@@ -6,7 +6,7 @@ import nest_asyncio
 import sys
 from datetime import datetime
 
-# Aplica o patch do nest_asyncio (útil em ambientes onde já existe um event loop ativo)
+# Aplica o patch do nest_asyncio (útil em ambientes com event loop já ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -54,20 +54,21 @@ logger.info("Firebase inicializado com sucesso!")
 # ------------------------------------------------------------------------------
 # Integração com o Telegram Bot (API assíncrona)
 # ------------------------------------------------------------------------------
-from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
     ConversationHandler,
     MessageHandler,
+    CallbackQueryHandler,
     filters,
     ContextTypes
 )
 
-# Estados para a conversa de follow-up
+# ----- Estados para Follow-up Conversation -----
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 
-# Estados para a conversa de visita
+# ----- Estados para Visita Conversation -----
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE = range(4)
 
 # -------------------------- Comandos Simples ------------------------------
@@ -155,27 +156,31 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
     
-    # Prepara o teclado com as opções de categoria
-    category_options = [
-        "Potencial Cliente",
-        "Cliente Ativo",
-        "Cliente Inativo",
-        "Cliente Novo",
-        "Cliente de Aluguel",
-        "Cliente de Venda",
-        "Cliente de Manutenção",
-        "Cliente em Negociação",
-        "Cliente Perdido",
-        "Sem Interesse"
+    # Cria o teclado inline com as opções de categoria
+    options = [
+        [InlineKeyboardButton("Potencial Cliente", callback_data="Potencial Cliente"),
+         InlineKeyboardButton("Cliente Ativo", callback_data="Cliente Ativo")],
+        [InlineKeyboardButton("Cliente Inativo", callback_data="Cliente Inativo"),
+         InlineKeyboardButton("Cliente Novo", callback_data="Cliente Novo")],
+        [InlineKeyboardButton("Cliente de Aluguel", callback_data="Cliente de Aluguel"),
+         InlineKeyboardButton("Cliente de Venda", callback_data="Cliente de Venda")],
+        [InlineKeyboardButton("Cliente de Manutenção", callback_data="Cliente de Manutenção")],
+        [InlineKeyboardButton("Cliente em Negociação", callback_data="Cliente em Negociação")],
+        [InlineKeyboardButton("Cliente Perdido", callback_data="Cliente Perdido")],
+        [InlineKeyboardButton("Sem Interesse", callback_data="Sem Interesse")]
     ]
-    reply_markup = ReplyKeyboardMarkup([category_options], one_time_keyboard=True, resize_keyboard=True)
-    await update.message.reply_text("Qual a categoria do cliente?", reply_markup=reply_markup)
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text("Qual a categoria do cliente? Selecione uma opção abaixo:", reply_markup=reply_markup)
     return VISIT_CATEGORY
 
-async def visita_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["category"] = update.message.text.strip()
-    # Removendo o teclado após a seleção
-    await update.message.reply_text("Qual o motivo da visita?", reply_markup=ReplyKeyboardRemove())
+# Esse handler processa a resposta do teclado inline
+async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()  # Confirma o callback
+    category = query.data
+    context.user_data["category"] = category
+    # Atualiza a mensagem para indicar a escolha e procede para o próximo passo
+    await query.edit_message_text(text=f"Categoria selecionada: {category}\nQual o motivo da visita?")
     return VISIT_MOTIVE
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -236,14 +241,14 @@ async def main():
         states={
             VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
             VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
-            VISIT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_category)],
+            # Aqui usaremos o CallbackQueryHandler para capturar a opção inline
+            VISIT_CATEGORY: [CallbackQueryHandler(visita_category_callback)],
             VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
         },
         fallbacks=[CommandHandler("cancel", visita_cancel)],
     )
     application.add_handler(visita_conv_handler)
 
-    # Adiciona o error handler para capturar exceções
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
