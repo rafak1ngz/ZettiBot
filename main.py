@@ -248,7 +248,8 @@ async def main():
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
-    # Use o parâmetro drop_pending_updates=True para evitar conflitos se houver atualizações pendentes
+    # Remove qualquer webhook pendente e descarta atualizações pendentes antes de iniciar
+    await application.bot.delete_webhook(drop_pending_updates=True)
     await application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
