@@ -21,6 +21,7 @@ console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
+# Reduz "barulho" de bibliotecas auxiliares
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -68,14 +69,14 @@ from telegram.ext import (
 # Follow-up
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 
-# Visita – incluímos follow-up opcional
+# Visita (inclui opção de follow-up opcional)
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
 
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 
-# Lembrete (já implementado)
-REMINDER_TEXT, REMINDER_DELAY = 100, 101
+# Lembrete – vamos alterar o fluxo para data/hora.
+REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
 # Funções Básicas e Conversas Interativas
@@ -88,8 +89,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # Comando /testfirebase
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
-        # Exemplificando com um documento de teste na subcoleção do usuário
         chat_id = str(update.message.chat.id)
+        # Documento de teste na subcoleção "test" do usuário
         db.collection("users").document(chat_id).collection("test").document("hello").set({
             "message": "Teste de integração Firebase!",
             "timestamp": firestore.SERVER_TIMESTAMP
@@ -100,7 +101,7 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error("Erro ao enviar dados para o Firebase: %s", error)
         await update.message.reply_text("Erro ao enviar dados para o Firebase. 😟")
 
-# ---- Follow-up (conversa) ----
+# ---- Conversa Interativa: Follow-up ----
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode='Markdown')
     return FOLLOWUP_CLIENT
@@ -126,7 +127,6 @@ async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["followup_desc"] = update.message.text.strip()
     try:
         chat_id = str(update.message.chat.id)
-        # Salva o follow-up na subcoleção de followups do usuário
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["client"],
             "data_follow": context.user_data["followup_date"],
@@ -147,7 +147,7 @@ async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info("Conversa de follow-up cancelada pelo usuário.")
     return ConversationHandler.END
 
-# ---- Visita (conversa) ----
+# ---- Conversa Interativa: Visita ----
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode='Markdown')
     return VISIT_COMPANY
@@ -241,7 +241,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
             "followup": context.user_data["followup_date"],
             "criado_em": datetime.now().isoformat()
         })
-        # Cria também o documento de followup na subcoleção followups do usuário
+        # Cria também o documento de followup na subcoleção "followups"
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["company"],
             "data_follow": context.user_data["followup_date"],
@@ -262,7 +262,7 @@ async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     logger.info("Conversa de visita cancelada pelo usuário.")
     return ConversationHandler.END
 
-# ---- Interação (conversa) ----
+# ---- Conversa Interativa: Interação ----
 async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem você interagiu:", parse_mode='Markdown')
     return INTER_CLIENT
@@ -331,28 +331,35 @@ async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     logger.info("Conversa de interação cancelada pelo usuário.")
     return ConversationHandler.END
 
-# ---- Lembrete (conversa) ----
+# ---- Conversa Interativa: Lembrete (Atualizado para data/hora) ----
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🔔 *Lembrete*: Por favor, digite o texto do seu lembrete:", parse_mode='Markdown')
     return REMINDER_TEXT
 
 async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["lembrete_text"] = update.message.text.strip()
-    await update.message.reply_text("⏳ Agora, informe em quantos minutos você deseja receber este lembrete:")
-    return REMINDER_DELAY
+    await update.message.reply_text(
+        "⏳ Agora, informe a data e o horário para o lembrete (formato: dd/mm/yyyy HH:MM):"
+    )
+    return REMINDER_DATETIME
 
-async def lembrete_delay(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    input_str = update.message.text.strip()
     try:
-        delay_minutes = float(update.message.text.strip())
-        delay_seconds = int(delay_minutes * 60)
+        target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M")
     except ValueError:
-        await update.message.reply_text("⚠️ Por favor, insira um número válido de minutos.")
-        return REMINDER_DELAY
+        await update.message.reply_text("⚠️ Formato inválido! Por favor, use o formato: dd/mm/yyyy HH:MM")
+        return REMINDER_DATETIME
+    now = datetime.now()
+    delay_seconds = (target_datetime - now).total_seconds()
+    if delay_seconds <= 0:
+        await update.message.reply_text("⚠️ A data/hora informada já passou. Informe um horário futuro:")
+        return REMINDER_DATETIME
     chat_id = str(update.message.chat.id)
-    lembrete_text = context.user_data["lembrete_text"]
-    # Agenda o lembrete na JobQueue (aqui, você pode também salvar no Firestore se quiser histórico)
-    context.job_queue.run_once(lembrete_callback, delay_seconds, data={"chat_id": chat_id, "lembrete_text": lembrete_text})
-    await update.message.reply_text(f"✅ Lembrete agendado para daqui {delay_minutes:.1f} minuto(s)!", reply_markup=ReplyKeyboardRemove())
+    lembrete_text_value = context.user_data["lembrete_text"]
+    # Agenda o lembrete na JobQueue
+    context.job_queue.run_once(lembrete_callback, delay_seconds, data={"chat_id": chat_id, "lembrete_text": lembrete_text_value})
+    await update.message.reply_text(f"✅ Lembrete agendado para {target_datetime.strftime('%d/%m/%Y %H:%M')}!", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def lembrete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -362,10 +369,10 @@ async def lembrete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     job_data = context.job.data
     chat_id = job_data["chat_id"]
-    lembrete_text = job_data["lembrete_text"]
-    await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text}", parse_mode='Markdown')
+    lembrete_text_value = job_data["lembrete_text"]
+    await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode='Markdown')
 
-# ---- Histórico: consulta das interações do usuário ----
+# ---- Comando para Consultar Histórico ----
 async def historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     if not context.args:
         await update.message.reply_text("Por favor, informe o mês desejado no formato YYYY-MM (ex.: 2025-04).")
@@ -393,15 +400,14 @@ async def historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("Erro ao recuperar histórico: %s", e)
         await update.message.reply_text("Erro ao recuperar histórico: " + str(e))
 
-# ----- Jobs de Follow-up Automático -----
-# Envia lembretes dos follow-ups agendados para hoje aos 08:30 e 13:00
+# ---- Jobs Diários para Follow-up Automático ----
+# Envia lembretes para os follow-ups agendados para hoje (08:30 e 13:00)
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     today = datetime.now().date().isoformat()
-    # Usamos collection group para buscar em todos os subcoleções "followups"
+    # Consulta por todos os "followups" (de toda a base) via collection group
     docs = db.collection_group("followups").where("data_follow", "==", today).where("status", "==", "pendente").stream()
     for doc in docs:
         data = doc.to_dict()
-        # Se o documento contém chat_id, enviamos a mensagem para o respectivo usuário.
         user_chat_id = data.get("chat_id")
         if user_chat_id:
             followup_id = doc.id
@@ -411,13 +417,12 @@ async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"Descrição: {data.get('descricao')}\n\n"
                 f"Confirme se o contato foi realizado:"
             )
-            # callback_data inclui chat_id e doc id
             keyboard = InlineKeyboardMarkup(
                 [[InlineKeyboardButton("Confirmar", callback_data=f"confirm_followup:{user_chat_id}:{followup_id}")]]
             )
             await context.bot.send_message(chat_id=user_chat_id, text=message_text, reply_markup=keyboard, parse_mode='Markdown')
 
-# Envia resumo diário às 18:00 e reagenda follow-ups pendentes para o dia seguinte
+# Envia resumo diário às 18:00 e reagenda follow-ups pendentes para amanhã
 async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     today = datetime.now().date().isoformat()
     confirmed_count = {}
@@ -430,9 +435,8 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             continue
         if data.get("status") == "realizado":
             confirmed_count[user_chat_id] = confirmed_count.get(user_chat_id, 0) + 1
-        else:
+        elif data.get("status") == "pendente":
             pending_items.setdefault(user_chat_id, []).append((doc.id, data))
-    # Para cada usuário, envia um resumo e reagenda os pendentes
     tomorrow = (datetime.now().date() + timedelta(days=1)).isoformat()
     for user_chat_id in pending_items.keys():
         pending_count = len(pending_items[user_chat_id])
@@ -444,16 +448,13 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             f"Os pendentes foram reagendados para {tomorrow}."
         )
         await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode='Markdown')
-        # Reagenda os pendentes para amanhã
         for doc_id, data in pending_items[user_chat_id]:
-            # Identificar o caminho: users/{chat_id}/followups/{doc_id}
             db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"data_follow": tomorrow})
 
-# ----- Callback para confirmar Follow-up via botão inline -----
+# ---- Callback para confirmar Follow-up via Botão Inline ----
 async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    # Formato: "confirm_followup:{chat_id}:{doc_id}"
     try:
         _, user_chat_id, doc_id = query.data.split(":", 2)
         db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"status": "realizado"})
@@ -463,11 +464,13 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text(text="Erro ao confirmar follow-up.")
         logger.error("Erro ao confirmar follow-up: %s", e)
 
-# ----- Error Handler -----
+# ---- Error Handler ----
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
 
-# ----- Função Principal -----
+# ------------------------------------------------------------------------------
+# Função Principal
+# ------------------------------------------------------------------------------
 async def main():
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
@@ -521,12 +524,12 @@ async def main():
     )
     application.add_handler(interacao_conv_handler)
 
-    # ConversationHandler para Lembrete
+    # ConversationHandler para Lembrete (Atualizado para data/hora)
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
             REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
-            REMINDER_DELAY: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_delay)],
+            REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)],
         },
         fallbacks=[CommandHandler("cancel", lembrete_cancel)],
     )
@@ -539,10 +542,8 @@ async def main():
 
     # Agendar os jobs diários na JobQueue
     job_queue = application.job_queue
-    # Diário às 08:30 (manhã) e às 13:00 (tarde) enviar lembretes
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0))
-    # Diário às 18:00 enviar resumo e reagendar follow-ups pendentes
     job_queue.run_daily(evening_summary_callback, time=time(18, 0))
 
     logger.info("Iniciando o bot...")
