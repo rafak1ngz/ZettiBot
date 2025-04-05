@@ -6,7 +6,7 @@ import nest_asyncio
 import sys
 from datetime import datetime
 
-# Aplica o patch do nest_asyncio (útil para ambientes com event loop já ativo)
+# Aplica o patch do nest_asyncio (útil para ambientes onde já existe um event loop ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -15,7 +15,7 @@ nest_asyncio.apply()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Remove handlers existentes e adiciona um novo para stdout
+# Remove os handlers existentes e cria um handler para stdout
 for handler in logger.handlers[:]:
     logger.removeHandler(handler)
 
@@ -25,7 +25,7 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-# Ajusta niveis de log de bibliotecas auxiliares para evitar "barulho"
+# Ajusta níveis de log de bibliotecas auxiliares para reduzir "barulho"
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -52,17 +52,32 @@ db = firestore.client()
 logger.info("Firebase inicializado com sucesso!")
 
 # ------------------------------------------------------------------------------
-# Integração com o Telegram Bot (usando a API assíncrona)
+# Integração com o Telegram Bot (API assíncrona)
 # ------------------------------------------------------------------------------
 from telegram import Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ConversationHandler,
+    MessageHandler,
+    filters,
+    ContextTypes
+)
 
-# Comando /start para testar se o bot está ativo
+# Estados para a conversa de follow-up
+FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
+
+# Estados para a conversa de visita
+VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE = range(4)
+
+# -------------------------- Comandos Simples ------------------------------
+
+# /start: Comando simples para testar a conexão do bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Olá Rafael! Seu bot está ativo e integrado com o Firebase.")
     logger.info("Comando /start executado.")
 
-# Comando /testfirebase para testar a integração com o Firebase
+# /testfirebase: Comando para testar a conexão com o Firebase
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         doc_ref = db.collection("test").document("hello")
@@ -76,82 +91,118 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error("Erro ao enviar dados para o Firebase: %s", error)
         await update.message.reply_text("Erro ao enviar dados para o Firebase.")
 
-# Comando /followup para registrar follow-ups
-# Exemplo de uso: /followup EmpresaX 25/04/2025 Ligar para confirmar proposta
-async def followup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ------------------ Conversa Interativa: Follow-up -------------------------
+
+# Inicia a conversa de follow-up com o comando /followup
+async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Qual o nome do cliente para o follow-up?")
+    return FOLLOWUP_CLIENT
+
+# Recebe o nome do cliente e pergunta a data
+async def followup_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["client"] = update.message.text.strip()
+    await update.message.reply_text("Informe a data do follow-up (dd/mm/yyyy):")
+    return FOLLOWUP_DATE
+
+# Recebe a data e valida, perguntando em seguida pela descrição
+async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    data_str = update.message.text.strip()
     try:
-        args = context.args
-        if len(args) < 3:
-            await update.message.reply_text("Uso: /followup <cliente> <data(dd/mm/yyyy)> <descrição>")
-            logger.warning("Comando /followup chamado com parâmetros insuficientes.")
-            return
+        data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
+    except ValueError:
+        await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy. Por favor, informe novamente a data:")
+        logger.warning("Formato de data inválido no follow-up.")
+        return FOLLOWUP_DATE
+    context.user_data["followup_date"] = data_followup.isoformat()
+    await update.message.reply_text("Descreva o follow-up (ex.: Ligar para confirmar proposta):")
+    return FOLLOWUP_DESCRIPTION
 
-        cliente = args[0]
-        data_str = args[1]
-        descricao = " ".join(args[2:])
-
-        try:
-            data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
-        except ValueError:
-            await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy.")
-            logger.warning("Formato de data inválido fornecido ao comando /followup.")
-            return
-
+# Recebe a descrição, registra o follow-up no Firestore e encerra a conversa
+async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["followup_desc"] = update.message.text.strip()
+    try:
         doc_ref = db.collection("followups").document()
         doc_ref.set({
-            "cliente": cliente,
-            "data_follow": data_follow.isoformat(),
-            "descricao": descricao,
+            "cliente": context.user_data["client"],
+            "data_follow": context.user_data["followup_date"],
+            "descricao": context.user_data["followup_desc"],
             "criado_em": datetime.now().isoformat()
         })
-
-        await update.message.reply_text(f"Follow-up para {cliente} registrado para {data_follow.isoformat()} com sucesso!")
-        logger.info(f"Follow-up registrado para {cliente} com data {data_follow.isoformat()}.")
+        await update.message.reply_text("Follow-up registrado com sucesso!")
+        logger.info(f"Follow-up registrado para {context.user_data['client']} na data {context.user_data['followup_date']}.")
     except Exception as e:
         logger.error("Erro ao registrar follow-up: %s", e)
         await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
+    return ConversationHandler.END
 
-# Comando /visita para registrar visitas a clientes
-# Exemplo de uso: /visita EmpresaX 05/04/2025 PotencialCliente Aluguel
-async def visita(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# Comando de cancelamento para a conversa de follow-up
+async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Registro de follow-up cancelado.")
+    logger.info("Conversa de follow-up cancelada pelo usuário.")
+    return ConversationHandler.END
+
+# ------------------ Conversa Interativa: Visita -----------------------------
+
+# Inicia a conversa de visita com o comando /visita
+async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Qual a empresa visitada?")
+    return VISIT_COMPANY
+
+# Recebe e armazena o nome da empresa, depois pergunta a data
+async def visita_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["company"] = update.message.text.strip()
+    await update.message.reply_text("Qual a data da visita? (Formato dd/mm/yyyy)")
+    return VISIT_DATE
+
+# Recebe a data, valida e pergunta pela categoria do cliente
+async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    data_str = update.message.text.strip()
     try:
-        args = context.args
-        if len(args) < 4:
-            await update.message.reply_text("Uso: /visita <empresa> <data(dd/mm/yyyy)> <classificação> <serviço>")
-            logger.warning("Comando /visita chamado com parâmetros insuficientes.")
-            return
+        data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
+    except ValueError:
+        await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy. Por favor, informe novamente a data:")
+        logger.warning("Formato de data inválido no comando /visita.")
+        return VISIT_DATE
+    context.user_data["visit_date"] = data_visita.isoformat()
+    await update.message.reply_text("Qual a categoria do cliente? (Ex.: Potencial Cliente, Cliente Atual, etc.)")
+    return VISIT_CATEGORY
 
-        empresa = args[0]
-        data_str = args[1]
-        classificacao = args[2]
-        servico = args[3]
+# Recebe a categoria e depois pergunta pelo motivo da visita
+async def visita_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["category"] = update.message.text.strip()
+    await update.message.reply_text("Qual o motivo da visita?")
+    return VISIT_MOTIVE
 
-        try:
-            data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
-        except ValueError:
-            await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy.")
-            logger.warning("Formato de data inválido fornecido ao comando /visita.")
-            return
-
+# Recebe o motivo, registra as informações no Firebase e encerra a conversa
+async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["motive"] = update.message.text.strip()
+    try:
         doc_ref = db.collection("visitas").document()
         doc_ref.set({
-            "empresa": empresa,
-            "data_visita": data_visita.isoformat(),
-            "classificacao": classificacao,
-            "servico": servico,
+            "empresa": context.user_data["company"],
+            "data_visita": context.user_data["visit_date"],
+            "classificacao": context.user_data["category"],
+            "motivo": context.user_data["motive"],
             "criado_em": datetime.now().isoformat()
         })
-
-        await update.message.reply_text(f"Visita registrada para {empresa} em {data_visita.isoformat()}.")
-        logger.info(f"Visita registrada para {empresa} com data {data_visita.isoformat()}.")
+        await update.message.reply_text("Visita registrada com sucesso!")
+        logger.info(f"Visita registrada para {context.user_data['company']} na data {context.user_data['visit_date']}.")
     except Exception as e:
         logger.error("Erro ao registrar visita: %s", e)
         await update.message.reply_text("Erro ao registrar visita: " + str(e))
+    return ConversationHandler.END
 
-# Error handler para capturar exceções durante as atualizações
+# Comando de cancelamento para a conversa de visita
+async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Registro de visita cancelado.")
+    logger.info("Conversa de visita cancelada pelo usuário.")
+    return ConversationHandler.END
+
+# ------------------ Error Handler -----------------------------
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
 
+# ------------------ Função Principal --------------------------
 async def main():
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
@@ -159,10 +210,37 @@ async def main():
         return
 
     application = ApplicationBuilder().token(token).build()
+
+    # Comandos simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
-    application.add_handler(CommandHandler("followup", followup))
-    application.add_handler(CommandHandler("visita", visita))
+    
+    # ConversationHandler para Follow-up
+    followup_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("followup", followup_start)],
+        states={
+            FOLLOWUP_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_client)],
+            FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_date)],
+            FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)],
+        },
+        fallbacks=[CommandHandler("cancel", followup_cancel)],
+    )
+    application.add_handler(followup_conv_handler)
+
+    # ConversationHandler para Visita
+    visita_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("visita", visita_start)],
+        states={
+            VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
+            VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
+            VISIT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_category)],
+            VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
+        },
+        fallbacks=[CommandHandler("cancel", visita_cancel)],
+    )
+    application.add_handler(visita_conv_handler)
+
+    # Adiciona o error handler para capturar exceções
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
