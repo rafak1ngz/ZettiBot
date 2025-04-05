@@ -1,8 +1,12 @@
 import os
 import logging
 import asyncio
+import nest_asyncio  # Importa o nest_asyncio
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+
+# Aplica o patch para permitir reentrar no event loop
+nest_asyncio.apply()
 
 # Configura o logging para facilitar o debug
 logging.basicConfig(
@@ -20,13 +24,11 @@ async def main():
         print("Erro: TELEGRAM_TOKEN não definido.")
         return
 
-    # Cria a aplicação utilizando ApplicationBuilder (API nova e assíncrona)
+    # Cria a aplicação utilizando ApplicationBuilder
     application = ApplicationBuilder().token(token).build()
-
     # Adiciona o handler para o comando /start
     application.add_handler(CommandHandler("start", start))
-
-    # Inicia o bot com polling
+    # Inicia o bot com polling de forma assíncrona
     await application.run_polling()
 
 if __name__ == '__main__':
