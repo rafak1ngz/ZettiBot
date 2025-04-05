@@ -14,18 +14,14 @@ nest_asyncio.apply()
 # ------------------------------------------------------------------------------
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-
-# Remove os handlers existentes e cria um handler para stdout
 for handler in logger.handlers[:]:
     logger.removeHandler(handler)
-
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
-
-# Ajusta níveis de log de bibliotecas auxiliares para reduzir "barulho"
+# Reduz barulho das bibliotecas auxiliares
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -39,13 +35,11 @@ firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
 if not firebase_credentials:
     logger.error("Variável de ambiente FIREBASE_CREDENTIALS não definida!")
     exit(1)
-
 try:
     cred_dict = json.loads(firebase_credentials)
 except json.JSONDecodeError as error:
     logger.error("Erro ao decodificar FIREBASE_CREDENTIALS: %s", error)
     exit(1)
-
 cred = credentials.Certificate(cred_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
@@ -54,7 +48,7 @@ logger.info("Firebase inicializado com sucesso!")
 # ------------------------------------------------------------------------------
 # Integração com o Telegram Bot (API assíncrona)
 # ------------------------------------------------------------------------------
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardRemove
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -71,8 +65,10 @@ FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 # ----- Estados para Visita Conversation -----
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE = range(4)
 
-# -------------------------- Comandos Simples ------------------------------
+# ----- Estados para Interação Conversation -----
+INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 
+# -------------------------- Comandos Simples ------------------------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Olá Rafael! Seu bot está ativo e integrado com o Firebase.")
     logger.info("Comando /start executado.")
@@ -91,7 +87,6 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Erro ao enviar dados para o Firebase.")
 
 # ------------------ Conversa Interativa: Follow-up -------------------------
-
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Qual o nome do cliente para o follow-up?")
     return FOLLOWUP_CLIENT
@@ -155,7 +150,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
 
-    # Cria o teclado inline com as opções de categoria
+    # Cria o teclado inline com opções de categoria
     options = [
         [InlineKeyboardButton("Potencial Cliente", callback_data="Potencial Cliente"),
          InlineKeyboardButton("Cliente Ativo", callback_data="Cliente Ativo")],
@@ -174,7 +169,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
 
 async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
-    await query.answer()  # Confirma o callback
+    await query.answer()  # confirma o callback
     category = query.data
     context.user_data["category"] = category
     await query.edit_message_text(text=f"Categoria selecionada: {category}\nQual o motivo da visita?")
@@ -203,6 +198,103 @@ async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     logger.info("Conversa de visita cancelada pelo usuário.")
     return ConversationHandler.END
 
+# ------------------ Conversa Interativa: Interação --------------------------
+async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Digite o nome do cliente ou empresa com quem teve a interação:")
+    return INTER_CLIENT
+
+async def interacao_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["client_interacao"] = update.message.text.strip()
+    await update.message.reply_text("Digite um resumo da interação:")
+    return INTER_SUMMARY
+
+async def interacao_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["resumo_interacao"] = update.message.text.strip()
+    reply_keyboard = [["Sim", "Não"]]
+    await update.message.reply_text(
+        "Deseja agendar um follow-up para essa interação? (Sim/Não)",
+        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
+    )
+    return INTER_FOLLOWUP_CHOICE
+
+async def interacao_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    choice = update.message.text.strip().lower()
+    if choice == "sim":
+        await update.message.reply_text("Informe a data para o follow-up (dd/mm/yyyy):", reply_markup=ReplyKeyboardRemove())
+        return INTER_FOLLOWUP_DATE
+    else:
+        context.user_data["followup_interacao"] = None
+        try:
+            doc_ref = db.collection("interacoes").document()
+            doc_ref.set({
+                "cliente": context.user_data["client_interacao"],
+                "resumo": context.user_data["resumo_interacao"],
+                "followup": None,
+                "criado_em": datetime.now().isoformat()
+            })
+            await update.message.reply_text("Interação registrada com sucesso!", reply_markup=ReplyKeyboardRemove())
+            logger.info(f"Interação registrada para {context.user_data['client_interacao']}.")
+        except Exception as e:
+            logger.error("Erro ao registrar interação: %s", e)
+            await update.message.reply_text("Erro ao registrar interação: " + str(e), reply_markup=ReplyKeyboardRemove())
+        return ConversationHandler.END
+
+async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    data_str = update.message.text.strip()
+    try:
+        data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
+    except ValueError:
+        await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy. Informe novamente a data:")
+        return INTER_FOLLOWUP_DATE
+    context.user_data["followup_interacao"] = data_follow.isoformat()
+    try:
+        doc_ref = db.collection("interacoes").document()
+        doc_ref.set({
+            "cliente": context.user_data["client_interacao"],
+            "resumo": context.user_data["resumo_interacao"],
+            "followup": context.user_data["followup_interacao"],
+            "criado_em": datetime.now().isoformat()
+        })
+        await update.message.reply_text("Interação registrada com sucesso!")
+        logger.info(f"Interação registrada para {context.user_data['client_interacao']} com follow-up em {context.user_data['followup_interacao']}.")
+    except Exception as e:
+        logger.error("Erro ao registrar interação: %s", e)
+        await update.message.reply_text("Erro ao registrar interação: " + str(e))
+    return ConversationHandler.END
+
+async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Registro de interação cancelado.", reply_markup=ReplyKeyboardRemove())
+    logger.info("Conversa de interação cancelada pelo usuário.")
+    return ConversationHandler.END
+
+# ------------------ Comando para Consultar Histórico ----------------------
+async def historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if not context.args:
+        await update.message.reply_text("Por favor, informe o mês desejado no formato YYYY-MM (ex.: 2025-04).")
+        return
+    filtro = context.args[0]  # esperado, por exemplo, "2025-04"
+    try:
+        docs = db.collection("interacoes").stream()
+        resultado = ""
+        count = 0
+        for doc in docs:
+            data = doc.to_dict()
+            criado_em = data.get("criado_em", "")
+            # Como o ISO padrão é "YYYY-MM-DD...", filtramos pelos 7 primeiros caracteres.
+            if criado_em.startswith(filtro):
+                count += 1
+                cliente = data.get("cliente", "N/A")
+                resumo = data.get("resumo", "N/A")
+                followup = data.get("followup", "Não agendado")
+                resultado += f"Cliente: {cliente}\nResumo: {resumo}\nFollow-up: {followup}\n\n"
+        if count == 0:
+            await update.message.reply_text(f"Nenhuma interação encontrada para o período {filtro}.")
+        else:
+            await update.message.reply_text(f"{count} interação(ões) encontrada(s) para {filtro}:\n\n{resultado}")
+    except Exception as e:
+        logger.error("Erro ao recuperar histórico: %s", e)
+        await update.message.reply_text("Erro ao recuperar histórico: " + str(e))
+
 # ------------------ Error Handler -----------------------------
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
@@ -219,6 +311,7 @@ async def main():
     # Handlers simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
+    application.add_handler(CommandHandler("historico", historico))
     
     # ConversationHandler para Follow-up
     followup_conv_handler = ConversationHandler(
@@ -244,11 +337,23 @@ async def main():
         fallbacks=[CommandHandler("cancel", visita_cancel)],
     )
     application.add_handler(visita_conv_handler)
+    
+    # ConversationHandler para Interação
+    interacao_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("interacao", interacao_start)],
+        states={
+            INTER_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_client)],
+            INTER_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_summary)],
+            INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
+            INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)],
+        },
+        fallbacks=[CommandHandler("cancel", interacao_cancel)],
+    )
+    application.add_handler(interacao_conv_handler)
 
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
-    # Remove qualquer webhook pendente e descarta atualizações pendentes antes de iniciar
     await application.bot.delete_webhook(drop_pending_updates=True)
     await application.run_polling(drop_pending_updates=True)
 
