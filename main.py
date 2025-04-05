@@ -1,27 +1,33 @@
 import os
 import logging
+import asyncio
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext
+from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# Configura o logging
-logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+# Configura o logging para facilitar o debug
+logging.basicConfig(
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,
+)
 
-def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text("Olá Rafael! Seu bot está ativo e pronto para gerenciar suas tarefas.")
+# Função assíncrona para tratar o comando /start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await update.message.reply_text("Olá Rafael! Seu bot está ativo e pronto para gerenciar suas tarefas.")
 
-def main():
-    token = os.environ.get("TELEGRAM_TOKEN")
+async def main():
+    token = os.getenv("TELEGRAM_TOKEN")
     if not token:
         print("Erro: TELEGRAM_TOKEN não definido.")
         return
-    # Remova o parâmetro `use_context`
-    updater = Updater(token)
-    dp = updater.dispatcher
 
-    dp.add_handler(CommandHandler("start", start))
+    # Cria a aplicação utilizando ApplicationBuilder (API nova e assíncrona)
+    application = ApplicationBuilder().token(token).build()
 
-    updater.start_polling()
-    updater.idle()
+    # Adiciona o handler para o comando /start
+    application.add_handler(CommandHandler("start", start))
 
-if __name__ == "__main__":
-    main()
+    # Inicia o bot com polling
+    await application.run_polling()
+
+if __name__ == '__main__':
+    asyncio.run(main())
