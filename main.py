@@ -6,7 +6,7 @@ import nest_asyncio
 import sys
 from datetime import datetime
 
-# Aplica o patch do nest_asyncio (ajuda em ambientes onde já existe um event loop)
+# Aplica o patch do nest_asyncio (útil para ambientes com event loop já ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -15,7 +15,7 @@ nest_asyncio.apply()
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
-# Remove os handlers existentes (caso haja) e cria um novo handler para stdout
+# Remove handlers existentes e adiciona um novo para stdout
 for handler in logger.handlers[:]:
     logger.removeHandler(handler)
 
@@ -25,10 +25,9 @@ formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(messag
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
 
-# Se desejar adicionar um FileHandler para armazenar logs em arquivo, pode fazê-lo aqui.
-# ------------------------------------------------------------------------------
-# Fim da configuração de Logging
-# ------------------------------------------------------------------------------
+# Ajusta niveis de log de bibliotecas auxiliares para evitar "barulho"
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 # ------------------------------------------------------------------------------
 # Inicialização do Firebase
@@ -58,10 +57,12 @@ logger.info("Firebase inicializado com sucesso!")
 from telegram import Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
+# Comando /start para testar se o bot está ativo
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Olá Rafael! Seu bot está ativo e integrado com o Firebase.")
     logger.info("Comando /start executado.")
 
+# Comando /testfirebase para testar a integração com o Firebase
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         doc_ref = db.collection("test").document("hello")
@@ -75,6 +76,8 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         logger.error("Erro ao enviar dados para o Firebase: %s", error)
         await update.message.reply_text("Erro ao enviar dados para o Firebase.")
 
+# Comando /followup para registrar follow-ups
+# Exemplo de uso: /followup EmpresaX 25/04/2025 Ligar para confirmar proposta
 async def followup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         args = context.args
@@ -108,7 +111,44 @@ async def followup(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("Erro ao registrar follow-up: %s", e)
         await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
 
-# Error handler para capturar exceções e registrar os erros
+# Comando /visita para registrar visitas a clientes
+# Exemplo de uso: /visita EmpresaX 05/04/2025 PotencialCliente Aluguel
+async def visita(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        args = context.args
+        if len(args) < 4:
+            await update.message.reply_text("Uso: /visita <empresa> <data(dd/mm/yyyy)> <classificação> <serviço>")
+            logger.warning("Comando /visita chamado com parâmetros insuficientes.")
+            return
+
+        empresa = args[0]
+        data_str = args[1]
+        classificacao = args[2]
+        servico = args[3]
+
+        try:
+            data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
+        except ValueError:
+            await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy.")
+            logger.warning("Formato de data inválido fornecido ao comando /visita.")
+            return
+
+        doc_ref = db.collection("visitas").document()
+        doc_ref.set({
+            "empresa": empresa,
+            "data_visita": data_visita.isoformat(),
+            "classificacao": classificacao,
+            "servico": servico,
+            "criado_em": datetime.now().isoformat()
+        })
+
+        await update.message.reply_text(f"Visita registrada para {empresa} em {data_visita.isoformat()}.")
+        logger.info(f"Visita registrada para {empresa} com data {data_visita.isoformat()}.")
+    except Exception as e:
+        logger.error("Erro ao registrar visita: %s", e)
+        await update.message.reply_text("Erro ao registrar visita: " + str(e))
+
+# Error handler para capturar exceções durante as atualizações
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
 
@@ -122,6 +162,7 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
     application.add_handler(CommandHandler("followup", followup))
+    application.add_handler(CommandHandler("visita", visita))
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
