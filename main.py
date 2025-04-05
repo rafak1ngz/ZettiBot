@@ -5,6 +5,10 @@ import asyncio
 import nest_asyncio
 import sys
 from datetime import datetime, timedelta, time
+from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
+
+# Define o fuso horário desejado (ajuste conforme necessário)
+TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Aplica o patch do nest_asyncio (útil em ambientes com event loop já ativo)
 nest_asyncio.apply()
@@ -21,7 +25,6 @@ console_handler.setLevel(logging.INFO)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 logger.addHandler(console_handler)
-# Reduz "barulho" de bibliotecas auxiliares
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -75,7 +78,7 @@ VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, 
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 
-# Lembrete – vamos alterar o fluxo para data/hora.
+# Lembrete – agora usando data/hora (em vez de atraso em minutos)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
@@ -90,7 +93,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         chat_id = str(update.message.chat.id)
-        # Documento de teste na subcoleção "test" do usuário
         db.collection("users").document(chat_id).collection("test").document("hello").set({
             "message": "Teste de integração Firebase!",
             "timestamp": firestore.SERVER_TIMESTAMP
@@ -338,26 +340,24 @@ async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["lembrete_text"] = update.message.text.strip()
-    await update.message.reply_text(
-        "⏳ Agora, informe a data e o horário para o lembrete (formato: dd/mm/yyyy HH:MM):"
-    )
+    await update.message.reply_text("⏳ Agora, informe a data e o horário para o lembrete (formato: dd/mm/yyyy HH:MM):")
     return REMINDER_DATETIME
 
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     input_str = update.message.text.strip()
     try:
-        target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M")
+        # Converte a string para datetime e atribui o fuso horário desejado
+        target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
         await update.message.reply_text("⚠️ Formato inválido! Por favor, use o formato: dd/mm/yyyy HH:MM")
         return REMINDER_DATETIME
-    now = datetime.now()
+    now = datetime.now(TIMEZONE)
     delay_seconds = (target_datetime - now).total_seconds()
     if delay_seconds <= 0:
         await update.message.reply_text("⚠️ A data/hora informada já passou. Informe um horário futuro:")
         return REMINDER_DATETIME
     chat_id = str(update.message.chat.id)
     lembrete_text_value = context.user_data["lembrete_text"]
-    # Agenda o lembrete na JobQueue
     context.job_queue.run_once(lembrete_callback, delay_seconds, data={"chat_id": chat_id, "lembrete_text": lembrete_text_value})
     await update.message.reply_text(f"✅ Lembrete agendado para {target_datetime.strftime('%d/%m/%Y %H:%M')}!", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
@@ -403,8 +403,7 @@ async def historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 # ---- Jobs Diários para Follow-up Automático ----
 # Envia lembretes para os follow-ups agendados para hoje (08:30 e 13:00)
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = datetime.now().date().isoformat()
-    # Consulta por todos os "followups" (de toda a base) via collection group
+    today = datetime.now(TIMEZONE).date().isoformat()
     docs = db.collection_group("followups").where("data_follow", "==", today).where("status", "==", "pendente").stream()
     for doc in docs:
         data = doc.to_dict()
@@ -424,7 +423,7 @@ async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # Envia resumo diário às 18:00 e reagenda follow-ups pendentes para amanhã
 async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = datetime.now().date().isoformat()
+    today = datetime.now(TIMEZONE).date().isoformat()
     confirmed_count = {}
     pending_items = {}
     docs = db.collection_group("followups").where("data_follow", "==", today).stream()
@@ -437,7 +436,7 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             confirmed_count[user_chat_id] = confirmed_count.get(user_chat_id, 0) + 1
         elif data.get("status") == "pendente":
             pending_items.setdefault(user_chat_id, []).append((doc.id, data))
-    tomorrow = (datetime.now().date() + timedelta(days=1)).isoformat()
+    tomorrow = (datetime.now(TIMEZONE).date() + timedelta(days=1)).isoformat()
     for user_chat_id in pending_items.keys():
         pending_count = len(pending_items[user_chat_id])
         confirmed = confirmed_count.get(user_chat_id, 0)
@@ -451,7 +450,7 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         for doc_id, data in pending_items[user_chat_id]:
             db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"data_follow": tomorrow})
 
-# ---- Callback para confirmar Follow-up via Botão Inline ----
+# ---- Callback para Confirmar Follow-up via Botão Inline ----
 async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
@@ -524,7 +523,7 @@ async def main():
     )
     application.add_handler(interacao_conv_handler)
 
-    # ConversationHandler para Lembrete (Atualizado para data/hora)
+    # ConversationHandler para Lembrete (atualizado para data/hora)
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
@@ -540,11 +539,11 @@ async def main():
 
     application.add_error_handler(error_handler)
 
-    # Agendar os jobs diários na JobQueue
+    # Agendamento dos jobs diários na JobQueue
     job_queue = application.job_queue
-    job_queue.run_daily(daily_reminder_callback, time=time(8, 30))
-    job_queue.run_daily(daily_reminder_callback, time=time(13, 0))
-    job_queue.run_daily(evening_summary_callback, time=time(18, 0))
+    job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
+    job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
+    job_queue.run_daily(evening_summary_callback, time=time(18, 0, tzinfo=TIMEZONE))
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
