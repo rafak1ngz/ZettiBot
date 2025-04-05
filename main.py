@@ -4,6 +4,17 @@ import logging
 import asyncio
 import nest_asyncio
 from datetime import datetime
+import logging
+
+# Configuração do log principal
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,  # Aqui o nível global é INFO
+)
+
+# Ajusta o nível de log do httpx e do telegram.ext para WARNING
+logging.getLogger("httpx").setLevel(logging.WARNING)
+logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
 # -------------------------------
 # Inicialização do Firebase
