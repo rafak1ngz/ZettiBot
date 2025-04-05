@@ -6,7 +6,7 @@ import nest_asyncio
 import sys
 from datetime import datetime
 
-# Aplica o patch do nest_asyncio (útil para ambientes onde já existe um event loop ativo)
+# Aplica o patch do nest_asyncio (útil em ambientes onde já existe um event loop ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ logger.info("Firebase inicializado com sucesso!")
 # ------------------------------------------------------------------------------
 # Integração com o Telegram Bot (API assíncrona)
 # ------------------------------------------------------------------------------
-from telegram import Update
+from telegram import Update, ReplyKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -72,12 +72,10 @@ VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE = range(4)
 
 # -------------------------- Comandos Simples ------------------------------
 
-# /start: Comando simples para testar a conexão do bot
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Olá Rafael! Seu bot está ativo e integrado com o Firebase.")
     logger.info("Comando /start executado.")
 
-# /testfirebase: Comando para testar a conexão com o Firebase
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         doc_ref = db.collection("test").document("hello")
@@ -93,18 +91,15 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 
 # ------------------ Conversa Interativa: Follow-up -------------------------
 
-# Inicia a conversa de follow-up com o comando /followup
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Qual o nome do cliente para o follow-up?")
     return FOLLOWUP_CLIENT
 
-# Recebe o nome do cliente e pergunta a data
 async def followup_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["client"] = update.message.text.strip()
     await update.message.reply_text("Informe a data do follow-up (dd/mm/yyyy):")
     return FOLLOWUP_DATE
 
-# Recebe a data e valida, perguntando em seguida pela descrição
 async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data_str = update.message.text.strip()
     try:
@@ -117,7 +112,6 @@ async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await update.message.reply_text("Descreva o follow-up (ex.: Ligar para confirmar proposta):")
     return FOLLOWUP_DESCRIPTION
 
-# Recebe a descrição, registra o follow-up no Firestore e encerra a conversa
 async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["followup_desc"] = update.message.text.strip()
     try:
@@ -135,26 +129,22 @@ async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
     return ConversationHandler.END
 
-# Comando de cancelamento para a conversa de follow-up
 async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Registro de follow-up cancelado.")
     logger.info("Conversa de follow-up cancelada pelo usuário.")
     return ConversationHandler.END
 
 # ------------------ Conversa Interativa: Visita -----------------------------
-
-# Inicia a conversa de visita com o comando /visita
+# Inicia a conversa perguntando a empresa visitada
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Qual a empresa visitada?")
     return VISIT_COMPANY
 
-# Recebe e armazena o nome da empresa, depois pergunta a data
 async def visita_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["company"] = update.message.text.strip()
     await update.message.reply_text("Qual a data da visita? (Formato dd/mm/yyyy)")
     return VISIT_DATE
 
-# Recebe a data, valida e pergunta pela categoria do cliente
 async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data_str = update.message.text.strip()
     try:
@@ -164,16 +154,30 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         logger.warning("Formato de data inválido no comando /visita.")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
-    await update.message.reply_text("Qual a categoria do cliente? (Ex.: Potencial Cliente, Cliente Atual, etc.)")
+    
+    # Prepara o teclado com as opções de categoria
+    category_options = [
+        "Potencial Cliente",
+        "Cliente Ativo",
+        "Cliente Inativo",
+        "Cliente Novo",
+        "Cliente de Aluguel",
+        "Cliente de Venda",
+        "Cliente de Manutenção",
+        "Cliente em Negociação",
+        "Cliente Perdido",
+        "Sem Interesse"
+    ]
+    reply_markup = ReplyKeyboardMarkup([category_options], one_time_keyboard=True, resize_keyboard=True)
+    await update.message.reply_text("Qual a categoria do cliente?", reply_markup=reply_markup)
     return VISIT_CATEGORY
 
-# Recebe a categoria e depois pergunta pelo motivo da visita
 async def visita_category(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["category"] = update.message.text.strip()
-    await update.message.reply_text("Qual o motivo da visita?")
+    # Removendo o teclado após a seleção
+    await update.message.reply_text("Qual o motivo da visita?", reply_markup=ReplyKeyboardRemove())
     return VISIT_MOTIVE
 
-# Recebe o motivo, registra as informações no Firebase e encerra a conversa
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["motive"] = update.message.text.strip()
     try:
@@ -192,9 +196,8 @@ async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
         await update.message.reply_text("Erro ao registrar visita: " + str(e))
     return ConversationHandler.END
 
-# Comando de cancelamento para a conversa de visita
 async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Registro de visita cancelado.")
+    await update.message.reply_text("Registro de visita cancelado.", reply_markup=ReplyKeyboardRemove())
     logger.info("Conversa de visita cancelada pelo usuário.")
     return ConversationHandler.END
 
@@ -211,7 +214,7 @@ async def main():
 
     application = ApplicationBuilder().token(token).build()
 
-    # Comandos simples
+    # Handlers simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
     
@@ -226,7 +229,7 @@ async def main():
         fallbacks=[CommandHandler("cancel", followup_cancel)],
     )
     application.add_handler(followup_conv_handler)
-
+    
     # ConversationHandler para Visita
     visita_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("visita", visita_start)],
