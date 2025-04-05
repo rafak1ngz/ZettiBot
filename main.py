@@ -136,7 +136,6 @@ async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 # ------------------ Conversa Interativa: Visita -----------------------------
-# Inicia a conversa perguntando a empresa visitada
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Qual a empresa visitada?")
     return VISIT_COMPANY
@@ -151,11 +150,11 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy. Por favor, informe novamente a data:")
+        await update.message.reply_text("Formato de data inválido! Utilize dd/mm/yyyy. Informe novamente a data:")
         logger.warning("Formato de data inválido no comando /visita.")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
-    
+
     # Cria o teclado inline com as opções de categoria
     options = [
         [InlineKeyboardButton("Potencial Cliente", callback_data="Potencial Cliente"),
@@ -173,13 +172,11 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     await update.message.reply_text("Qual a categoria do cliente? Selecione uma opção abaixo:", reply_markup=reply_markup)
     return VISIT_CATEGORY
 
-# Esse handler processa a resposta do teclado inline
 async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()  # Confirma o callback
     category = query.data
     context.user_data["category"] = category
-    # Atualiza a mensagem para indicar a escolha e procede para o próximo passo
     await query.edit_message_text(text=f"Categoria selecionada: {category}\nQual o motivo da visita?")
     return VISIT_MOTIVE
 
@@ -241,7 +238,6 @@ async def main():
         states={
             VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
             VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
-            # Aqui usaremos o CallbackQueryHandler para capturar a opção inline
             VISIT_CATEGORY: [CallbackQueryHandler(visita_category_callback)],
             VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
         },
@@ -252,7 +248,8 @@ async def main():
     application.add_error_handler(error_handler)
 
     logger.info("Iniciando o bot...")
-    await application.run_polling()
+    # Use o parâmetro drop_pending_updates=True para evitar conflitos se houver atualizações pendentes
+    await application.run_polling(drop_pending_updates=True)
 
 if __name__ == '__main__':
     asyncio.run(main())
