@@ -6,18 +6,20 @@ import nest_asyncio
 import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
+import tempfile
+import matplotlib.pyplot as plt
 
 # Define o fuso horário desejado (ajuste conforme necessário)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
-# Aplica o patch no nest_asyncio (para evitar conflitos com o event loop já ativo)
+# Aplica o patch no nest_asyncio (para evitar conflitos com event loop já ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
 # Configuração do Logger
 # ------------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.DEBUG) 
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
@@ -91,6 +93,23 @@ REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 REPORT_START, REPORT_END = range(300, 302)
 # Histórico (detalhado) (400 a 401)
 HIST_START, HIST_END = range(400, 402)
+
+# ------------------------------------------------------------------------------
+# Função para Gerar Gráfico com Matplotlib
+# ------------------------------------------------------------------------------
+def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info):
+    categorias = ['Follow-ups', 'Confirmados', 'Pendentes', 'Visitas', 'Interações']
+    valores = [total_followups, confirmados, pendentes, total_visitas, total_interacoes]
+    plt.figure(figsize=(8, 4))
+    barras = plt.bar(categorias, valores, color=['blue', 'green', 'orange', 'purple', 'red'])
+    plt.title(f"Relatório {periodo_info}")
+    for barra in barras:
+        yval = barra.get_height()
+        plt.text(barra.get_x() + barra.get_width() / 2, yval + 0.1, yval, ha='center', va='bottom')
+    tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+    plt.savefig(tmp_file.name, dpi=150)
+    plt.close()
+    return tmp_file.name
 
 # ------------------------------------------------------------------------------
 # Comandos Básicos
@@ -199,7 +218,10 @@ async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     category = query.data
     context.user_data["category"] = category
-    await query.edit_message_text(text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:", parse_mode="Markdown")
+    await query.edit_message_text(
+        text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:",
+        parse_mode="Markdown"
+    )
     return VISIT_MOTIVE
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -214,7 +236,10 @@ async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text(
+            "📅 Informe a data do follow-up (formato DD/MM/AAAA):",
+            reply_markup=ReplyKeyboardRemove()
+        )
         return VISIT_FOLLOWUP_DATE
     else:
         try:
@@ -381,7 +406,7 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("Erro no lembrete_callback: %s", e)
 
 # ------------------------------------------------------------------------------
-# Fluxo de Relatório (Resumido)
+# Fluxo de Relatório (Resumido) com Gráfico
 # ------------------------------------------------------------------------------
 async def relatorio_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("📊 *Relatório*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
@@ -422,24 +447,22 @@ async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_T
         except Exception:
             return False
         return context.user_data["report_start_dt"] <= doc_date <= context.user_data["report_end_dt"]
-
+    
     total_followups = 0
     confirmados = 0
     total_visitas = 0
     total_interacoes = 0
-
+    
     for doc in followups_docs:
         data = doc.to_dict() or {}
         if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
             total_followups += 1
             if data.get("status") == "realizado":
                 confirmados += 1
-
     for doc in visitas_docs:
         data = doc.to_dict() or {}
         if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
             total_visitas += 1
-
     for doc in interacoes_docs:
         data = doc.to_dict() or {}
         if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
@@ -447,16 +470,20 @@ async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_T
 
     pendentes = total_followups - confirmados
     periodo_info = f"de {context.user_data['report_start']} até {context.user_data['report_end']}"
-    mensagem = (
+    
+    texto_relatorio = (
         f"📊 *Relatório ({periodo_info})*\n\n"
-        f"Follow-ups:\n"
-        f" - Total: {total_followups}\n"
-        f" - Confirmados: {confirmados}\n"
-        f" - Pendentes: {pendentes}\n\n"
+        f"Follow-ups:\n - Total: {total_followups}\n - Confirmados: {confirmados}\n - Pendentes: {pendentes}\n\n"
         f"Visitas: {total_visitas}\n"
         f"Interações: {total_interacoes}"
     )
-    await update.message.reply_text(mensagem, parse_mode="Markdown")
+    await update.message.reply_text(texto_relatorio, parse_mode="Markdown")
+    
+    # Agora, gera e envia o gráfico
+    grafico_path = gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info)
+    with open(grafico_path, "rb") as photo:
+        await update.message.reply_photo(photo=photo, caption="Gráfico do relatório")
+    os.remove(grafico_path)
     return ConversationHandler.END
 
 async def relatorio_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -498,16 +525,16 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
     followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
     visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
     interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
-
+    
     def in_interval(criado_em_str: str) -> bool:
         try:
             doc_date = datetime.fromisoformat(criado_em_str)
         except Exception:
             return False
         return context.user_data["historico_start_dt"] <= doc_date <= context.user_data["historico_end_dt"]
-
+    
     mensagem = "*📜 Histórico Detalhado*\n\n"
-
+    
     if followups_docs:
         mensagem += "📋 *Follow-ups*\n"
         for doc in followups_docs:
@@ -520,7 +547,7 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
                 mensagem += f" - Cliente: {cliente}\n   Data: {data_follow}\n   Descrição: {descricao}\n   Status: {status}\n\n"
     else:
         mensagem += "📋 *Follow-ups*\n - Nenhum registro encontrado.\n\n"
-
+    
     if visitas_docs:
         mensagem += "🏢 *Visitas*\n"
         for doc in visitas_docs:
@@ -533,7 +560,7 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
                 mensagem += f" - Empresa: {empresa}\n   Data: {data_visita}\n   Classificação: {classificacao}\n   Motivo: {motivo}\n\n"
     else:
         mensagem += "🏢 *Visitas*\n - Nenhum registro encontrado.\n\n"
-
+    
     if interacoes_docs:
         mensagem += "💬 *Interações*\n"
         for doc in interacoes_docs:
@@ -545,10 +572,10 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
                 mensagem += f" - Cliente: {cliente}\n   Resumo: {resumo}\n   Follow-up: {followup}\n\n"
     else:
         mensagem += "💬 *Interações*\n - Nenhum registro encontrado.\n\n"
-
+    
     if mensagem.strip() == "*📜 Histórico Detalhado*\n\n":
         mensagem = "⚠️ Nenhum registro encontrado no intervalo fornecido."
-
+    
     await update.message.reply_text(mensagem, parse_mode="Markdown")
     return ConversationHandler.END
 
@@ -646,7 +673,7 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
     
-    # Handler para Relatório (Resumido)
+    # Handler para Relatório (Resumido) com Gráfico
     relatorio_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("relatorio", relatorio_start)],
         states={
