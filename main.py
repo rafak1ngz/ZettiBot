@@ -86,7 +86,7 @@ FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
-# Lembrete – agora usando data/hora em vez de minutos
+# Lembrete – agora usando data/hora (em vez de minutos)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
@@ -555,7 +555,12 @@ async def main():
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
-    await application.run_polling(drop_pending_updates=True)
+    # Aguarda um curto intervalo para garantir que o webhook tenha sido efetivamente removido
+    await asyncio.sleep(1)
+    try:
+        await application.run_polling(drop_pending_updates=True)
+    except Exception as e:
+        logger.error("Erro durante polling: %s", e)
 
 if __name__ == '__main__':
     asyncio.run(main())
