@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 
-# Define o fuso horário desejado (altere se necessário)
+# Define o fuso horário desejado (ajuste conforme necessário)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Aplica o patch do nest_asyncio (útil em ambientes com event loop já ativo)
@@ -19,7 +19,6 @@ nest_asyncio.apply()
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)  # DEBUG para capturar mais informações
 
-# Configura o handler para stdout
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -334,7 +333,7 @@ async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     logger.info("Interação cancelada.")
     return ConversationHandler.END
 
-# ---- Lembrete (Atualizado para data/hora) ---------------
+# ---- Lembrete (Atualizado para Data/Hora) ---------------
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🔔 *Lembrete*: Informe o texto do lembrete:", parse_mode="Markdown")
     return REMINDER_TEXT
@@ -347,6 +346,7 @@ async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     input_str = update.message.text.strip()
     try:
+        # Converte a entrada para datetime e atribui o fuso horário definido
         target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
         await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy HH:MM")
@@ -374,35 +374,6 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode="Markdown")
     except Exception as e:
         logger.error("Erro no lembrete_callback: %s", e)
-
-# ---- Relatório (/relatorio) ---------------------------
-async def relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    try:
-        chat_id = str(update.message.chat.id)
-        # Consulta as subcoleções do usuário
-        followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
-        visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
-        interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
-        
-        total_followups = len(followups_docs)
-        confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
-        pendentes = total_followups - confirmados
-        total_visitas = len(visitas_docs)
-        total_interacoes = len(interacoes_docs)
-        
-        mensagem = (
-            f"📊 *Relatório Geral*\n\n"
-            f"Follow-ups:\n"
-            f" - Total: {total_followups}\n"
-            f" - Confirmados: {confirmados}\n"
-            f" - Pendentes: {pendentes}\n\n"
-            f"Visitas: {total_visitas}\n"
-            f"Interações: {total_interacoes}"
-        )
-        await update.message.reply_text(mensagem, parse_mode="Markdown")
-    except Exception as e:
-        logger.error("Erro no relatorio: %s", e)
-        await update.message.reply_text("Erro ao gerar relatório.")
 
 # ---- Jobs Diários para Follow-up Automático ----
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -486,11 +457,10 @@ async def main():
 
     application = ApplicationBuilder().token(token).build()
 
-    # Handlers simples
+    # Handlers Simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
-    application.add_handler(CommandHandler("historico", historico))
-    application.add_handler(CommandHandler("relatorio", relatorio))
+    # Removemos o comando de relatório para voltar à versão anterior
 
     # ConversationHandler para Follow-up
     followup_conv_handler = ConversationHandler(
