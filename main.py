@@ -7,26 +7,30 @@ import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 
-print("Iniciando a aplicação…")
-
-# Define o fuso horário desejado (ajuste conforme necessário)
+# Define o fuso horário desejado (altere se necessário)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Aplica o patch do nest_asyncio (útil em ambientes com event loop já ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
-# Configuração personalizada de Logging para envio para stdout
+# Configuração do Logger
 # ------------------------------------------------------------------------------
-logger = logging.getLogger()
-logger.setLevel(logging.DEBUG)
-for handler in logger.handlers[:] :
-    logger.removeHandler(handler)
-console_handler = logging.StreamHandler(sys.stdout)
-console_handler.setLevel(logging.INFO)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.DEBUG)  # DEBUG para capturar mais informações
+
+# Configura o handler para stdout
+handler = logging.StreamHandler(sys.stdout)
+handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-logger.addHandler(console_handler)
+handler.setFormatter(formatter)
+if not logger.handlers:
+    logger.addHandler(handler)
+else:
+    for h in logger.handlers:
+        logger.removeHandler(h)
+    logger.addHandler(handler)
+
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -36,22 +40,28 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
-if not firebase_credentials:
-    logger.error("Variável de ambiente FIREBASE_CREDENTIALS não definida!")
+# Verifica se as variáveis de ambiente necessárias estão definidas
+if not os.environ.get("TELEGRAM_TOKEN"):
+    logger.error("TELEGRAM_TOKEN não definido!")
     exit(1)
+if not os.environ.get("FIREBASE_CREDENTIALS"):
+    logger.error("FIREBASE_CREDENTIALS não definida!")
+    exit(1)
+
+firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
 try:
     cred_dict = json.loads(firebase_credentials)
-except json.JSONDecodeError as error:
-    logger.error("Erro ao decodificar FIREBASE_CREDENTIALS: %s", error)
+except json.JSONDecodeError as e:
+    logger.error("Erro ao decodificar FIREBASE_CREDENTIALS: %s", e)
     exit(1)
+
 cred = credentials.Certificate(cred_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 logger.info("Firebase inicializado com sucesso!")
 
 # ------------------------------------------------------------------------------
-# Integração com o Telegram Bot (API assíncrona)
+# Integração com o Telegram Bot (API Assíncrona)
 # ------------------------------------------------------------------------------
 from telegram import (
     Update,
@@ -70,28 +80,23 @@ from telegram.ext import (
     ContextTypes
 )
 
-# ***** Estados para as conversas *****
+# ***** Estados para as Conversas *****
 # Follow-up
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
-
-# Visita (inclui opção de follow-up opcional)
+# Visita (com opção de follow-up opcional)
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
-
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
-
-# Lembrete – agora usando data/hora (em vez de apenas minutos)
+# Lembrete – agora usando data/hora
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
-# Funções Básicas e Conversas Interativas
+# Comandos Básicos e Conversas Interativas
 # ------------------------------------------------------------------------------
-# Comando /start
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text("Olá Rafael! 😃 Seu bot está ativo e integrado com o Firebase.")
     logger.info("Comando /start executado.")
 
-# Comando /testfirebase
 async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         chat_id = str(update.message.chat.id)
@@ -99,15 +104,15 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             "message": "Teste de integração Firebase!",
             "timestamp": firestore.SERVER_TIMESTAMP
         })
-        await update.message.reply_text("Dados enviados com sucesso para o Firebase! ✅")
+        await update.message.reply_text("Dados enviados para o Firebase com sucesso! ✅")
         logger.info("Comando /testfirebase executado com sucesso.")
-    except Exception as error:
-        logger.error("Erro ao enviar dados para o Firebase: %s", error)
-        await update.message.reply_text("Erro ao enviar dados para o Firebase. 😟")
+    except Exception as e:
+        logger.error("Erro no testfirebase: %s", e)
+        await update.message.reply_text("Erro ao enviar dados para o Firebase.")
 
-# ---- Conversa Interativa: Follow-up ----
+# ---- Follow-up -----------------------------------------
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode='Markdown')
+    await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode="Markdown")
     return FOLLOWUP_CLIENT
 
 async def followup_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -120,11 +125,11 @@ async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato de data inválido! Utilize dd/mm/yyyy. Informe novamente:")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato dd/mm/yyyy.")
         logger.warning("Formato de data inválido no follow-up.")
         return FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
-    await update.message.reply_text("📝 Descreva a ação do follow-up (ex.: Ligar para confirmar proposta):")
+    await update.message.reply_text("📝 Descreva a ação do follow-up:")
     return FOLLOWUP_DESCRIPTION
 
 async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -140,25 +145,25 @@ async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYP
             "criado_em": datetime.now().isoformat()
         })
         await update.message.reply_text("Follow-up registrado com sucesso! ✅")
-        logger.info(f"Follow-up registrado para {context.user_data['client']} na data {context.user_data['followup_date']}.")
+        logger.info(f"Follow-up registrado para {context.user_data['client']} em {context.user_data['followup_date']}.")
     except Exception as e:
         logger.error("Erro ao registrar follow-up: %s", e)
         await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
     return ConversationHandler.END
 
 async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Registro de follow-up cancelado. ❌")
-    logger.info("Conversa de follow-up cancelada pelo usuário.")
+    await update.message.reply_text("Follow-up cancelado. ❌")
+    logger.info("Follow-up cancelado.")
     return ConversationHandler.END
 
-# ---- Conversa Interativa: Visita ----
+# ---- Visita ---------------------------------------------
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode='Markdown')
+    await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode="Markdown")
     return VISIT_COMPANY
 
 async def visita_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["company"] = update.message.text.strip()
-    await update.message.reply_text("📅 Qual a data da visita? (dd/mm/yyyy)")
+    await update.message.reply_text("📅 Informe a data da visita (dd/mm/yyyy):")
     return VISIT_DATE
 
 async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -166,8 +171,8 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato de data inválido! Informe novamente (dd/mm/yyyy):")
-        logger.warning("Formato de data inválido no comando /visita.")
+        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
+        logger.warning("Formato de data inválido na visita.")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
     options = [
@@ -183,7 +188,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         [InlineKeyboardButton("Sem Interesse", callback_data="Sem Interesse")]
     ]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("📋 Qual a categoria do cliente? Selecione uma opção:", reply_markup=reply_markup)
+    await update.message.reply_text("📋 Selecione a categoria do cliente:", reply_markup=reply_markup)
     return VISIT_CATEGORY
 
 async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -191,16 +196,14 @@ async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     category = query.data
     context.user_data["category"] = category
-    await query.edit_message_text(text=f"✔️ Categoria selecionada: *{category}*\nQual o motivo da visita?", parse_mode='Markdown')
+    await query.edit_message_text(text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:", parse_mode="Markdown")
     return VISIT_MOTIVE
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["motive"] = update.message.text.strip()
     reply_keyboard = [["Sim", "Não"]]
-    await update.message.reply_text(
-        "Deseja agendar um follow-up para essa visita? (Sim/Não)",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
+    await update.message.reply_text("Deseja agendar follow-up para a visita? (Sim/Não)",
+                                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True))
     return VISIT_FOLLOWUP_CHOICE
 
 async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -220,9 +223,9 @@ async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_T
                 "criado_em": datetime.now().isoformat()
             })
             await update.message.reply_text("Visita registrada com sucesso!", reply_markup=ReplyKeyboardRemove())
-            logger.info(f"Visita registrada para {context.user_data['company']} na data {context.user_data['visit_date']}.")
+            logger.info(f"Visita registrada para {context.user_data['company']} em {context.user_data['visit_date']}.")
         except Exception as e:
-            logger.error("Erro ao registrar visita: %s", e)
+            logger.error("Erro na visita: %s", e)
             await update.message.reply_text("Erro ao registrar visita: " + str(e), reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
 
@@ -231,12 +234,11 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato de data inválido! Utilize dd/mm/yyyy. Informe novamente:")
+        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
         return VISIT_FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
     chat_id = str(update.message.chat.id)
     try:
-        # Registra a visita com follow-up agendado
         db.collection("users").document(chat_id).collection("visitas").document().set({
             "empresa": context.user_data["company"],
             "data_visita": context.user_data["visit_date"],
@@ -245,7 +247,6 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
             "followup": context.user_data["followup_date"],
             "criado_em": datetime.now().isoformat()
         })
-        # Cria também o follow-up na subcoleção "followups"
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["company"],
             "data_follow": context.user_data["followup_date"],
@@ -254,41 +255,39 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
             "chat_id": chat_id,
             "criado_em": datetime.now().isoformat()
         })
-        await update.message.reply_text("Visita registrada com follow-up agendado com sucesso! ✅")
-        logger.info(f"Visita para {context.user_data['company']} registrada e follow-up agendado para {context.user_data['followup_date']}.")
+        await update.message.reply_text("Visita e follow-up registrados com sucesso! ✅")
+        logger.info(f"Visita registrada e follow-up agendado para {context.user_data['company']} em {context.user_data['followup_date']}.")
     except Exception as e:
-        logger.error("Erro ao registrar visita com followup: %s", e)
-        await update.message.reply_text("Erro ao registrar visita com followup: " + str(e))
+        logger.error("Erro ao registrar visita com follow-up: %s", e)
+        await update.message.reply_text("Erro ao registrar visita com follow-up: " + str(e))
     return ConversationHandler.END
 
 async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Registro de visita cancelado.", reply_markup=ReplyKeyboardRemove())
-    logger.info("Conversa de visita cancelada pelo usuário.")
+    await update.message.reply_text("Visita cancelada.", reply_markup=ReplyKeyboardRemove())
+    logger.info("Visita cancelada.")
     return ConversationHandler.END
 
-# ---- Conversa Interativa: Interação ----
+# ---- Interação -----------------------------------------
 async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem você interagiu:", parse_mode='Markdown')
+    await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem interagiu:", parse_mode="Markdown")
     return INTER_CLIENT
 
 async def interacao_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["client_interacao"] = update.message.text.strip()
-    await update.message.reply_text("📝 Agora, digite um resumo da interação:")
+    await update.message.reply_text("📝 Digite um resumo da interação:")
     return INTER_SUMMARY
 
 async def interacao_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["resumo_interacao"] = update.message.text.strip()
     reply_keyboard = [["Sim", "Não"]]
-    await update.message.reply_text(
-        "Você deseja agendar um follow-up para essa interação? (Sim/Não)",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
+    await update.message.reply_text("Deseja agendar follow-up para essa interação? (Sim/Não)",
+                                    reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True))
     return INTER_FOLLOWUP_CHOICE
 
 async def interacao_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data para o follow-up (dd/mm/yyyy):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("📅 Informe a data do follow-up (dd/mm/yyyy):", reply_markup=ReplyKeyboardRemove())
         return INTER_FOLLOWUP_DATE
     else:
         context.user_data["followup_interacao"] = None
@@ -312,7 +311,7 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
     try:
         data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato de data inválido! Utilize dd/mm/yyyy. Informe novamente:")
+        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
         return INTER_FOLLOWUP_DATE
     context.user_data["followup_interacao"] = data_follow.isoformat()
     try:
@@ -324,34 +323,33 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
             "criado_em": datetime.now().isoformat()
         })
         await update.message.reply_text("Interação registrada com sucesso!")
-        logger.info(f"Interação registrada para {context.user_data['client_interacao']} com follow-up em {context.user_data['followup_interacao']}.")
+        logger.info(f"Interação registrada para {context.user_data['client_interacao']} com follow-up {context.user_data['followup_interacao']}.")
     except Exception as e:
-        logger.error("Erro ao registrar interação: %s", e)
+        logger.error("Erro no interacao_followup_date: %s", e)
         await update.message.reply_text("Erro ao registrar interação: " + str(e))
     return ConversationHandler.END
 
 async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Registro de interação cancelado.", reply_markup=ReplyKeyboardRemove())
-    logger.info("Conversa de interação cancelada pelo usuário.")
+    await update.message.reply_text("Interação cancelada.", reply_markup=ReplyKeyboardRemove())
+    logger.info("Interação cancelada.")
     return ConversationHandler.END
 
-# ---- Conversa Interativa: Lembrete (Atualizado para data/hora) ----
+# ---- Lembrete (Atualizado para data/hora) ---------------
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔔 *Lembrete*: Por favor, digite o texto do seu lembrete:", parse_mode='Markdown')
+    await update.message.reply_text("🔔 *Lembrete*: Informe o texto do lembrete:", parse_mode="Markdown")
     return REMINDER_TEXT
 
 async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["lembrete_text"] = update.message.text.strip()
-    await update.message.reply_text("⏳ Agora, informe a data e o horário para o lembrete (formato: dd/mm/yyyy HH:MM):")
+    await update.message.reply_text("⏳ Agora, informe a data e horário para o lembrete (dd/mm/yyyy HH:MM):")
     return REMINDER_DATETIME
 
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     input_str = update.message.text.strip()
     try:
-        # Converte a entrada para datetime e atribui o fuso horário definido
         target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Por favor, use o formato: dd/mm/yyyy HH:MM")
+        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy HH:MM")
         return REMINDER_DATETIME
     now = datetime.now(TIMEZONE)
     delay_seconds = (target_datetime - now).total_seconds()
@@ -369,98 +367,109 @@ async def lembrete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    job_data = context.job.data
-    chat_id = job_data["chat_id"]
-    lembrete_text_value = job_data["lembrete_text"]
-    await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode='Markdown')
+    try:
+        job_data = context.job.data
+        chat_id = job_data["chat_id"]
+        lembrete_text_value = job_data["lembrete_text"]
+        await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Erro no lembrete_callback: %s", e)
 
-# ---- Comando para Gerar Relatórios e Analytics ----
+# ---- Relatório (/relatorio) ---------------------------
 async def relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    chat_id = str(update.message.chat.id)
-    # Consulta os documentos dos followups, visitas e interações da subcoleção do usuário
-    followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
-    visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
-    interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
-    
-    total_followups = len(followups_docs)
-    confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
-    pendentes = total_followups - confirmados
-    total_visitas = len(visitas_docs)
-    total_interacoes = len(interacoes_docs)
-    
-    mensagem = (
-        f"📊 *Relatório Geral*\n\n"
-        f"Follow-ups:\n"
-        f" - Total: {total_followups}\n"
-        f" - Confirmados: {confirmados}\n"
-        f" - Pendentes: {pendentes}\n\n"
-        f"Visitas: {total_visitas}\n"
-        f"Interações: {total_interacoes}"
-    )
-    await update.message.reply_text(mensagem, parse_mode='Markdown')
+    try:
+        chat_id = str(update.message.chat.id)
+        # Consulta as subcoleções do usuário
+        followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
+        visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
+        interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
+        
+        total_followups = len(followups_docs)
+        confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
+        pendentes = total_followups - confirmados
+        total_visitas = len(visitas_docs)
+        total_interacoes = len(interacoes_docs)
+        
+        mensagem = (
+            f"📊 *Relatório Geral*\n\n"
+            f"Follow-ups:\n"
+            f" - Total: {total_followups}\n"
+            f" - Confirmados: {confirmados}\n"
+            f" - Pendentes: {pendentes}\n\n"
+            f"Visitas: {total_visitas}\n"
+            f"Interações: {total_interacoes}"
+        )
+        await update.message.reply_text(mensagem, parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Erro no relatorio: %s", e)
+        await update.message.reply_text("Erro ao gerar relatório.")
 
 # ---- Jobs Diários para Follow-up Automático ----
-# Envia lembretes para os follow-ups agendados para hoje (08:30 e 13:00)
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = datetime.now(TIMEZONE).date().isoformat()
-    docs = db.collection_group("followups").where("data_follow", "==", today).where("status", "==", "pendente").stream()
-    for doc in docs:
-        data = doc.to_dict()
-        user_chat_id = data.get("chat_id")
-        if user_chat_id:
-            followup_id = doc.id
-            message_text = (
-                f"🔔 *Lembrete de Follow-up:*\n"
-                f"Cliente: {data.get('cliente')}\n"
-                f"Descrição: {data.get('descricao')}\n\n"
-                f"Confirme se o contato foi realizado:"
-            )
-            keyboard = InlineKeyboardMarkup(
-                [[InlineKeyboardButton("Confirmar", callback_data=f"confirm_followup:{user_chat_id}:{followup_id}")]]
-            )
-            await context.bot.send_message(chat_id=user_chat_id, text=message_text, reply_markup=keyboard, parse_mode='Markdown')
+    try:
+        today = datetime.now(TIMEZONE).date().isoformat()
+        docs = db.collection_group("followups").where("data_follow", "==", today).where("status", "==", "pendente").stream()
+        for doc in docs:
+            data = doc.to_dict()
+            user_chat_id = data.get("chat_id")
+            if user_chat_id:
+                followup_id = doc.id
+                message_text = (
+                    f"🔔 *Lembrete de Follow-up:*\n"
+                    f"Cliente: {data.get('cliente')}\n"
+                    f"Descrição: {data.get('descricao')}\n\n"
+                    f"Confirme se o contato foi realizado:"
+                )
+                keyboard = InlineKeyboardMarkup(
+                    [[InlineKeyboardButton("Confirmar", callback_data=f"confirm_followup:{user_chat_id}:{followup_id}")]]
+                )
+                await context.bot.send_message(chat_id=user_chat_id, text=message_text, reply_markup=keyboard, parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Erro no daily_reminder_callback: %s", e)
 
-# Envia resumo diário às 18:00 e reagenda follow-ups pendentes para amanhã
 async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
-    today = datetime.now(TIMEZONE).date().isoformat()
-    confirmed_count = {}
-    pending_items = {}
-    docs = db.collection_group("followups").where("data_follow", "==", today).stream()
-    for doc in docs:
-        data = doc.to_dict()
-        user_chat_id = data.get("chat_id")
-        if not user_chat_id:
-            continue
-        if data.get("status") == "realizado":
-            confirmed_count[user_chat_id] = confirmed_count.get(user_chat_id, 0) + 1
-        elif data.get("status") == "pendente":
-            pending_items.setdefault(user_chat_id, []).append((doc.id, data))
-    tomorrow = (datetime.now(TIMEZONE).date() + timedelta(days=1)).isoformat()
-    for user_chat_id in pending_items.keys():
-        pending_count = len(pending_items[user_chat_id])
-        confirmed = confirmed_count.get(user_chat_id, 0)
-        summary_text = (
-            f"📝 *Resumo do dia {today}:*\n\n"
-            f"Follow-ups confirmados: {confirmed}\n"
-            f"Follow-ups pendentes: {pending_count}\n"
-            f"Os pendentes foram reagendados para {tomorrow}."
-        )
-        await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode='Markdown')
-        for doc_id, data in pending_items[user_chat_id]:
-            db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"data_follow": tomorrow})
+    try:
+        today = datetime.now(TIMEZONE).date().isoformat()
+        confirmed_count = {}
+        pending_items = {}
+        docs = db.collection_group("followups").where("data_follow", "==", today).stream()
+        for doc in docs:
+            data = doc.to_dict()
+            user_chat_id = data.get("chat_id")
+            if not user_chat_id:
+                continue
+            if data.get("status") == "realizado":
+                confirmed_count[user_chat_id] = confirmed_count.get(user_chat_id, 0) + 1
+            elif data.get("status") == "pendente":
+                pending_items.setdefault(user_chat_id, []).append((doc.id, data))
+        tomorrow = (datetime.now(TIMEZONE).date() + timedelta(days=1)).isoformat()
+        for user_chat_id in pending_items.keys():
+            pending_count = len(pending_items[user_chat_id])
+            confirmed = confirmed_count.get(user_chat_id, 0)
+            summary_text = (
+                f"📝 *Resumo do dia {today}:*\n\n"
+                f"Follow-ups confirmados: {confirmed}\n"
+                f"Follow-ups pendentes: {pending_count}\n"
+                f"Os pendentes foram reagendados para {tomorrow}."
+            )
+            await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode="Markdown")
+            for doc_id, data in pending_items[user_chat_id]:
+                db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"data_follow": tomorrow})
+    except Exception as e:
+        logger.error("Erro no evening_summary_callback: %s", e)
 
 # ---- Callback para Confirmar Follow-up via Botão Inline ----
 async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
     try:
+        query = update.callback_query
+        await query.answer()
         _, user_chat_id, doc_id = query.data.split(":", 2)
         db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"status": "realizado"})
         await query.edit_message_text(text="✅ Follow-up confirmado!")
         logger.info(f"Follow-up {doc_id} confirmado para o usuário {user_chat_id}.")
     except Exception as e:
-        await query.edit_message_text(text="Erro ao confirmar follow-up.")
         logger.error("Erro ao confirmar follow-up: %s", e)
+        await query.edit_message_text(text="Erro ao confirmar follow-up.")
 
 # ---- Error Handler ----
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -539,7 +548,7 @@ async def main():
 
     application.add_error_handler(error_handler)
 
-    # Agendamento dos jobs diários na JobQueue (usando o fuso horário definido)
+    # Agendamento dos jobs diários na JobQueue (usando o TIMEZONE definido)
     job_queue = application.job_queue
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
