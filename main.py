@@ -7,12 +7,14 @@ import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 import tempfile
-import matplotlib.pyplot as plt  # Certifique-se de que está instalado
+import matplotlib.pyplot as plt
+# Para exportar CSV
+import csv
 
 # Define o fuso horário desejado
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
-# Aplica o patch no nest_asyncio
+# Aplica o patch do nest_asyncio
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -81,7 +83,7 @@ from telegram.ext import (
 # Follow-up (0 a 2)
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 # Visita (0 a 5)
-VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
+VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 3+6)
 # Interação (0 a 3)
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 # Lembrete (100 a 101)
@@ -99,6 +101,10 @@ DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 # Estados para Exportação (800 a 801)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
+# Estado para Buscar Potenciais Clientes
+BUSCA_CRITERIOS = 900
+# Estado para Criar Rota
+ROTA_REGIAO = 901
 
 # ------------------------------------------------------------------------------
 # Função para Gerar Gráfico com Matplotlib
@@ -121,11 +127,9 @@ def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_
 # Função para Gerar Arquivo CSV (Exportar Registros)
 # ------------------------------------------------------------------------------
 def exportar_csv(docs):
-    import csv
     temp_file = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", delete=False, suffix=".csv")
     writer = csv.writer(temp_file)
     if docs:
-        # Obtem as chaves do primeiro registro como cabeçalho
         keys = list(docs[0].to_dict().keys())
         writer.writerow(keys)
         for doc in docs:
@@ -133,6 +137,38 @@ def exportar_csv(docs):
             writer.writerow([data.get(k, "") for k in keys])
     temp_file.close()
     return temp_file.name
+
+# ------------------------------------------------------------------------------
+# Nova Função: Buscar Potenciais Clientes (Simulação)
+# ------------------------------------------------------------------------------
+def buscar_potenciais_clientes(query: str):
+    # Aqui você integraria uma API real; neste exemplo, simulamos a pesquisa.
+    query_lower = query.lower()
+    if "vitória" in query_lower and "empilhadeiras" in query_lower:
+        return [
+            "Empilhadeiras Vitória Ltda",
+            "Manutenção Empilhadeiras Vitória",
+            "Aluguel de Empilhadeiras Vitória"
+        ]
+    else:
+        return [
+            "Empresa Exemplo 1",
+            "Empresa Exemplo 2"
+        ]
+
+# ------------------------------------------------------------------------------
+# Nova Função: Criar Rota de Visita (Simulação)
+# ------------------------------------------------------------------------------
+def criar_rota_visita(regiao: str):
+    # Em produção, integre com uma API de rotas, como a do Google Maps.
+    if "linhares" in regiao.lower():
+        return [
+            "Cliente A - Linhares",
+            "Cliente B - Linhares",
+            "Cliente C - Linhares"
+        ]
+    else:
+        return []
 
 # ------------------------------------------------------------------------------
 # Comando /inicio – Mensagem de Boas-Vindas
@@ -152,17 +188,20 @@ async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /excluir – Excluir um registro\n"
         "• /filtrar – Filtrar registros\n"
         "• /exportar – Exportar registros em CSV\n"
+        "• /buscapotenciais – Buscar potenciais clientes\n"
+        "• /criarrota – Criar uma rota de visita para uma região\n"
     )
     await update.message.reply_text(msg)
     logger.info("Comando /inicio executado.")
 
 # ------------------------------------------------------------------------------
-# Comando /ajuda – Informações sobre o Bot e suas funções
+# Comando /ajuda – Informações sobre o Bot
 # ------------------------------------------------------------------------------
 async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = (
         "*Ajuda - Informações do Bot*\n\n"
-        "Este bot permite gerenciar registros de follow‑ups, visitas e interações, agendar lembretes e gerar relatórios.\n\n"
+        "Este bot permite gerenciar registros de follow‑ups, visitas, interações, agendar lembretes, gerar relatórios, "
+        "editar/excluir registros, filtrar e exportar dados, além de buscar potenciais clientes e criar rotas de visita.\n\n"
         "*Comandos disponíveis:*\n"
         "• /inicio – Mensagem de boas‑vindas\n"
         "• /ajuda – Exibe esta mensagem de ajuda\n"
@@ -175,7 +214,9 @@ async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /editar – Editar um registro\n"
         "• /excluir – Excluir um registro\n"
         "• /filtrar – Filtrar registros\n"
-        "• /exportar – Exportar registros em CSV\n\n"
+        "• /exportar – Exportar registros em CSV\n"
+        "• /buscapotenciais – Buscar potenciais clientes com critérios informados\n"
+        "• /criarrota – Criar uma rota de visita para uma região\n\n"
         "Para cancelar um fluxo, use /cancelar.\n"
         "Se enviar uma mensagem fora do fluxo, você receberá esta orientação."
     )
@@ -214,14 +255,15 @@ async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["followup_desc"] = update.message.text.strip()
     try:
         chat_id = str(update.message.chat.id)
-        db.collection("users").document(chat_id).collection("followups").document().set({
-            "cliente": context.user_data["client"],
-            "data_follow": context.user_data["followup_date"],
-            "descricao": context.user_data["followup_desc"],
-            "status": "pendente",
-            "chat_id": chat_id,
-            "criado_em": datetime.now().isoformat()
-        })
+        db.collection("users").document(chat_id)\
+          .collection("followups").document().set({
+              "cliente": context.user_data["client"],
+              "data_follow": context.user_data["followup_date"],
+              "descricao": context.user_data["followup_desc"],
+              "status": "pendente",
+              "chat_id": chat_id,
+              "criado_em": datetime.now().isoformat()
+          })
         await update.message.reply_text("Follow-up registrado com sucesso! ✅")
     except Exception as e:
         await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
@@ -641,10 +683,7 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
     context.user_data["edit_record_id"] = record_id
-    await update.message.reply_text(
-        "Qual campo deseja editar? (Ex.: followup: cliente, data_follow, descricao, status; visita: empresa, data_visita, classificacao, motivo, followup; interacao: cliente, resumo, followup)",
-        parse_mode="Markdown"
-    )
+    await update.message.reply_text("Qual campo deseja editar? (Ex.: followup: cliente, data_follow, descricao, status; visita: empresa, data_visita, classificacao, motivo, followup; interacao: cliente, resumo, followup)", parse_mode="Markdown")
     return EDIT_FIELD
 
 async def editar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -819,7 +858,6 @@ async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # ------------------------------------------------------------------------------
 # Fluxo de Exportação de Registros (CSV)
 # ------------------------------------------------------------------------------
-# Estados para Exportação: EXPORT_CATEGORY, EXPORT_PROCESS (estão no range 800 a 801)
 async def exportar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
         InlineKeyboardButton("Followup", callback_data="export_followup"),
@@ -863,12 +901,48 @@ async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
+# Fluxo de Busca de Potenciais Clientes
+# ------------------------------------------------------------------------------
+async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Informe os critérios para buscar potenciais clientes (ex.: 'compra, aluguel ou contrato de manutenção de empilhadeiras em Vitória ES'):")
+    return BUSCA_CRITERIOS
+
+async def buscapotenciais_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.message.text.strip()
+    lista = buscar_potenciais_clientes(query)
+    if lista:
+        msg = "Potenciais clientes encontrados:\n" + "\n".join(lista)
+    else:
+        msg = "Nenhum potencial cliente encontrado para os critérios informados."
+    await update.message.reply_text(msg)
+    return ConversationHandler.END
+
+# ------------------------------------------------------------------------------
+# Fluxo de Criação de Rota de Visita
+# ------------------------------------------------------------------------------
+async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Informe a região para criar a rota de visita (ex.: 'Linhares-ES'):")
+    return ROTA_REGIAO
+
+async def criarrota_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    regiao = update.message.text.strip()
+    rota = criar_rota_visita(regiao)
+    if rota:
+        msg = "Rota de visita para a região de {}:\n".format(regiao) + "\n".join(rota)
+    else:
+        msg = "Nenhum cliente encontrado para a região informada."
+    await update.message.reply_text(msg)
+    return ConversationHandler.END
+
+# ------------------------------------------------------------------------------
 # Jobs Diários e Callback Inline para Follow-up
 # ------------------------------------------------------------------------------
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         today = datetime.now(TIMEZONE).date().isoformat()
-        docs = db.collection_group("followups").where("data_follow", "==", today).where("status", "==", "pendente").stream()
+        docs = db.collection_group("followups")\
+                 .where("data_follow", "==", today)\
+                 .where("status", "==", "pendente").stream()
         for doc in docs:
             data = doc.to_dict()
             user_chat_id = data.get("chat_id")
@@ -914,7 +988,8 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             )
             await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode="Markdown")
             for doc_id, _ in pending_items[user_chat_id]:
-                db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"data_follow": tomorrow})
+                db.collection("users").document(user_chat_id)\
+                  .collection("followups").document(doc_id).update({"data_follow": tomorrow})
     except Exception as e:
         logger.error("Erro no evening_summary_callback: %s", e)
 
@@ -923,7 +998,8 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         query = update.callback_query
         await query.answer()
         _, user_chat_id, doc_id = query.data.split(":", 2)
-        db.collection("users").document(user_chat_id).collection("followups").document(doc_id).update({"status": "realizado"})
+        db.collection("users").document(user_chat_id)\
+          .collection("followups").document(doc_id).update({"status": "realizado"})
         await query.edit_message_text(text="✅ Follow-up confirmado!")
     except Exception as e:
         logger.error("Erro ao confirmar follow-up: %s", e)
@@ -943,11 +1019,17 @@ async def main():
     if not token:
         logger.error("TELEGRAM_TOKEN não definido!")
         return
+
     application = ApplicationBuilder().token(token).build()
 
     # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
     application.add_handler(CommandHandler("ajuda", ajuda))
+    
+    # Comando para busca de potenciais clientes
+    application.add_handler(CommandHandler("buscapotenciais", buscapotenciais_start))
+    # Comando para criar rota
+    application.add_handler(CommandHandler("criarrota", criarrota_start))
     
     # Handler default para mensagens fora de fluxo
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem_default))
@@ -1071,19 +1153,39 @@ async def main():
         fallbacks=[CommandHandler("cancelar", exportar_cancel)]
     )
     application.add_handler(exportar_conv_handler)
-    
+
+    # Handler para Busca de Potenciais Clientes
+    buscapotenciais_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
+        states={
+            BUSCA_CRITERIOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_received)]
+        },
+        fallbacks=[CommandHandler("cancelar", buscapotenciais_received)]
+    )
+    application.add_handler(buscapotenciais_conv_handler)
+
+    # Handler para Criação de Rota de Visita
+    criarrota_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("criarrota", criarrota_start)],
+        states={
+            ROTA_REGIAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_received)]
+        },
+        fallbacks=[CommandHandler("cancelar", criarrota_received)]
+    )
+    application.add_handler(criarrota_conv_handler)
+
     # Handler para confirmar Follow-up via Botão Inline
     application.add_handler(CallbackQueryHandler(confirm_followup_callback, pattern=r"^confirm_followup:"))
-    
+
     # Error Handler
     application.add_error_handler(error_handler)
-    
+
     # Agendamento dos Jobs Diários
     job_queue = application.job_queue
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
     job_queue.run_daily(evening_summary_callback, time=time(18, 0, tzinfo=TIMEZONE))
-    
+
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
     await asyncio.sleep(1)
