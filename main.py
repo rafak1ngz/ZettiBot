@@ -7,7 +7,7 @@ import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 import tempfile
-import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt  # Já resolvido a dependência no requirements.txt
 
 # Define o fuso horário desejado (ajuste conforme necessário)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
@@ -19,7 +19,7 @@ nest_asyncio.apply()
 # Configuração do Logger
 # ------------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG) 
+logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
@@ -80,7 +80,7 @@ from telegram.ext import (
     ContextTypes
 )
 
-# ----- Estados para os fluxos de conversa -----
+# ----- Estados já existentes -----
 # Follow-up (0 a 2)
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 # Visita (0 a 5)
@@ -93,6 +93,15 @@ REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 REPORT_START, REPORT_END = range(300, 302)
 # Histórico (detalhado) (400 a 401)
 HIST_START, HIST_END = range(400, 402)
+
+# ----- Estados para Edição (500 a 503) -----
+EDIT_CATEGORY, EDIT_RECORD, EDIT_FIELD, EDIT_NEW_VALUE = range(500, 504)
+
+# ----- Estados para Exclusão (600 a 602) -----
+DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
+
+# ----- Estados para Filtragem/Pesquisa (700 a 702) -----
+FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 
 # ------------------------------------------------------------------------------
 # Função para Gerar Gráfico com Matplotlib
@@ -218,10 +227,7 @@ async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT
     await query.answer()
     category = query.data
     context.user_data["category"] = category
-    await query.edit_message_text(
-        text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:",
-        parse_mode="Markdown"
-    )
+    await query.edit_message_text(text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:", parse_mode="Markdown")
     return VISIT_MOTIVE
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -236,10 +242,7 @@ async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text(
-            "📅 Informe a data do follow-up (formato DD/MM/AAAA):",
-            reply_markup=ReplyKeyboardRemove()
-        )
+        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
         return VISIT_FOLLOWUP_DATE
     else:
         try:
@@ -479,7 +482,7 @@ async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_T
     )
     await update.message.reply_text(texto_relatorio, parse_mode="Markdown")
     
-    # Agora, gera e envia o gráfico
+    # Gera e envia o gráfico
     grafico_path = gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info)
     with open(grafico_path, "rb") as photo:
         await update.message.reply_photo(photo=photo, caption="Gráfico do relatório")
@@ -581,6 +584,196 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
 
 async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Histórico cancelado.")
+    return ConversationHandler.END
+
+# ------------------------------------------------------------------------------
+# Fluxo de Edição de Registros
+# ------------------------------------------------------------------------------
+async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("❓ *Edição*: Qual categoria deseja editar? (followup, visita, interacao)",
+                                    parse_mode="Markdown")
+    return EDIT_CATEGORY
+
+async def editar_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    cat = update.message.text.strip().lower()
+    if cat not in ["followup", "visita", "interacao"]:
+        await update.message.reply_text("Categoria inválida, escolha entre followup, visita ou interacao.")
+        return EDIT_CATEGORY
+    context.user_data["edit_category"] = cat
+    chat_id = str(update.message.chat.id)
+    if cat == "followup":
+        col = db.collection("users").document(chat_id).collection("followups")
+    elif cat == "visita":
+        col = db.collection("users").document(chat_id).collection("visitas")
+    else:
+        col = db.collection("users").document(chat_id).collection("interacoes")
+    docs = list(col.stream())
+    if not docs:
+        await update.message.reply_text(f"Não foram encontrados registros para a categoria {cat}.")
+        return ConversationHandler.END
+    msg = f"*Registros de {cat}:*\n"
+    for doc in docs:
+        data = doc.to_dict()
+        msg += f"ID: {doc.id} - {data}\n"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text("Digite o ID do registro que deseja editar:")
+    return EDIT_RECORD
+
+async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    record_id = update.message.text.strip()
+    context.user_data["edit_record_id"] = record_id
+    await update.message.reply_text(
+        "Qual campo deseja editar? (Exemplos: para followup: cliente, data_follow, descricao, status; "
+        "para visita: empresa, data_visita, classificacao, motivo, followup; para interacao: cliente, resumo, followup)",
+        parse_mode="Markdown"
+    )
+    return EDIT_FIELD
+
+async def editar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    field = update.message.text.strip()
+    context.user_data["edit_field"] = field
+    await update.message.reply_text(f"Digite o novo valor para o campo '{field}':")
+    return EDIT_NEW_VALUE
+
+async def editar_new_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    new_value = update.message.text.strip()
+    cat = context.user_data["edit_category"]
+    record_id = context.user_data["edit_record_id"]
+    field = context.user_data["edit_field"]
+    chat_id = str(update.message.chat.id)
+    if cat == "followup":
+        col = db.collection("users").document(chat_id).collection("followups")
+    elif cat == "visita":
+        col = db.collection("users").document(chat_id).collection("visitas")
+    else:
+        col = db.collection("users").document(chat_id).collection("interacoes")
+    try:
+        col.document(record_id).update({field: new_value})
+        await update.message.reply_text("Registro atualizado com sucesso!")
+    except Exception as e:
+        await update.message.reply_text("Erro ao atualizar registro: " + str(e))
+    return ConversationHandler.END
+
+async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Edição cancelada.")
+    return ConversationHandler.END
+
+# ------------------------------------------------------------------------------
+# Fluxo de Exclusão de Registros
+# ------------------------------------------------------------------------------
+async def excluir_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("❓ *Exclusão*: Qual categoria deseja excluir? (followup, visita, interacao)",
+                                    parse_mode="Markdown")
+    return DELETE_CATEGORY
+
+async def excluir_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    cat = update.message.text.strip().lower()
+    if cat not in ["followup", "visita", "interacao"]:
+        await update.message.reply_text("Categoria inválida. Escolha followup, visita ou interacao.")
+        return DELETE_CATEGORY
+    context.user_data["delete_category"] = cat
+    chat_id = str(update.message.chat.id)
+    if cat == "followup":
+        col = db.collection("users").document(chat_id).collection("followups")
+    elif cat == "visita":
+        col = db.collection("users").document(chat_id).collection("visitas")
+    else:
+        col = db.collection("users").document(chat_id).collection("interacoes")
+    docs = list(col.stream())
+    if not docs:
+        await update.message.reply_text(f"Não foram encontrados registros para a categoria {cat}.")
+        return ConversationHandler.END
+    msg = f"*Registros de {cat}:*\n"
+    for doc in docs:
+        data = doc.to_dict()
+        msg += f"ID: {doc.id} - {data}\n"
+    await update.message.reply_text(msg, parse_mode="Markdown")
+    await update.message.reply_text("Digite o ID do registro que deseja excluir:")
+    return DELETE_RECORD
+
+async def excluir_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    record_id = update.message.text.strip()
+    context.user_data["delete_record_id"] = record_id
+    await update.message.reply_text("Tem certeza que deseja excluir esse registro? (sim/nao)")
+    return DELETE_CONFIRMATION
+
+async def excluir_confirmation_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    response = update.message.text.strip().lower()
+    if response != "sim":
+        await update.message.reply_text("Exclusão cancelada.")
+        return ConversationHandler.END
+    cat = context.user_data["delete_category"]
+    record_id = context.user_data["delete_record_id"]
+    chat_id = str(update.message.chat.id)
+    if cat == "followup":
+        col = db.collection("users").document(chat_id).collection("followups")
+    elif cat == "visita":
+        col = db.collection("users").document(chat_id).collection("visitas")
+    else:
+        col = db.collection("users").document(chat_id).collection("interacoes")
+    try:
+        col.document(record_id).delete()
+        await update.message.reply_text("Registro excluído com sucesso!")
+    except Exception as e:
+        await update.message.reply_text("Erro ao excluir registro: " + str(e))
+    return ConversationHandler.END
+
+async def excluir_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Exclusão cancelada.")
+    return ConversationHandler.END
+
+# ------------------------------------------------------------------------------
+# Fluxo de Filtragem/Pesquisa de Registros
+# ------------------------------------------------------------------------------
+async def filtrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("🔍 *Filtragem*: Qual categoria deseja filtrar? (followup, visita, interacao)",
+                                    parse_mode="Markdown")
+    return FILTER_CATEGORY
+
+async def filtrar_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    cat = update.message.text.strip().lower()
+    if cat not in ["followup", "visita", "interacao"]:
+        await update.message.reply_text("Categoria inválida. Escolha followup, visita ou interacao.")
+        return FILTER_CATEGORY
+    context.user_data["filter_category"] = cat
+    await update.message.reply_text("Qual campo deseja utilizar para filtrar? (exemplo: para followup: cliente, data_follow, status; para visita: empresa, data_visita, classificacao, motivo; para interacao: cliente, resumo, followup)")
+    return FILTER_FIELD
+
+async def filtrar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    field = update.message.text.strip()
+    context.user_data["filter_field"] = field
+    await update.message.reply_text(f"Digite o valor para filtrar o campo '{field}':")
+    return FILTER_VALUE
+
+async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    value = update.message.text.strip()
+    context.user_data["filter_value"] = value
+    cat = context.user_data["filter_category"]
+    chat_id = str(update.message.chat.id)
+    if cat == "followup":
+        col = db.collection("users").document(chat_id).collection("followups")
+    elif cat == "visita":
+        col = db.collection("users").document(chat_id).collection("visitas")
+    else:
+        col = db.collection("users").document(chat_id).collection("interacoes")
+    docs = list(col.stream())
+    matched = []
+    for doc in docs:
+        data = doc.to_dict() or {}
+        # Realiza comparação case-insensitive
+        if str(data.get(context.user_data["filter_field"], "")).lower() == value.lower():
+            matched.append((doc.id, data))
+    if not matched:
+        await update.message.reply_text("Nenhum registro encontrado com esse critério.")
+    else:
+        msg = f"*Registros filtrados em {cat}:*\n"
+        for rec in matched:
+            msg += f"ID: {rec[0]} - {rec[1]}\n"
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Filtragem cancelada.")
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
@@ -746,6 +939,43 @@ async def main():
     )
     application.add_handler(lembrete_conv_handler)
     
+    # Handler para Edição de Registros
+    editar_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("editar", editar_start)],
+        states={
+            EDIT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_category_received)],
+            EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
+            EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_field_received)],
+            EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
+        },
+        fallbacks=[CommandHandler("cancel", editar_cancel)]
+    )
+    application.add_handler(editar_conv_handler)
+    
+    # Handler para Exclusão de Registros
+    excluir_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("excluir", excluir_start)],
+        states={
+            DELETE_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_category_received)],
+            DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
+            DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
+        },
+        fallbacks=[CommandHandler("cancel", excluir_cancel)]
+    )
+    application.add_handler(excluir_conv_handler)
+    
+    # Handler para Filtragem/Pesquisa de Registros
+    filtrar_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("filtrar", filtrar_start)],
+        states={
+            FILTER_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_category_received)],
+            FILTER_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_field_received)],
+            FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
+        },
+        fallbacks=[CommandHandler("cancel", filtrar_cancel)]
+    )
+    application.add_handler(filtrar_conv_handler)
+    
     # Handler para confirmar Follow-up via Botão Inline
     application.add_handler(CallbackQueryHandler(confirm_followup_callback, pattern=r"^confirm_followup:"))
     
@@ -760,7 +990,7 @@ async def main():
     
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.sleep(1)  # Aguarda a remoção do webhook
+    await asyncio.sleep(1)
     try:
         await application.run_polling(drop_pending_updates=True)
     except Exception as e:
