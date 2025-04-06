@@ -19,7 +19,7 @@ nest_asyncio.apply()
 # Configuração personalizada de Logging para envio para stdout
 # ------------------------------------------------------------------------------
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 for handler in logger.handlers[:] :
     logger.removeHandler(handler)
 console_handler = logging.StreamHandler(sys.stdout)
