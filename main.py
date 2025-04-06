@@ -18,7 +18,7 @@ nest_asyncio.apply()
 # ------------------------------------------------------------------------------
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
-for handler in logger.handlers[:]:
+for handler in logger.handlers[:] :
     logger.removeHandler(handler)
 console_handler = logging.StreamHandler(sys.stdout)
 console_handler.setLevel(logging.INFO)
@@ -78,7 +78,7 @@ VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, 
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 
-# Lembrete – agora usando data/hora (em vez de atraso em minutos)
+# Lembrete – agora usando data/hora (em vez de apenas minutos)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
@@ -234,7 +234,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
     context.user_data["followup_date"] = data_followup.isoformat()
     chat_id = str(update.message.chat.id)
     try:
-        # Registra o documento de visita com followup agendado
+        # Registra a visita com follow-up agendado
         db.collection("users").document(chat_id).collection("visitas").document().set({
             "empresa": context.user_data["company"],
             "data_visita": context.user_data["visit_date"],
@@ -243,7 +243,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
             "followup": context.user_data["followup_date"],
             "criado_em": datetime.now().isoformat()
         })
-        # Cria também o documento de followup na subcoleção "followups"
+        # Cria também o follow-up na subcoleção "followups"
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["company"],
             "data_follow": context.user_data["followup_date"],
@@ -346,7 +346,7 @@ async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     input_str = update.message.text.strip()
     try:
-        # Converte a string para datetime e atribui o fuso horário desejado
+        # Converte a entrada para datetime e atribui o fuso horário definido
         target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
         await update.message.reply_text("⚠️ Formato inválido! Por favor, use o formato: dd/mm/yyyy HH:MM")
@@ -372,33 +372,30 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     lembrete_text_value = job_data["lembrete_text"]
     await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode='Markdown')
 
-# ---- Comando para Consultar Histórico ----
-async def historico(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    if not context.args:
-        await update.message.reply_text("Por favor, informe o mês desejado no formato YYYY-MM (ex.: 2025-04).")
-        return
-    filtro = context.args[0]  # exemplo: "2025-04"
+# ---- Comando para Gerar Relatórios e Analytics ----
+async def relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.message.chat.id)
-    try:
-        docs = db.collection("users").document(chat_id).collection("interacoes").stream()
-        resultado = ""
-        count = 0
-        for doc in docs:
-            data = doc.to_dict()
-            criado_em = data.get("criado_em", "")
-            if criado_em.startswith(filtro):
-                count += 1
-                cliente = data.get("cliente", "N/A")
-                resumo = data.get("resumo", "N/A")
-                followup = data.get("followup", "Não agendado")
-                resultado += f"• *Cliente*: {cliente}\n  *Resumo*: {resumo}\n  *Follow-up*: {followup}\n\n"
-        if count == 0:
-            await update.message.reply_text(f"Nenhuma interação encontrada para o período {filtro}.")
-        else:
-            await update.message.reply_text(f"*{count} interação(ões)* encontrada(s) para {filtro}:\n\n{resultado}", parse_mode='Markdown')
-    except Exception as e:
-        logger.error("Erro ao recuperar histórico: %s", e)
-        await update.message.reply_text("Erro ao recuperar histórico: " + str(e))
+    # Consulta os documentos dos followups, visitas e interações da subcoleção do usuário
+    followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
+    visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
+    interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
+    
+    total_followups = len(followups_docs)
+    confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
+    pendentes = total_followups - confirmados
+    total_visitas = len(visitas_docs)
+    total_interacoes = len(interacoes_docs)
+    
+    mensagem = (
+        f"📊 *Relatório Geral*\n\n"
+        f"Follow-ups:\n"
+        f" - Total: {total_followups}\n"
+        f" - Confirmados: {confirmados}\n"
+        f" - Pendentes: {pendentes}\n\n"
+        f"Visitas: {total_visitas}\n"
+        f"Interações: {total_interacoes}"
+    )
+    await update.message.reply_text(mensagem, parse_mode='Markdown')
 
 # ---- Jobs Diários para Follow-up Automático ----
 # Envia lembretes para os follow-ups agendados para hoje (08:30 e 13:00)
@@ -482,6 +479,7 @@ async def main():
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
     application.add_handler(CommandHandler("historico", historico))
+    application.add_handler(CommandHandler("relatorio", relatorio))
 
     # ConversationHandler para Follow-up
     followup_conv_handler = ConversationHandler(
@@ -523,7 +521,7 @@ async def main():
     )
     application.add_handler(interacao_conv_handler)
 
-    # ConversationHandler para Lembrete (atualizado para data/hora)
+    # ConversationHandler para Lembrete (Atualizado para data/hora)
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
@@ -539,7 +537,7 @@ async def main():
 
     application.add_error_handler(error_handler)
 
-    # Agendamento dos jobs diários na JobQueue
+    # Agendamento dos jobs diários na JobQueue (usando o fuso horário definido)
     job_queue = application.job_queue
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
