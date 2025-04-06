@@ -7,12 +7,12 @@ import sys
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 import tempfile
-import matplotlib.pyplot as plt  # Já resolvido a dependência no requirements.txt
+import matplotlib.pyplot as plt  # Certifique-se de ter instalado
 
-# Define o fuso horário desejado (ajuste conforme necessário)
+# Define o fuso horário desejado
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
-# Aplica o patch no nest_asyncio (para evitar conflitos com event loop já ativo)
+# Aplica o patch do nest_asyncio
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -20,7 +20,6 @@ nest_asyncio.apply()
 # ------------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
-
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -31,7 +30,6 @@ else:
     for h in logger.handlers:
         logger.removeHandler(h)
     logger.addHandler(handler)
-
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
@@ -40,21 +38,18 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 # ------------------------------------------------------------------------------
 import firebase_admin
 from firebase_admin import credentials, firestore
-
 if not os.environ.get("TELEGRAM_TOKEN"):
     logger.error("TELEGRAM_TOKEN não definido!")
     exit(1)
 if not os.environ.get("FIREBASE_CREDENTIALS"):
     logger.error("FIREBASE_CREDENTIALS não definida!")
     exit(1)
-
 firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
 try:
     cred_dict = json.loads(firebase_credentials)
 except json.JSONDecodeError as e:
     logger.error("Erro ao decodificar FIREBASE_CREDENTIALS: %s", e)
     exit(1)
-
 cred = credentials.Certificate(cred_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
@@ -80,7 +75,7 @@ from telegram.ext import (
     ContextTypes
 )
 
-# ----- Estados já existentes -----
+# ----- Estados para os fluxos já existentes -----
 # Follow-up (0 a 2)
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 # Visita (0 a 5)
@@ -89,18 +84,17 @@ VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, 
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 # Lembrete (100 a 101)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
-# Relatório (resumido) (300 a 301)
+# Relatório (Resumido) (300 a 301)
 REPORT_START, REPORT_END = range(300, 302)
-# Histórico (detalhado) (400 a 401)
+# Histórico (Detalhado) (400 a 401)
 HIST_START, HIST_END = range(400, 402)
 
-# ----- Estados para Edição (500 a 503) -----
+# ----- Novos Estados para Edição, Exclusão e Filtragem -----
+# Edição (500 a 503)
 EDIT_CATEGORY, EDIT_RECORD, EDIT_FIELD, EDIT_NEW_VALUE = range(500, 504)
-
-# ----- Estados para Exclusão (600 a 602) -----
+# Exclusão (600 a 602)
 DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
-
-# ----- Estados para Filtragem/Pesquisa (700 a 702) -----
+# Filtragem (700 a 702)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 
 # ------------------------------------------------------------------------------
@@ -141,7 +135,7 @@ async def testfirebase(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         await update.message.reply_text("Erro ao enviar dados para o Firebase.")
 
 # ------------------------------------------------------------------------------
-# Fluxo de Follow-up
+# Fluxo de Follow-up (sem alterações)
 # ------------------------------------------------------------------------------
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode="Markdown")
@@ -187,7 +181,7 @@ async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Visita
+# Fluxo de Visita (sem alterações)
 # ------------------------------------------------------------------------------
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode="Markdown")
@@ -298,7 +292,7 @@ async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Interação
+# Fluxo de Interação (sem alterações)
 # ------------------------------------------------------------------------------
 async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem interagiu:", parse_mode="Markdown")
@@ -366,7 +360,7 @@ async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Lembrete
+# Fluxo de Lembrete (sem alterações)
 # ------------------------------------------------------------------------------
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🔔 *Lembrete*: Informe o texto do lembrete:", parse_mode="Markdown")
@@ -409,7 +403,7 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         logger.error("Erro no lembrete_callback: %s", e)
 
 # ------------------------------------------------------------------------------
-# Fluxo de Relatório (Resumido) com Gráfico
+# Fluxo de Relatório (Resumido) com Gráfico (sem alterações)
 # ------------------------------------------------------------------------------
 async def relatorio_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("📊 *Relatório*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
@@ -494,7 +488,7 @@ async def relatorio_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Histórico (Detalhado)
+# Fluxo de Histórico (Detalhado) (sem alterações dos demais passos)
 # ------------------------------------------------------------------------------
 async def historico_conv_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("📜 *Histórico Detalhado*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
@@ -587,44 +581,55 @@ async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TY
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Edição de Registros
+# Fluxo de Edição de Registros (Ajustado com teclado de categoria)
 # ------------------------------------------------------------------------------
 async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❓ *Edição*: Qual categoria deseja editar? (followup, visita, interacao)",
-                                    parse_mode="Markdown")
+    options = [
+        [InlineKeyboardButton("Followup", callback_data="edit_followup"),
+         InlineKeyboardButton("Visita", callback_data="edit_visita"),
+         InlineKeyboardButton("Interacao", callback_data="edit_interacao")]
+    ]
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text("❓ *Edição*: Escolha a categoria para editar:", reply_markup=reply_markup, parse_mode="Markdown")
     return EDIT_CATEGORY
 
-async def editar_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cat = update.message.text.strip().lower()
-    if cat not in ["followup", "visita", "interacao"]:
-        await update.message.reply_text("Categoria inválida, escolha entre followup, visita ou interacao.")
-        return EDIT_CATEGORY
-    context.user_data["edit_category"] = cat
-    chat_id = str(update.message.chat.id)
-    if cat == "followup":
+async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "edit_followup":
+        context.user_data["edit_category"] = "followup"
+    elif data == "edit_visita":
+        context.user_data["edit_category"] = "visita"
+    elif data == "edit_interacao":
+        context.user_data["edit_category"] = "interacao"
+    else:
+        await query.edit_message_text("Categoria inválida!")
+        return ConversationHandler.END
+    chat_id = str(query.message.chat.id)
+    if context.user_data["edit_category"] == "followup":
         col = db.collection("users").document(chat_id).collection("followups")
-    elif cat == "visita":
+    elif context.user_data["edit_category"] == "visita":
         col = db.collection("users").document(chat_id).collection("visitas")
     else:
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await update.message.reply_text(f"Não foram encontrados registros para a categoria {cat}.")
+        await query.edit_message_text(f"Não foram encontrados registros para a categoria {context.user_data['edit_category']}.")
         return ConversationHandler.END
-    msg = f"*Registros de {cat}:*\n"
+    msg = f"*Registros de {context.user_data['edit_category']}:*\n"
     for doc in docs:
-        data = doc.to_dict()
-        msg += f"ID: {doc.id} - {data}\n"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-    await update.message.reply_text("Digite o ID do registro que deseja editar:")
+        data_doc = doc.to_dict()
+        msg += f"ID: {doc.id} - {data_doc}\n"
+    await query.edit_message_text(msg, parse_mode="Markdown")
+    await query.message.reply_text("Digite o ID do registro que deseja editar:")
     return EDIT_RECORD
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
     context.user_data["edit_record_id"] = record_id
     await update.message.reply_text(
-        "Qual campo deseja editar? (Exemplos: para followup: cliente, data_follow, descricao, status; "
-        "para visita: empresa, data_visita, classificacao, motivo, followup; para interacao: cliente, resumo, followup)",
+        "Qual campo deseja editar? (Exemplos para followup: cliente, data_follow, descricao, status; para visita: empresa, data_visita, classificacao, motivo, followup; para interacao: cliente, resumo, followup)",
         parse_mode="Markdown"
     )
     return EDIT_FIELD
@@ -659,36 +664,48 @@ async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Exclusão de Registros
+# Fluxo de Exclusão de Registros (Ajustado com teclado de categoria)
 # ------------------------------------------------------------------------------
 async def excluir_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("❓ *Exclusão*: Qual categoria deseja excluir? (followup, visita, interacao)",
-                                    parse_mode="Markdown")
+    options = [
+        [InlineKeyboardButton("Followup", callback_data="delete_followup"),
+         InlineKeyboardButton("Visita", callback_data="delete_visita"),
+         InlineKeyboardButton("Interacao", callback_data="delete_interacao")]
+    ]
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text("❓ *Exclusão*: Escolha a categoria para excluir:", reply_markup=reply_markup, parse_mode="Markdown")
     return DELETE_CATEGORY
 
-async def excluir_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cat = update.message.text.strip().lower()
-    if cat not in ["followup", "visita", "interacao"]:
-        await update.message.reply_text("Categoria inválida. Escolha followup, visita ou interacao.")
-        return DELETE_CATEGORY
-    context.user_data["delete_category"] = cat
-    chat_id = str(update.message.chat.id)
-    if cat == "followup":
+async def excluir_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "delete_followup":
+        context.user_data["delete_category"] = "followup"
+    elif data == "delete_visita":
+        context.user_data["delete_category"] = "visita"
+    elif data == "delete_interacao":
+        context.user_data["delete_category"] = "interacao"
+    else:
+        await query.edit_message_text("Categoria inválida!")
+        return ConversationHandler.END
+    chat_id = str(query.message.chat.id)
+    if context.user_data["delete_category"] == "followup":
         col = db.collection("users").document(chat_id).collection("followups")
-    elif cat == "visita":
+    elif context.user_data["delete_category"] == "visita":
         col = db.collection("users").document(chat_id).collection("visitas")
     else:
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await update.message.reply_text(f"Não foram encontrados registros para a categoria {cat}.")
+        await query.edit_message_text(f"Não foram encontrados registros para a categoria {context.user_data['delete_category']}.")
         return ConversationHandler.END
-    msg = f"*Registros de {cat}:*\n"
+    msg = f"*Registros de {context.user_data['delete_category']}:*\n"
     for doc in docs:
-        data = doc.to_dict()
-        msg += f"ID: {doc.id} - {data}\n"
-    await update.message.reply_text(msg, parse_mode="Markdown")
-    await update.message.reply_text("Digite o ID do registro que deseja excluir:")
+        data_doc = doc.to_dict()
+        msg += f"ID: {doc.id} - {data_doc}\n"
+    await query.edit_message_text(msg, parse_mode="Markdown")
+    await query.message.reply_text("Digite o ID do registro que deseja excluir:")
     return DELETE_RECORD
 
 async def excluir_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -723,20 +740,32 @@ async def excluir_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Fluxo de Filtragem/Pesquisa de Registros
+# Fluxo de Filtragem/Pesquisa de Registros (Ajustado com teclado)
 # ------------------------------------------------------------------------------
 async def filtrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔍 *Filtragem*: Qual categoria deseja filtrar? (followup, visita, interacao)",
-                                    parse_mode="Markdown")
+    options = [
+        [InlineKeyboardButton("Followup", callback_data="filter_followup"),
+         InlineKeyboardButton("Visita", callback_data="filter_visita"),
+         InlineKeyboardButton("Interacao", callback_data="filter_interacao")]
+    ]
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text("🔍 *Filtragem*: Escolha a categoria para filtrar:", reply_markup=reply_markup, parse_mode="Markdown")
     return FILTER_CATEGORY
 
-async def filtrar_category_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    cat = update.message.text.strip().lower()
-    if cat not in ["followup", "visita", "interacao"]:
-        await update.message.reply_text("Categoria inválida. Escolha followup, visita ou interacao.")
-        return FILTER_CATEGORY
-    context.user_data["filter_category"] = cat
-    await update.message.reply_text("Qual campo deseja utilizar para filtrar? (exemplo: para followup: cliente, data_follow, status; para visita: empresa, data_visita, classificacao, motivo; para interacao: cliente, resumo, followup)")
+async def filtrar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    if data == "filter_followup":
+        context.user_data["filter_category"] = "followup"
+    elif data == "filter_visita":
+        context.user_data["filter_category"] = "visita"
+    elif data == "filter_interacao":
+        context.user_data["filter_category"] = "interacao"
+    else:
+        await query.edit_message_text("Categoria inválida!")
+        return ConversationHandler.END
+    await query.edit_message_text("Qual campo deseja utilizar para filtrar? (Ex.: followup: cliente, data_follow, status; visita: empresa, data_visita, classificacao, motivo; interacao: cliente, resumo, followup)")
     return FILTER_FIELD
 
 async def filtrar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -760,7 +789,6 @@ async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_T
     matched = []
     for doc in docs:
         data = doc.to_dict() or {}
-        # Realiza comparação case-insensitive
         if str(data.get(context.user_data["filter_field"], "")).lower() == value.lower():
             matched.append((doc.id, data))
     if not matched:
@@ -777,7 +805,7 @@ async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     return ConversationHandler.END
 
 # ------------------------------------------------------------------------------
-# Jobs Diários e Callback Inline para Confirmação de Follow-up
+# Jobs Diários e Callback Inline para Follow-up
 # ------------------------------------------------------------------------------
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -939,11 +967,11 @@ async def main():
     )
     application.add_handler(lembrete_conv_handler)
     
-    # Handler para Edição de Registros
+    # Handler para Edição de Registros (usando inline keyboard para categoria)
     editar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("editar", editar_start)],
         states={
-            EDIT_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_category_received)],
+            EDIT_CATEGORY: [CallbackQueryHandler(editar_category_callback, pattern="^edit_")],
             EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
             EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_field_received)],
             EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
@@ -952,11 +980,11 @@ async def main():
     )
     application.add_handler(editar_conv_handler)
     
-    # Handler para Exclusão de Registros
+    # Handler para Exclusão de Registros (usando inline keyboard para categoria)
     excluir_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
         states={
-            DELETE_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_category_received)],
+            DELETE_CATEGORY: [CallbackQueryHandler(excluir_category_callback, pattern="^delete_")],
             DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
             DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
         },
@@ -964,11 +992,11 @@ async def main():
     )
     application.add_handler(excluir_conv_handler)
     
-    # Handler para Filtragem/Pesquisa de Registros
+    # Handler para Filtragem de Registros (usando inline keyboard para categoria)
     filtrar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("filtrar", filtrar_start)],
         states={
-            FILTER_CATEGORY: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_category_received)],
+            FILTER_CATEGORY: [CallbackQueryHandler(filtrar_category_callback, pattern="^filter_")],
             FILTER_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_field_received)],
             FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
         },
