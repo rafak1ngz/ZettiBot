@@ -17,7 +17,7 @@ nest_asyncio.apply()
 # Configuração do Logger
 # ------------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)  # DEBUG para capturar mais informações
+logger.setLevel(logging.DEBUG)  # Nível DEBUG para capturar mais informações
 
 handler = logging.StreamHandler(sys.stdout)
 handler.setLevel(logging.DEBUG)
@@ -86,7 +86,7 @@ FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
-# Lembrete – agora usando data/hora
+# Lembrete – agora usando data/hora em vez de minutos
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 
 # ------------------------------------------------------------------------------
@@ -170,7 +170,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
         logger.warning("Formato de data inválido na visita.")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
@@ -233,7 +233,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
         return VISIT_FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
     chat_id = str(update.message.chat.id)
@@ -310,7 +310,7 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
     try:
         data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
         return INTER_FOLLOWUP_DATE
     context.user_data["followup_interacao"] = data_follow.isoformat()
     try:
@@ -374,6 +374,35 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode="Markdown")
     except Exception as e:
         logger.error("Erro no lembrete_callback: %s", e)
+
+# ---- Relatório (/relatorio) ---------------------------
+async def relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    try:
+        chat_id = str(update.message.chat.id)
+        # Consulta as subcoleções do usuário
+        followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
+        visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
+        interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
+        
+        total_followups = len(followups_docs)
+        confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
+        pendentes = total_followups - confirmados
+        total_visitas = len(visitas_docs)
+        total_interacoes = len(interacoes_docs)
+        
+        mensagem = (
+            f"📊 *Relatório Geral*\n\n"
+            f"Follow-ups:\n"
+            f" - Total: {total_followups}\n"
+            f" - Confirmados: {confirmados}\n"
+            f" - Pendentes: {pendentes}\n\n"
+            f"Visitas: {total_visitas}\n"
+            f"Interações: {total_interacoes}"
+        )
+        await update.message.reply_text(mensagem, parse_mode="Markdown")
+    except Exception as e:
+        logger.error("Erro no relatorio: %s", e)
+        await update.message.reply_text("Erro ao gerar relatório.")
 
 # ---- Jobs Diários para Follow-up Automático ----
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -460,7 +489,7 @@ async def main():
     # Handlers Simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
-    # Removemos o comando de relatório para voltar à versão anterior
+    application.add_handler(CommandHandler("relatorio", relatorio))
 
     # ConversationHandler para Follow-up
     followup_conv_handler = ConversationHandler(
@@ -502,7 +531,7 @@ async def main():
     )
     application.add_handler(interacao_conv_handler)
 
-    # ConversationHandler para Lembrete (Atualizado para data/hora)
+    # ConversationHandler para Lembrete (Atualizado para Data/Hora)
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
@@ -513,7 +542,7 @@ async def main():
     )
     application.add_handler(lembrete_conv_handler)
 
-    # Handler para confirmar Follow-up via botão inline
+    # Handler para confirmar Follow-up via Botão Inline
     application.add_handler(CallbackQueryHandler(confirm_followup_callback, pattern=r"^confirm_followup:"))
 
     application.add_error_handler(error_handler)
