@@ -10,7 +10,7 @@ from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
 # Define o fuso horário desejado (ajuste conforme necessário)
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
-# Aplica o patch do nest_asyncio (útil em ambientes com event loop já ativo)
+# Aplica o patch do nest_asyncio (útil caso o event loop já esteja ativo)
 nest_asyncio.apply()
 
 # ------------------------------------------------------------------------------
@@ -39,7 +39,6 @@ logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 import firebase_admin
 from firebase_admin import credentials, firestore
 
-# Verifica se as variáveis de ambiente necessárias estão definidas
 if not os.environ.get("TELEGRAM_TOKEN"):
     logger.error("TELEGRAM_TOKEN não definido!")
     exit(1)
@@ -72,9 +71,9 @@ from telegram import (
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
-    ConversationHandler,
     MessageHandler,
     CallbackQueryHandler,
+    ConversationHandler,
     filters,
     ContextTypes
 )
@@ -86,8 +85,10 @@ FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
 VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(6)
 # Interação
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
-# Lembrete – agora usando data/hora (em vez de minutos)
+# Lembrete – usa os estados 100 e 101
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
+# Relatório – estados 300 e 301 para início e fim do período
+REPORT_START, REPORT_END = range(300, 302)
 
 # ------------------------------------------------------------------------------
 # Comandos Básicos e Conversas Interativas
@@ -116,15 +117,16 @@ async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def followup_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["client"] = update.message.text.strip()
-    await update.message.reply_text("📅 Informe a data do follow-up (dd/mm/yyyy):")
+    await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):")
     return FOLLOWUP_DATE
 
 async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     data_str = update.message.text.strip()
     try:
+        # Conversão usando o formato DD/MM/AAAA
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato DD/MM/AAAA.")
         logger.warning("Formato de data inválido no follow-up.")
         return FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
@@ -162,7 +164,7 @@ async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
 
 async def visita_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["company"] = update.message.text.strip()
-    await update.message.reply_text("📅 Informe a data da visita (dd/mm/yyyy):")
+    await update.message.reply_text("📅 Informe a data da visita (formato DD/MM/AAAA):")
     return VISIT_DATE
 
 async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -170,7 +172,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato DD/MM/AAAA.")
         logger.warning("Formato de data inválido na visita.")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
@@ -208,7 +210,7 @@ async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data do follow-up (dd/mm/yyyy):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
         return VISIT_FOLLOWUP_DATE
     else:
         try:
@@ -233,7 +235,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato DD/MM/AAAA.")
         return VISIT_FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
     chat_id = str(update.message.chat.id)
@@ -286,7 +288,7 @@ async def interacao_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) 
 async def interacao_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data do follow-up (dd/mm/yyyy):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
         return INTER_FOLLOWUP_DATE
     else:
         context.user_data["followup_interacao"] = None
@@ -310,7 +312,7 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
     try:
         data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Utilize dd/mm/yyyy.")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato DD/MM/AAAA.")
         return INTER_FOLLOWUP_DATE
     context.user_data["followup_interacao"] = data_follow.isoformat()
     try:
@@ -340,16 +342,16 @@ async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["lembrete_text"] = update.message.text.strip()
-    await update.message.reply_text("⏳ Agora, informe a data e horário para o lembrete (dd/mm/yyyy HH:MM):")
+    await update.message.reply_text("⏳ Agora, informe a data e horário para o lembrete (formato DD/MM/AAAA HH:MM):")
     return REMINDER_DATETIME
 
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     input_str = update.message.text.strip()
     try:
-        # Converte a entrada para datetime e atribui o fuso horário definido
+        # Converte a entrada para datetime usando o formato DD/MM/AAAA HH:MM
         target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use dd/mm/yyyy HH:MM")
+        await update.message.reply_text("⚠️ Formato inválido! Utilize o formato DD/MM/AAAA HH:MM")
         return REMINDER_DATETIME
     now = datetime.now(TIMEZONE)
     delay_seconds = (target_datetime - now).total_seconds()
@@ -375,34 +377,91 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error("Erro no lembrete_callback: %s", e)
 
-# ---- Relatório (/relatorio) ---------------------------
-async def relatorio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+# ---- Relatório (Conversa) ---------------------------
+async def relatorio_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("📊 *Relatório*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
+    return REPORT_START
+
+async def relatorio_start_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    date_str = update.message.text.strip()
     try:
-        chat_id = str(update.message.chat.id)
-        # Consulta as subcoleções do usuário
-        followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
-        visitas_docs = list(db.collection("users").document(chat_id).collection("visitas").stream())
-        interacoes_docs = list(db.collection("users").document(chat_id).collection("interacoes").stream())
-        
-        total_followups = len(followups_docs)
-        confirmados = sum(1 for doc in followups_docs if doc.to_dict().get("status") == "realizado")
-        pendentes = total_followups - confirmados
-        total_visitas = len(visitas_docs)
-        total_interacoes = len(interacoes_docs)
-        
-        mensagem = (
-            f"📊 *Relatório Geral*\n\n"
-            f"Follow-ups:\n"
-            f" - Total: {total_followups}\n"
-            f" - Confirmados: {confirmados}\n"
-            f" - Pendentes: {pendentes}\n\n"
-            f"Visitas: {total_visitas}\n"
-            f"Interações: {total_interacoes}"
-        )
-        await update.message.reply_text(mensagem, parse_mode="Markdown")
+        start_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
+        context.user_data["report_start"] = date_str
+        context.user_data["report_start_dt"] = start_date_dt
     except Exception as e:
-        logger.error("Erro no relatorio: %s", e)
-        await update.message.reply_text("Erro ao gerar relatório.")
+        logger.error("Erro ao converter data de início: %s", e)
+        await update.message.reply_text("Formato inválido! Use DD/MM/AAAA. Informe novamente a data de início:")
+        return REPORT_START
+    await update.message.reply_text("Agora, informe a data de fim (formato DD/MM/AAAA):", parse_mode="Markdown")
+    return REPORT_END
+
+async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    date_str = update.message.text.strip()
+    try:
+        end_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
+        context.user_data["report_end"] = date_str
+        context.user_data["report_end_dt"] = end_date_dt
+    except Exception as e:
+        logger.error("Erro ao converter data de fim: %s", e)
+        await update.message.reply_text("Formato inválido! Use DD/MM/AAAA. Informe novamente a data de fim:")
+        return REPORT_END
+
+    chat_id = str(update.message.chat.id)
+    followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
+    visitas_docs   = list(db.collection("users").document(chat_id).collection("visitas").stream())
+    interacoes_docs= list(db.collection("users").document(chat_id).collection("interacoes").stream())
+
+    total_followups = 0
+    confirmados = 0
+    total_visitas = 0
+    total_interacoes = 0
+
+    def in_interval(criado_em_str: str) -> bool:
+        try:
+            doc_date = datetime.fromisoformat(criado_em_str)
+        except Exception:
+            return False
+        start_date_dt = context.user_data["report_start_dt"]
+        end_date_dt = context.user_data["report_end_dt"]
+        return start_date_dt <= doc_date <= end_date_dt
+
+    for doc in followups_docs:
+        data = doc.to_dict() or {}
+        criado_em = data.get("criado_em", "")
+        if criado_em and in_interval(criado_em):
+            total_followups += 1
+            if data.get("status") == "realizado":
+                confirmados += 1
+
+    for doc in visitas_docs:
+        data = doc.to_dict() or {}
+        criado_em = data.get("criado_em", "")
+        if criado_em and in_interval(criado_em):
+            total_visitas += 1
+
+    for doc in interacoes_docs:
+        data = doc.to_dict() or {}
+        criado_em = data.get("criado_em", "")
+        if criado_em and in_interval(criado_em):
+            total_interacoes += 1
+
+    pendentes = total_followups - confirmados
+    periodo_info = f"de {context.user_data['report_start']} até {context.user_data['report_end']}"
+    mensagem = (
+        f"📊 *Relatório ({periodo_info})*\n\n"
+        f"Follow-ups:\n"
+        f" - Total: {total_followups}\n"
+        f" - Confirmados: {confirmados}\n"
+        f" - Pendentes: {pendentes}\n\n"
+        f"Visitas: {total_visitas}\n"
+        f"Interações: {total_interacoes}"
+    )
+    await update.message.reply_text(mensagem, parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def relatorio_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Relatório cancelado.")
+    return ConversationHandler.END
 
 # ---- Jobs Diários para Follow-up Automático ----
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -489,17 +548,27 @@ async def main():
     # Handlers Simples
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("testfirebase", testfirebase))
-    application.add_handler(CommandHandler("relatorio", relatorio))
-
+    
+    # ConversationHandler para Relatório
+    relatorio_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("relatorio", relatorio_start)],
+        states={
+            REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
+            REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
+        },
+        fallbacks=[CommandHandler("cancel", relatorio_cancel)]
+    )
+    application.add_handler(relatorio_conv_handler)
+    
     # ConversationHandler para Follow-up
     followup_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("followup", followup_start)],
         states={
             FOLLOWUP_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_client)],
             FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_date)],
-            FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)],
+            FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)]
         },
-        fallbacks=[CommandHandler("cancel", followup_cancel)],
+        fallbacks=[CommandHandler("cancel", followup_cancel)]
     )
     application.add_handler(followup_conv_handler)
 
@@ -512,9 +581,9 @@ async def main():
             VISIT_CATEGORY: [CallbackQueryHandler(visita_category_callback)],
             VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
             VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
-            VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)],
+            VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
         },
-        fallbacks=[CommandHandler("cancel", visita_cancel)],
+        fallbacks=[CommandHandler("cancel", visita_cancel)]
     )
     application.add_handler(visita_conv_handler)
 
@@ -525,9 +594,9 @@ async def main():
             INTER_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_client)],
             INTER_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_summary)],
             INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
-            INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)],
+            INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)]
         },
-        fallbacks=[CommandHandler("cancel", interacao_cancel)],
+        fallbacks=[CommandHandler("cancel", interacao_cancel)]
     )
     application.add_handler(interacao_conv_handler)
 
@@ -536,9 +605,9 @@ async def main():
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
             REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
-            REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)],
+            REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)]
         },
-        fallbacks=[CommandHandler("cancel", lembrete_cancel)],
+        fallbacks=[CommandHandler("cancel", lembrete_cancel)]
     )
     application.add_handler(lembrete_conv_handler)
 
@@ -555,8 +624,7 @@ async def main():
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
-    # Aguarda um curto intervalo para garantir que o webhook tenha sido efetivamente removido
-    await asyncio.sleep(1)
+    await asyncio.sleep(1)  # Aguarda um curto intervalo para garantir a remoção do webhook
     try:
         await application.run_polling(drop_pending_updates=True)
     except Exception as e:
