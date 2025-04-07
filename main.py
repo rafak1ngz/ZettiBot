@@ -86,7 +86,7 @@ DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
 BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO, BUSCA_QUANTIDADE = range(900, 904)
-ROTA_TIPO, ROTA_LOCALIZACAO, ROTA_RAIO, ROTA_QUANTIDADE = range(910, 914)  # Ajustado para 4 passos
+ROTA_TIPO, ROTA_LOCALIZACAO, ROTA_RAIO, ROTA_QUANTIDADE = range(910, 914)
 
 # Função para Gerar Gráfico com Matplotlib
 def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info):
@@ -154,7 +154,7 @@ def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
                 'endereco': endereco,
                 'telefone': telefone,
                 'coordenadas': lugar['geometry']['location'],
-                'fonte': 'Google Maps'  # Adicionada fonte
+                'fonte': 'Google Maps'
             })
         
         if not resultados:
@@ -174,7 +174,6 @@ def buscar_clientes_firebase(chat_id, localizacao, tipo_cliente):
         for doc in followups:
             data = doc.to_dict()
             nome = data.get("cliente", "Sem nome")
-            # Usa o endereço do cliente se disponível, senão tenta geolocalizar pelo nome
             endereco = data.get("endereco", f"{nome}, {localizacao}")
             if tipo_cliente.lower() in nome.lower() or tipo_cliente.lower() in endereco.lower():
                 geocode_result = gmaps.geocode(endereco)
@@ -283,7 +282,7 @@ async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Busca de potenciais clientes cancelada.")
     return ConversationHandler.END
 
-# Função para Criar Rota com Google Directions API (mantida como opcional)
+# Função para Criar Rota com Google Directions API
 def criar_rota_google(localizacao_inicial, num_clientes, clientes):
     try:
         geocode_result = gmaps.geocode(localizacao_inicial)
@@ -321,7 +320,7 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
         
         # Processa os waypoints na ordem otimizada
         for i, idx in enumerate(ordem, start=2):
-            perna = pernas[i-1]  # Perna correspondente ao waypoint
+            perna = pernas[i-1]
             cliente = clientes_selecionados[idx]
             distancia = perna['distance']['text']
             tempo = perna['duration']['text']
@@ -330,7 +329,7 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
             roteiro += f"{i}. *{cliente['nome']}* ({cliente['fonte']}): {distancia}, {tempo}\n"
         
         # Adiciona o retorno à origem
-        if len(pernas) > len(ordem):  # Há uma perna extra para o retorno
+        if len(pernas) > len(ordem):
             perna_retorno = pernas[-1]
             distancia = perna_retorno['distance']['text']
             tempo = perna_retorno['duration']['text']
@@ -344,8 +343,7 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
         logger.error("Erro na criação da rota: %s", e)
         return f"Erro ao criar a rota: {str(e)}. Tente novamente."
 
-
-# Fluxo de Criação de Rota (Ajustado para o padrão do /buscapotenciais)
+# Fluxo de Criação de Rota
 async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
         "🗺️ *Criar Rota*: Quais segmentos ou termos você quer buscar para a rota? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
@@ -390,7 +388,6 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
     raio = context.user_data["rota_raio"]
     chat_id = str(update.message.chat.id)
     
-    # Busca clientes do Firebase
     termos = [termo.strip() for termo in tipo_cliente.split(",")]
     clientes_firebase = []
     for termo in termos:
@@ -398,7 +395,6 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
         if resultado:
             clientes_firebase.extend(resultado)
     
-    # Busca clientes do Google Maps
     clientes_google = []
     for termo in termos:
         resultado = buscar_potenciais_clientes_google(localizacao, termo, raio)
@@ -418,12 +414,10 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
         quantidade = len(clientes_unicos)
     clientes_selecionados = clientes_unicos[:quantidade]
     
-    # Exibição da rota básica
     msg = f"*Rota criada para '{tipo_cliente}' (incluindo {quantidade} clientes):*\n"
     for i, cliente in enumerate(clientes_selecionados, 1):
         msg += f"{i}. *{cliente['nome']}* ({cliente['fonte']})\n   Endereço: {cliente['endereco']}\n   Telefone: {cliente['telefone']}\n"
     
-    # Opcional: Rota otimizada com Directions API
     rota_otimizada = criar_rota_google(localizacao, quantidade, clientes_selecionados)
     if not isinstance(rota_otimizada, str) or "Erro" not in rota_otimizada:
         msg += "\n" + rota_otimizada
@@ -1228,7 +1222,9 @@ async def main():
             FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_date)],
             FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)]
         },
-        fallbacks=[CommandHandler("cancelar", followup_cancel)]
+        fallbacks=[CommandHandler("cancelar", followup_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(followup_conv_handler)
 
@@ -1258,7 +1254,9 @@ async def main():
             INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
             INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)]
         },
-        fallbacks=[CommandHandler("cancelar", interacao_cancel)]
+        fallbacks=[CommandHandler("cancelar", interacao_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(interacao_conv_handler)
 
@@ -1269,7 +1267,9 @@ async def main():
             REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
             REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)]
         },
-        fallbacks=[CommandHandler("cancelar", lembrete_cancel)]
+        fallbacks=[CommandHandler("cancelar", lembrete_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(lembrete_conv_handler)
 
@@ -1280,7 +1280,9 @@ async def main():
             REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
             REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
         },
-        fallbacks=[CommandHandler("cancelar", relatorio_cancel)]
+        fallbacks=[CommandHandler("cancelar", relatorio_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(relatorio_conv_handler)
 
@@ -1291,7 +1293,9 @@ async def main():
             HIST_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_start_received)],
             HIST_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_end_received)]
         },
-        fallbacks=[CommandHandler("cancelar", historico_conv_cancel)]
+        fallbacks=[CommandHandler("cancelar", historico_conv_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(historico_conv_handler)
 
@@ -1359,7 +1363,9 @@ async def main():
             BUSCA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_raio)],
             BUSCA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_quantidade)]
         },
-        fallbacks=[CommandHandler("cancelar", buscapotenciais_cancel)]
+        fallbacks=[CommandHandler("cancelar", buscapotenciais_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(buscapotenciais_conv_handler)
 
@@ -1372,7 +1378,9 @@ async def main():
             ROTA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_raio)],
             ROTA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_quantidade)]
         },
-        fallbacks=[CommandHandler("cancelar", criarrota_cancel)]
+        fallbacks=[CommandHandler("cancelar", criarrota_cancel)],
+        per_chat=True,
+        per_message=False
     )
     application.add_handler(criarrota_conv_handler)
 
