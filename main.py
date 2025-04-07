@@ -123,8 +123,11 @@ if not GOOGLE_API_KEY:
     exit(1)
 gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
 
-# Função para Buscar Potenciais Clientes com Google Places API
-def buscar_potenciais_clientes_google(localizacao, raio_km=10):
+# Novos estados para o fluxo de busca
+BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO = range(900, 903)
+
+# Função ajustada para buscar potenciais clientes
+def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
     try:
         geocode_result = gmaps.geocode(localizacao)
         if not geocode_result:
@@ -133,31 +136,28 @@ def buscar_potenciais_clientes_google(localizacao, raio_km=10):
         lat = geocode_result[0]['geometry']['location']['lat']
         lng = geocode_result[0]['geometry']['location']['lng']
         
-        keywords = ["industrial", "logística", "armazém", "construção"]
         resultados = []
+        lugares = gmaps.places_nearby(
+            location=(lat, lng),
+            radius=raio_km * 1000,
+            keyword=tipo_cliente,  # Usar o tipo informado pelo usuário
+            type="establishment"
+        )
         
-        for keyword in keywords:
-            lugares = gmaps.places_nearby(
-                location=(lat, lng),
-                radius=raio_km * 1000,
-                keyword=keyword,
-                type="establishment"
-            )
+        for lugar in lugares['results']:
+            nome = lugar.get('name', 'Sem nome')
+            endereco = lugar.get('vicinity', 'Sem endereço')
+            place_id = lugar['place_id']
             
-            for lugar in lugares['results']:
-                nome = lugar.get('name', 'Sem nome')
-                endereco = lugar.get('vicinity', 'Sem endereço')
-                place_id = lugar['place_id']
-                
-                detalhes = gmaps.place(place_id=place_id, fields=['formatted_phone_number'])
-                telefone = detalhes['result'].get('formatted_phone_number', 'Não disponível')
-                
-                resultados.append({
-                    'nome': nome,
-                    'endereco': endereco,
-                    'telefone': telefone,
-                    'coordenadas': lugar['geometry']['location']
-                })
+            detalhes = gmaps.place(place_id=place_id, fields=['formatted_phone_number'])
+            telefone = detalhes['result'].get('formatted_phone_number', 'Não disponível')
+            
+            resultados.append({
+                'nome': nome,
+                'endereco': endereco,
+                'telefone': telefone,
+                'coordenadas': lugar['geometry']['location']
+            })
         
         if not resultados:
             return "Nenhum potencial cliente encontrado na região."
@@ -165,7 +165,50 @@ def buscar_potenciais_clientes_google(localizacao, raio_km=10):
         return resultados
     except Exception as e:
         logger.error("Erro na busca de clientes: %s", e)
-        return "Erro ao buscar clientes. Tente novamente."
+        return f"Erro ao buscar clientes: {str(e)}. Tente novamente."
+
+# Fluxo de Busca de Potenciais Clientes
+async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("🔍 *Busca de Potenciais Clientes*: Qual tipo de cliente ou produto você quer buscar? (ex.: 'empilhadeiras', 'móveis', 'alimentos'):", parse_mode="Markdown")
+    return BUSCA_TIPO
+
+async def buscapotenciais_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["busca_tipo"] = update.message.text.strip()
+    await update.message.reply_text("📍 Informe a região (ex.: 'Vale Encantado, Vila Velha - ES'):")
+    return BUSCA_LOCALIZACAO
+
+async def buscapotenciais_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["busca_localizacao"] = update.message.text.strip()
+    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
+    return BUSCA_RAIO
+
+async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        raio = float(update.message.text.strip())
+        if raio <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
+        return BUSCA_RAIO
+    
+    context.user_data["busca_raio"] = raio
+    tipo_cliente = context.user_data["busca_tipo"]
+    localizacao = context.user_data["busca_localizacao"]
+    clientes = buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio)
+    
+    if isinstance(clientes, str):
+        await update.message.reply_text(clientes)
+    else:
+        msg = f"*Potenciais clientes encontrados para '{tipo_cliente}':*\n"
+        for cliente in clientes[:5]:  # Limita a 5 resultados para não sobrecarregar
+            msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
+        context.user_data["clientes_potenciais"] = clientes
+        await update.message.reply_text(msg, parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Busca de potenciais clientes cancelada.")
+    return ConversationHandler.END
 
 # Função para Criar Rota com Google Directions API
 def criar_rota_google(localizacao_inicial, num_clientes, clientes_potenciais):
@@ -1210,8 +1253,9 @@ async def main():
     buscapotenciais_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
         states={
-            BUSCA_CRITERIOS: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_localizacao)],
-            BUSCA_CRITERIOS + 1: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_raio)]
+            BUSCA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_tipo)],
+            BUSCA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_localizacao)],
+            BUSCA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_raio)]
         },
         fallbacks=[CommandHandler("cancelar", buscapotenciais_cancel)]
     )
