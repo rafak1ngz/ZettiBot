@@ -538,28 +538,27 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
     options = [
-        [InlineKeyboardButton("Potencial Cliente", callback_data="Potencial Cliente"),
-         InlineKeyboardButton("Cliente Ativo", callback_data="Cliente Ativo")],
-        [InlineKeyboardButton("Cliente Inativo", callback_data="Cliente Inativo"),
-         InlineKeyboardButton("Cliente Novo", callback_data="Cliente Novo")],
-        [InlineKeyboardButton("Cliente de Aluguel", callback_data="Cliente de Aluguel"),
-         InlineKeyboardButton("Cliente de Venda", callback_data="Cliente de Venda")],
-        [InlineKeyboardButton("Cliente de Manutenção", callback_data="Cliente de Manutenção")],
-        [InlineKeyboardButton("Cliente em Negociação", callback_data="Cliente em Negociação")],
-        [InlineKeyboardButton("Cliente Perdido", callback_data="Cliente Perdido")],
-        [InlineKeyboardButton("Sem Interesse", callback_data="Sem Interesse")]
+        [InlineKeyboardButton("Potencial Cliente", callback_data="visit_category:Potencial Cliente"),
+         InlineKeyboardButton("Cliente Ativo", callback_data="visit_category:Cliente Ativo")],
+        [InlineKeyboardButton("Cliente Inativo", callback_data="visit_category:Cliente Inativo"),
+         InlineKeyboardButton("Cliente Novo", callback_data="visit_category:Cliente Novo")],
+        [InlineKeyboardButton("Cliente de Aluguel", callback_data="visit_category:Cliente de Aluguel"),
+         InlineKeyboardButton("Cliente de Venda", callback_data="visit_category:Cliente de Venda")],
+        [InlineKeyboardButton("Cliente de Manutenção", callback_data="visit_category:Cliente de Manutenção")],
+        [InlineKeyboardButton("Cliente em Negociação", callback_data="visit_category:Cliente em Negociação")],
+        [InlineKeyboardButton("Cliente Perdido", callback_data="visit_category:Cliente Perdido")],
+        [InlineKeyboardButton("Sem Interesse", callback_data="visit_category:Sem Interesse")]
     ]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("📋 Selecione a categoria do cliente:", reply_markup=reply_markup)
-    return VISIT_CATEGORY
+    return VISIT_MOTIVE  # Pula VISIT_CATEGORY, pois o callback será tratado fora
 
-async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    category = query.data
+    category = query.data.split(":", 1)[1]
     context.user_data["category"] = category
     await query.edit_message_text(text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:", parse_mode="Markdown")
-    return VISIT_MOTIVE
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["motive"] = update.message.text.strip()
@@ -875,44 +874,35 @@ async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TY
 # Fluxo de Edição
 async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
-        InlineKeyboardButton("Followup", callback_data="edit_followup"),
-        InlineKeyboardButton("Visita", callback_data="edit_visita"),
-        InlineKeyboardButton("Interacao", callback_data="edit_interacao")
+        InlineKeyboardButton("Followup", callback_data="edit_category:followup"),
+        InlineKeyboardButton("Visita", callback_data="edit_category:visita"),
+        InlineKeyboardButton("Interacao", callback_data="edit_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("❓ *Edição*: Escolha a categoria para editar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return EDIT_CATEGORY
+    return EDIT_RECORD  # Pula EDIT_CATEGORY, pois o callback será tratado fora
 
-async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    data = query.data
-    if data == "edit_followup":
-        context.user_data["edit_category"] = "followup"
-    elif data == "edit_visita":
-        context.user_data["edit_category"] = "visita"
-    elif data == "edit_interacao":
-        context.user_data["edit_category"] = "interacao"
-    else:
-        await query.edit_message_text("Categoria inválida!")
-        return ConversationHandler.END
+    category = query.data.split(":", 1)[1]
+    context.user_data["edit_category"] = category
     chat_id = str(query.message.chat.id)
-    if context.user_data["edit_category"] == "followup":
+    if category == "followup":
         col = db.collection("users").document(chat_id).collection("followups")
-    elif context.user_data["edit_category"] == "visita":
+    elif category == "visita":
         col = db.collection("users").document(chat_id).collection("visitas")
     else:
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não foram encontrados registros para {context.user_data['edit_category']}.")
-        return ConversationHandler.END
-    msg = f"*Registros de {context.user_data['edit_category']}:*\n"
+        await query.edit_message_text(f"Não foram encontrados registros para {category}.")
+        return
+    msg = f"*Registros de {category}:*\n"
     for doc in docs:
         msg += f"ID: {doc.id} - {doc.to_dict()}\n"
     await query.edit_message_text(msg, parse_mode="Markdown")
     await query.message.reply_text("Digite o ID do registro que deseja editar:")
-    return EDIT_RECORD
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
@@ -952,44 +942,35 @@ async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 # Fluxo de Exclusão
 async def excluir_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
-        InlineKeyboardButton("Followup", callback_data="delete_followup"),
-        InlineKeyboardButton("Visita", callback_data="delete_visita"),
-        InlineKeyboardButton("Interacao", callback_data="delete_interacao")
+        InlineKeyboardButton("Followup", callback_data="delete_category:followup"),
+        InlineKeyboardButton("Visita", callback_data="delete_category:visita"),
+        InlineKeyboardButton("Interacao", callback_data="delete_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("❓ *Exclusão*: Escolha a categoria para excluir:", reply_markup=reply_markup, parse_mode="Markdown")
-    return DELETE_CATEGORY
+    return DELETE_RECORD  # Pula DELETE_CATEGORY, pois o callback será tratado fora
 
-async def excluir_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def excluir_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    data = query.data
-    if data == "delete_followup":
-        context.user_data["delete_category"] = "followup"
-    elif data == "delete_visita":
-        context.user_data["delete_category"] = "visita"
-    elif data == "delete_interacao":
-        context.user_data["delete_category"] = "interacao"
-    else:
-        await query.edit_message_text("Categoria inválida!")
-        return ConversationHandler.END
+    category = query.data.split(":", 1)[1]
+    context.user_data["delete_category"] = category
     chat_id = str(query.message.chat.id)
-    if context.user_data["delete_category"] == "followup":
+    if category == "followup":
         col = db.collection("users").document(chat_id).collection("followups")
-    elif context.user_data["delete_category"] == "visita":
+    elif category == "visita":
         col = db.collection("users").document(chat_id).collection("visitas")
     else:
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não foram encontrados registros para {context.user_data['delete_category']}.")
-        return ConversationHandler.END
-    msg = f"*Registros de {context.user_data['delete_category']}:*\n"
+        await query.edit_message_text(f"Não foram encontrados registros para {category}.")
+        return
+    msg = f"*Registros de {category}:*\n"
     for doc in docs:
         msg += f"ID: {doc.id} - {doc.to_dict()}\n"
     await query.edit_message_text(msg, parse_mode="Markdown")
     await query.message.reply_text("Digite o ID do registro que deseja excluir:")
-    return DELETE_RECORD
 
 async def excluir_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
@@ -1025,29 +1006,20 @@ async def excluir_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # Fluxo de Filtragem
 async def filtrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
-        InlineKeyboardButton("Followup", callback_data="filter_followup"),
-        InlineKeyboardButton("Visita", callback_data="filter_visita"),
-        InlineKeyboardButton("Interacao", callback_data="filter_interacao")
+        InlineKeyboardButton("Followup", callback_data="filter_category:followup"),
+        InlineKeyboardButton("Visita", callback_data="filter_category:visita"),
+        InlineKeyboardButton("Interacao", callback_data="filter_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("🔍 *Filtragem*: Escolha a categoria para filtrar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return FILTER_CATEGORY
+    return FILTER_FIELD  # Pula FILTER_CATEGORY, pois o callback será tratado fora
 
-async def filtrar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def filtrar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    data = query.data
-    if data == "filter_followup":
-        context.user_data["filter_category"] = "followup"
-    elif data == "filter_visita":
-        context.user_data["filter_category"] = "visita"
-    elif data == "filter_interacao":
-        context.user_data["filter_category"] = "interacao"
-    else:
-        await query.edit_message_text("Categoria inválida!")
-        return ConversationHandler.END
+    category = query.data.split(":", 1)[1]
+    context.user_data["filter_category"] = category
     await query.edit_message_text("Qual campo deseja utilizar para filtrar? (Ex.: followup: cliente, data_follow, status; visita: empresa, data_visita, classificacao, motivo; interacao: cliente, resumo, followup)")
-    return FILTER_FIELD
 
 async def filtrar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = update.message.text.strip()
@@ -1088,41 +1060,37 @@ async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 # Fluxo de Exportação
 async def exportar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
-        InlineKeyboardButton("Followup", callback_data="export_followup"),
-        InlineKeyboardButton("Visita", callback_data="export_visita"),
-        InlineKeyboardButton("Interacao", callback_data="export_interacao")
+        InlineKeyboardButton("Followup", callback_data="export_category:followup"),
+        InlineKeyboardButton("Visita", callback_data="export_category:visita"),
+        InlineKeyboardButton("Interacao", callback_data="export_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("🔄 *Exportar*: Escolha a categoria que deseja exportar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return EXPORT_CATEGORY
+    return EXPORT_PROCESS  # Pula EXPORT_CATEGORY, pois o callback será tratado fora
 
-async def exportar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def exportar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
-    data = query.data
+    category = query.data.split(":", 1)[1]
     chat_id = str(query.message.chat.id)
-    if data == "export_followup":
+    if category == "followup":
         col = db.collection("users").document(chat_id).collection("followups")
-        categoria = "followups"
-    elif data == "export_visita":
+        categoria_nome = "followups"
+    elif category == "visita":
         col = db.collection("users").document(chat_id).collection("visitas")
-        categoria = "visitas"
-    elif data == "export_interacao":
-        col = db.collection("users").document(chat_id).collection("interacoes")
-        categoria = "interacoes"
+        categoria_nome = "visitas"
     else:
-        await query.edit_message_text("Categoria inválida!")
-        return ConversationHandler.END
+        col = db.collection("users").document(chat_id).collection("interacoes")
+        categoria_nome = "interacoes"
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não existem registros na categoria {categoria}.")
-        return ConversationHandler.END
+        await query.edit_message_text(f"Não existem registros na categoria {categoria_nome}.")
+        return
     csv_file = exportar_csv(docs)
     await query.edit_message_text("Gerando arquivo CSV...")
     with open(csv_file, "rb") as f:
-        await query.message.reply_document(document=f, filename=f"{categoria}.csv", caption="Arquivo exportado")
+        await query.message.reply_document(document=f, filename=f"{categoria_nome}.csv", caption="Arquivo exportado")
     os.remove(csv_file)
-    return ConversationHandler.END
 
 async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("Exportação cancelada.")
@@ -1234,7 +1202,6 @@ async def main():
         states={
             VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
             VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
-            VISIT_CATEGORY: [CallbackQueryHandler(visita_category_callback)],
             VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
             VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
             VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
@@ -1244,6 +1211,7 @@ async def main():
         per_message=False
     )
     application.add_handler(visita_conv_handler)
+    application.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
 
     # Handler para Interação
     interacao_conv_handler = ConversationHandler(
@@ -1303,7 +1271,6 @@ async def main():
     editar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("editar", editar_start)],
         states={
-            EDIT_CATEGORY: [CallbackQueryHandler(editar_category_callback, pattern="^edit_")],
             EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
             EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_field_received)],
             EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
@@ -1313,12 +1280,12 @@ async def main():
         per_message=False
     )
     application.add_handler(editar_conv_handler)
+    application.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
 
     # Handler para Exclusão
     excluir_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
         states={
-            DELETE_CATEGORY: [CallbackQueryHandler(excluir_category_callback, pattern="^delete_")],
             DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
             DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
         },
@@ -1327,12 +1294,12 @@ async def main():
         per_message=False
     )
     application.add_handler(excluir_conv_handler)
+    application.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
 
     # Handler para Filtragem
     filtrar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("filtrar", filtrar_start)],
         states={
-            FILTER_CATEGORY: [CallbackQueryHandler(filtrar_category_callback, pattern="^filter_")],
             FILTER_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_field_received)],
             FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
         },
@@ -1341,18 +1308,20 @@ async def main():
         per_message=False
     )
     application.add_handler(filtrar_conv_handler)
+    application.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
 
     # Handler para Exportação
     exportar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("exportar", exportar_start)],
         states={
-            EXPORT_CATEGORY: [CallbackQueryHandler(exportar_category_callback, pattern="^export_")]
+            EXPORT_PROCESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, exportar_cancel)]  # Estado vazio, pois o callback faz tudo
         },
         fallbacks=[CommandHandler("cancelar", exportar_cancel)],
         per_chat=True,
         per_message=False
     )
     application.add_handler(exportar_conv_handler)
+    application.add_handler(CallbackQueryHandler(exportar_category_callback, pattern="^export_category:"))
 
     # Handler para Busca de Potenciais Clientes
     buscapotenciais_conv_handler = ConversationHandler(
