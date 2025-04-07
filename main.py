@@ -5,12 +5,12 @@ import asyncio
 import nest_asyncio
 import sys
 from datetime import datetime, timedelta, time
-from zoneinfo import ZoneInfo  # Disponível a partir do Python 3.9
+from zoneinfo import ZoneInfo
 import tempfile
 import matplotlib.pyplot as plt
-# Para exportar CSV
 import csv
 import googlemaps
+import random
 
 # Define o fuso horário desejado
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
@@ -18,9 +18,7 @@ TIMEZONE = ZoneInfo("America/Sao_Paulo")
 # Aplica o patch do nest_asyncio
 nest_asyncio.apply()
 
-# ------------------------------------------------------------------------------
 # Configuração do Logger
-# ------------------------------------------------------------------------------
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.DEBUG)
 handler = logging.StreamHandler(sys.stdout)
@@ -36,9 +34,7 @@ else:
 logging.getLogger("httpx").setLevel(logging.WARNING)
 logging.getLogger("telegram.ext").setLevel(logging.WARNING)
 
-# ------------------------------------------------------------------------------
 # Inicialização do Firebase
-# ------------------------------------------------------------------------------
 import firebase_admin
 from firebase_admin import credentials, firestore
 
@@ -60,9 +56,7 @@ firebase_admin.initialize_app(cred)
 db = firestore.client()
 logger.info("Firebase inicializado com sucesso!")
 
-# ------------------------------------------------------------------------------
 # Integração com o Telegram Bot (API Assíncrona)
-# ------------------------------------------------------------------------------
 from telegram import (
     Update,
     InlineKeyboardMarkup,
@@ -80,36 +74,21 @@ from telegram.ext import (
     ContextTypes
 )
 
-# ----- Estados para os fluxos já existentes -----
-# Follow-up (0 a 2)
+# Estados para os fluxos
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
-# Visita (0 a 5)
-VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 3+6)
-# Interação (0 a 3)
+VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 9)
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
-# Lembrete (100 a 101)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
-# Relatório (Resumido) (300 a 301)
 REPORT_START, REPORT_END = range(300, 302)
-# Histórico (Detalhado) (400 a 401)
 HIST_START, HIST_END = range(400, 402)
-
-# Estados para Edição (500 a 503)
 EDIT_CATEGORY, EDIT_RECORD, EDIT_FIELD, EDIT_NEW_VALUE = range(500, 504)
-# Estados para Exclusão (600 a 602)
 DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
-# Estados para Filtragem (700 a 702)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
-# Estados para Exportação (800 a 801)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
-# Estado para Buscar Potenciais Clientes
 BUSCA_CRITERIOS = 900
-# Estado para Criar Rota
 ROTA_REGIAO = 901
 
-# ------------------------------------------------------------------------------
 # Função para Gerar Gráfico com Matplotlib
-# ------------------------------------------------------------------------------
 def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info):
     categorias = ['Follow-ups', 'Confirmados', 'Pendentes', 'Visitas', 'Interações']
     valores = [total_followups, confirmados, pendentes, total_visitas, total_interacoes]
@@ -124,9 +103,7 @@ def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_
     plt.close()
     return tmp_file.name
 
-# ------------------------------------------------------------------------------
-# Função para Gerar Arquivo CSV (Exportar Registros)
-# ------------------------------------------------------------------------------
+# Função para Gerar Arquivo CSV
 def exportar_csv(docs):
     temp_file = tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", newline="", delete=False, suffix=".csv")
     writer = csv.writer(temp_file)
@@ -139,47 +116,119 @@ def exportar_csv(docs):
     temp_file.close()
     return temp_file.name
 
-# ------------------------------------------------------------------------------
-# Nova Função: Buscar Potenciais Clientes (Simulação)
-# ------------------------------------------------------------------------------
-def buscar_potenciais_clientes(query: str):
-    # Aqui você integraria uma API real; neste exemplo, simulamos a pesquisa.
-    query_lower = query.lower()
-    if "vitória" in query_lower and "empilhadeiras" in query_lower:
-        return [
-            "Empilhadeiras Vitória Ltda",
-            "Manutenção Empilhadeiras Vitória",
-            "Aluguel de Empilhadeiras Vitória"
-        ]
-    else:
-        return [
-            "Empresa Exemplo 1",
-            "Empresa Exemplo 2"
-        ]
+# Configuração da API do Google Maps
+GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
+if not GOOGLE_API_KEY:
+    logger.error("GOOGLE_API_KEY não definida!")
+    exit(1)
+gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
 
-# ------------------------------------------------------------------------------
-# Nova Função: Criar Rota de Visita (Simulação)
-# ------------------------------------------------------------------------------
-def criar_rota_visita(regiao: str):
-    # Em produção, integre com uma API de rotas, como a do Google Maps.
-    if "linhares" in regiao.lower():
-        return [
-            "Cliente A - Linhares",
-            "Cliente B - Linhares",
-            "Cliente C - Linhares"
-        ]
-    else:
-        return []
+# Função para Buscar Potenciais Clientes com Google Places API
+def buscar_potenciais_clientes_google(localizacao, raio_km=10):
+    try:
+        geocode_result = gmaps.geocode(localizacao)
+        if not geocode_result:
+            return "Localização não encontrada."
+        
+        lat = geocode_result[0]['geometry']['location']['lat']
+        lng = geocode_result[0]['geometry']['location']['lng']
+        
+        keywords = ["industrial", "logística", "armazém", "construção"]
+        resultados = []
+        
+        for keyword in keywords:
+            lugares = gmaps.places_nearby(
+                location=(lat, lng),
+                radius=raio_km * 1000,
+                keyword=keyword,
+                type="establishment"
+            )
+            
+            for lugar in lugares['results']:
+                nome = lugar.get('name', 'Sem nome')
+                endereco = lugar.get('vicinity', 'Sem endereço')
+                place_id = lugar['place_id']
+                
+                detalhes = gmaps.place(place_id=place_id, fields=['formatted_phone_number'])
+                telefone = detalhes['result'].get('formatted_phone_number', 'Não disponível')
+                
+                resultados.append({
+                    'nome': nome,
+                    'endereco': endereco,
+                    'telefone': telefone,
+                    'coordenadas': lugar['geometry']['location']
+                })
+        
+        if not resultados:
+            return "Nenhum potencial cliente encontrado na região."
+        
+        return resultados
+    except Exception as e:
+        logger.error("Erro na busca de clientes: %s", e)
+        return "Erro ao buscar clientes. Tente novamente."
 
-# ------------------------------------------------------------------------------
-# Comando /inicio – Mensagem de Boas-Vindas
-# ------------------------------------------------------------------------------
+# Função para Criar Rota com Google Directions API
+def criar_rota_google(localizacao_inicial, num_clientes, clientes_potenciais):
+    try:
+        geocode_result = gmaps.geocode(localizacao_inicial)
+        if not geocode_result:
+            return "Localização inicial não encontrada."
+        
+        origem = geocode_result[0]['geometry']['location']
+        
+        if len(clientes_potenciais) < num_clientes:
+            num_clientes = len(clientes_potenciais)
+        
+        clientes_selecionados = random.sample(clientes_potenciais, num_clientes)
+        waypoints = [cliente['coordenadas'] for cliente in clientes_selecionados]
+        
+        rota = gmaps.directions(
+            origin=origem,
+            destination=origem,
+            waypoints=waypoints,
+            mode="driving",
+            optimize_waypoints=True
+        )
+        
+        if not rota:
+            return "Não foi possível calcular a rota."
+        
+        ordem = rota[0]['waypoint_order']
+        pernas = rota[0]['legs']
+        
+        roteiro = f"*Rota otimizada a partir de {localizacao_inicial}:*\n"
+        total_distancia = 0
+        total_tempo = 0
+        
+        for i, perna in enumerate(pernas):
+            if i == 0:
+                ponto = "Origem"
+            elif i <= num_clientes:
+                cliente_idx = ordem[i-1] if i-1 < len(ordem) else i-1
+                ponto = clientes_selecionados[cliente_idx]['nome']
+            else:
+                ponto = "Retorno à Origem"
+            
+            distancia = perna['distance']['text']
+            tempo = perna['duration']['text']
+            total_distancia += perna['distance']['value']
+            total_tempo += perna['duration']['value']
+            
+            roteiro += f"{i+1}. *{ponto}*: {distancia}, {tempo}\n"
+        
+        roteiro += f"\n*Total*: {total_distancia/1000:.1f} km, {total_tempo//60} minutos"
+        return roteiro
+    except Exception as e:
+        logger.error("Erro na criação da rota: %s", e)
+        return "Erro ao criar a rota. Tente novamente."
+
+# Comando /inicio
 async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = (
-        "Olá! Seja bem‑vindo ao bot de gerenciamento.\n"
+        "Olá! Seja bem-vindo ao ZettiBot.\n"
         "Para saber mais sobre as funções disponíveis, envie /ajuda.\n"
         "Comandos úteis:\n"
-        "• /followup – Registrar um follow‑up\n"
+        "• /followup – Registrar um follow-up\n"
         "• /visita – Registrar uma visita\n"
         "• /interacao – Registrar uma interação\n"
         "• /lembrete – Agendar um lembrete\n"
@@ -190,48 +239,36 @@ async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         "• /filtrar – Filtrar registros\n"
         "• /exportar – Exportar registros em CSV\n"
         "• /buscapotenciais – Buscar potenciais clientes\n"
-        "• /criarrota – Criar uma rota de visita para uma região\n"
+        "• /criarrota – Criar uma rota de visita"
     )
     await update.message.reply_text(msg)
     logger.info("Comando /inicio executado.")
 
-# ------------------------------------------------------------------------------
-# Comando /ajuda – Informações sobre o Bot
-# ------------------------------------------------------------------------------
+# Comando /ajuda
 async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = (
-        "*Ajuda - Informações do Bot*\n\n"
-        "Este bot permite gerenciar registros de follow‑ups, visitas, interações, agendar lembretes, gerar relatórios, "
-        "editar/excluir registros, filtrar e exportar dados, além de buscar potenciais clientes e criar rotas de visita.\n\n"
+        "*Ajuda - ZettiBot*\n\n"
+        "Este bot ajuda a gerenciar vendas externas de empilhadeiras.\n\n"
         "*Comandos disponíveis:*\n"
-        "• /inicio – Mensagem de boas‑vindas\n"
-        "• /ajuda – Exibe esta mensagem de ajuda\n"
-        "• /followup – Registrar um follow‑up\n"
-        "• /visita – Registrar uma visita\n"
-        "• /interacao – Registrar uma interação\n"
-        "• /lembrete – Agendar um lembrete\n"
-        "• /relatorio – Gerar um relatório resumido com gráfico\n"
-        "• /historico – Consultar o histórico detalhado\n"
-        "• /editar – Editar um registro\n"
-        "• /excluir – Excluir um registro\n"
+        "• /inicio – Mensagem de boas-vindas\n"
+        "• /ajuda – Esta mensagem\n"
+        "• /followup – Registrar follow-up\n"
+        "• /visita – Registrar visita\n"
+        "• /interacao – Registrar interação\n"
+        "• /lembrete – Agendar lembrete\n"
+        "• /relatorio – Relatório resumido com gráfico\n"
+        "• /historico – Histórico detalhado\n"
+        "• /editar – Editar registro\n"
+        "• /excluir – Excluir registro\n"
         "• /filtrar – Filtrar registros\n"
-        "• /exportar – Exportar registros em CSV\n"
-        "• /buscapotenciais – Buscar potenciais clientes com critérios informados\n"
-        "• /criarrota – Criar uma rota de visita para uma região\n\n"
-        "Para cancelar um fluxo, use /cancelar.\n"
-        "Se enviar uma mensagem fora do fluxo, você receberá esta orientação."
+        "• /exportar – Exportar em CSV\n"
+        "• /buscapotenciais – Buscar potenciais clientes\n"
+        "• /criarrota – Criar rota de visita\n\n"
+        "Use /cancelar para sair de um fluxo."
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
-# ------------------------------------------------------------------------------
-# Handler para Mensagens Fora de Fluxo
-# ------------------------------------------------------------------------------
-async def mensagem_default(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await update.message.reply_text("Olá! Para começar, envie /inicio ou /ajuda.")
-
-# ------------------------------------------------------------------------------
 # Fluxo de Follow-up
-# ------------------------------------------------------------------------------
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode="Markdown")
     return FOLLOWUP_CLIENT
@@ -274,9 +311,7 @@ async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Follow-up cancelado. ❌")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
 # Fluxo de Visita
-# ------------------------------------------------------------------------------
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode="Markdown")
     return VISIT_COMPANY
@@ -295,15 +330,15 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
     options = [
-        [InlineKeyboardButton("Followup", callback_data="Potencial Cliente"),
-         InlineKeyboardButton("Visita Ativa", callback_data="Cliente Ativo")],
-        [InlineKeyboardButton("Visita Inativa", callback_data="Cliente Inativo"),
-         InlineKeyboardButton("Novo Cliente", callback_data="Cliente Novo")],
-        [InlineKeyboardButton("Aluguel", callback_data="Cliente de Aluguel"),
-         InlineKeyboardButton("Venda", callback_data="Cliente de Venda")],
-        [InlineKeyboardButton("Manutenção", callback_data="Cliente de Manutenção")],
-        [InlineKeyboardButton("Negociação", callback_data="Cliente em Negociação")],
-        [InlineKeyboardButton("Perdido", callback_data="Cliente Perdido")],
+        [InlineKeyboardButton("Potencial Cliente", callback_data="Potencial Cliente"),
+         InlineKeyboardButton("Cliente Ativo", callback_data="Cliente Ativo")],
+        [InlineKeyboardButton("Cliente Inativo", callback_data="Cliente Inativo"),
+         InlineKeyboardButton("Cliente Novo", callback_data="Cliente Novo")],
+        [InlineKeyboardButton("Cliente de Aluguel", callback_data="Cliente de Aluguel"),
+         InlineKeyboardButton("Cliente de Venda", callback_data="Cliente de Venda")],
+        [InlineKeyboardButton("Cliente de Manutenção", callback_data="Cliente de Manutenção")],
+        [InlineKeyboardButton("Cliente em Negociação", callback_data="Cliente em Negociação")],
+        [InlineKeyboardButton("Cliente Perdido", callback_data="Cliente Perdido")],
         [InlineKeyboardButton("Sem Interesse", callback_data="Sem Interesse")]
     ]
     reply_markup = InlineKeyboardMarkup(options)
@@ -383,9 +418,7 @@ async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await update.message.reply_text("Visita cancelada.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
 # Fluxo de Interação
-# ------------------------------------------------------------------------------
 async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem interagiu:", parse_mode="Markdown")
     return INTER_CLIENT
@@ -447,9 +480,7 @@ async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("Interação cancelada.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
 # Fluxo de Lembrete
-# ------------------------------------------------------------------------------
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🔔 *Lembrete*: Informe o texto do lembrete:", parse_mode="Markdown")
     return REMINDER_TEXT
@@ -490,9 +521,7 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error("Erro no lembrete_callback: %s", e)
 
-# ------------------------------------------------------------------------------
-# Fluxo de Relatório (Resumido) com Gráfico
-# ------------------------------------------------------------------------------
+# Fluxo de Relatório
 async def relatorio_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("📊 *Relatório*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
     return REPORT_START
@@ -565,9 +594,7 @@ async def relatorio_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
     await update.message.reply_text("Relatório cancelado.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Histórico (Detalhado)
-# ------------------------------------------------------------------------------
+# Fluxo de Histórico
 async def historico_conv_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("📜 *Histórico Detalhado*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
     return HIST_START
@@ -637,9 +664,7 @@ async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TY
     await update.message.reply_text("Histórico cancelado.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Edição de Registros
-# ------------------------------------------------------------------------------
+# Fluxo de Edição
 async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
         InlineKeyboardButton("Followup", callback_data="edit_followup"),
@@ -684,7 +709,7 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
     context.user_data["edit_record_id"] = record_id
-    await update.message.reply_text("Qual campo deseja editar? (Ex.: followup: cliente, data_follow, descricao, status; visita: empresa, data_visita, classificacao, motivo, followup; interacao: cliente, resumo, followup)", parse_mode="Markdown")
+    await update.message.reply_text("Qual campo deseja editar? (Ex.: followup: cliente, data_follow, descricao, status; visita: empresa, data_visita, classificacao, motivo, followup; interacao: cliente, resumo, followup)")
     return EDIT_FIELD
 
 async def editar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -716,9 +741,7 @@ async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     await update.message.reply_text("Edição cancelada.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Exclusão de Registros
-# ------------------------------------------------------------------------------
+# Fluxo de Exclusão
 async def excluir_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
         InlineKeyboardButton("Followup", callback_data="delete_followup"),
@@ -791,9 +814,7 @@ async def excluir_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Exclusão cancelada.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Filtragem/Pesquisa de Registros
-# ------------------------------------------------------------------------------
+# Fluxo de Filtragem
 async def filtrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
         InlineKeyboardButton("Followup", callback_data="filter_followup"),
@@ -856,9 +877,7 @@ async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     await update.message.reply_text("Filtragem cancelada.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Exportação de Registros (CSV)
-# ------------------------------------------------------------------------------
+# Fluxo de Exportação
 async def exportar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     options = [[
         InlineKeyboardButton("Followup", callback_data="export_followup"),
@@ -901,43 +920,82 @@ async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Exportação cancelada.")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
 # Fluxo de Busca de Potenciais Clientes
-# ------------------------------------------------------------------------------
 async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Informe os critérios para buscar potenciais clientes (ex.: 'compra, aluguel ou contrato de manutenção de empilhadeiras em Vitória ES'):")
+    await update.message.reply_text("🔍 *Busca de Potenciais Clientes*: Informe a região (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
     return BUSCA_CRITERIOS
 
-async def buscapotenciais_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    query = update.message.text.strip()
-    lista = buscar_potenciais_clientes(query)
-    if lista:
-        msg = "Potenciais clientes encontrados:\n" + "\n".join(lista)
+async def buscapotenciais_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["busca_localizacao"] = update.message.text.strip()
+    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
+    return BUSCA_CRITERIOS + 1
+
+async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        raio = float(update.message.text.strip())
+        if raio <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
+        return BUSCA_CRITERIOS + 1
+    
+    context.user_data["busca_raio"] = raio
+    localizacao = context.user_data["busca_localizacao"]
+    clientes = buscar_potenciais_clientes_google(localizacao, raio)
+    
+    if isinstance(clientes, str):
+        await update.message.reply_text(clientes)
     else:
-        msg = "Nenhum potencial cliente encontrado para os critérios informados."
-    await update.message.reply_text(msg)
+        msg = "*Potenciais clientes encontrados:*\n"
+        for cliente in clientes[:5]:
+            msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
+        context.user_data["clientes_potenciais"] = clientes
+        await update.message.reply_text(msg, parse_mode="Markdown")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Fluxo de Criação de Rota de Visita
-# ------------------------------------------------------------------------------
+async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Busca de potenciais clientes cancelada.")
+    return ConversationHandler.END
+
+# Fluxo de Criação de Rota
 async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Informe a região para criar a rota de visita (ex.: 'Linhares-ES'):")
+    await update.message.reply_text("🗺️ *Criação de Rota*: Informe a região inicial (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
     return ROTA_REGIAO
 
-async def criarrota_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    regiao = update.message.text.strip()
-    rota = criar_rota_visita(regiao)
-    if rota:
-        msg = "Rota de visita para a região de {}:\n".format(regiao) + "\n".join(rota)
-    else:
-        msg = "Nenhum cliente encontrado para a região informada."
-    await update.message.reply_text(msg)
+async def criarrota_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["rota_localizacao"] = update.message.text.strip()
+    await update.message.reply_text("Quantos clientes deseja visitar? (Digite um número, ex.: '3'):")
+    return ROTA_REGIAO + 1
+
+async def criarrota_num_clientes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        num_clientes = int(update.message.text.strip())
+        if num_clientes <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '3'):")
+        return ROTA_REGIAO + 1
+    
+    localizacao = context.user_data["rota_localizacao"]
+    clientes = context.user_data.get("clientes_potenciais", buscar_potenciais_clientes_google(localizacao, 10))
+    
+    if isinstance(clientes, str):
+        await update.message.reply_text(clientes)
+        return ConversationHandler.END
+    
+    if not clientes:
+        await update.message.reply_text("Nenhum cliente disponível para criar a rota.")
+        return ConversationHandler.END
+    
+    rota = criar_rota_google(localizacao, num_clientes, clientes)
+    await update.message.reply_text(rota, parse_mode="Markdown")
     return ConversationHandler.END
 
-# ------------------------------------------------------------------------------
-# Jobs Diários e Callback Inline para Follow-up
-# ------------------------------------------------------------------------------
+async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Criação de rota cancelada.")
+    return ConversationHandler.END
+
+# Jobs Diários
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         today = datetime.now(TIMEZONE).date().isoformat()
@@ -1006,204 +1064,11 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         logger.error("Erro ao confirmar follow-up: %s", e)
         await query.edit_message_text(text="Erro ao confirmar follow-up.")
 
-# ------------------------------------------------------------------------------
 # Error Handler
-# ------------------------------------------------------------------------------
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
 
-# Configuração da API do Google Maps
-GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    logger.error("GOOGLE_API_KEY não definida!")
-    exit(1)
-gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
-
-# ------------------------------------------------------------------------------
-# Função para Buscar Potenciais Clientes com Google Places API
-# ------------------------------------------------------------------------------
-def buscar_potenciais_clientes_google(localizacao, raio_km=10):
-    try:
-        geocode_result = gmaps.geocode(localizacao)
-        if not geocode_result:
-            return "Localização não encontrada."
-        
-        lat = geocode_result[0]['geometry']['location']['lat']
-        lng = geocode_result[0]['geometry']['location']['lng']
-        
-        keywords = ["industrial", "logística", "armazém", "construção"]
-        resultados = []
-        
-        for keyword in keywords:
-            lugares = gmaps.places_nearby(
-                location=(lat, lng),
-                radius=raio_km * 1000,
-                keyword=keyword,
-                type="establishment"
-            )
-            
-            for lugar in lugares['results']:
-                nome = lugar.get('name', 'Sem nome')
-                endereco = lugar.get('vicinity', 'Sem endereço')
-                place_id = lugar['place_id']
-                
-                detalhes = gmaps.place(place_id=place_id, fields=['formatted_phone_number'])
-                telefone = detalhes['result'].get('formatted_phone_number', 'Não disponível')
-                
-                resultados.append({
-                    'nome': nome,
-                    'endereco': endereco,
-                    'telefone': telefone,
-                    'coordenadas': lugar['geometry']['location']
-                })
-        
-        if not resultados:
-            return "Nenhum potencial cliente encontrado na região."
-        
-        return resultados
-    except Exception as e:
-        logger.error("Erro na busca de clientes: %s", e)
-        return "Erro ao buscar clientes. Tente novamente."
-
-# ------------------------------------------------------------------------------
-# Função para Criar Rota com Google Directions API
-# ------------------------------------------------------------------------------
-def criar_rota_google(localizacao_inicial, num_clientes, clientes_potenciais):
-    try:
-        geocode_result = gmaps.geocode(localizacao_inicial)
-        if not geocode_result:
-            return "Localização inicial não encontrada."
-        
-        origem = geocode_result[0]['geometry']['location']
-        
-        if len(clientes_potenciais) < num_clientes:
-            num_clientes = len(clientes_potenciais)
-        
-        clientes_selecionados = random.sample(clientes_potenciais, num_clientes)
-        waypoints = [cliente['coordenadas'] for cliente in clientes_selecionados]
-        
-        rota = gmaps.directions(
-            origin=origem,
-            destination=origem,
-            waypoints=waypoints,
-            mode="driving",
-            optimize_waypoints=True
-        )
-        
-        if not rota:
-            return "Não foi possível calcular a rota."
-        
-        ordem = rota[0]['waypoint_order']
-        pernas = rota[0]['legs']
-        
-        roteiro = f"*Rota otimizada a partir de {localizacao_inicial}:*\n"
-        total_distancia = 0
-        total_tempo = 0
-        
-        for i, perna in enumerate(pernas):
-            if i == 0:
-                ponto = "Origem"
-            elif i <= num_clientes:
-                cliente_idx = ordem[i-1] if i-1 < len(ordem) else i-1
-                ponto = clientes_selecionados[cliente_idx]['nome']
-            else:
-                ponto = "Retorno à Origem"
-            
-            distancia = perna['distance']['text']
-            tempo = perna['duration']['text']
-            total_distancia += perna['distance']['value']
-            total_tempo += perna['duration']['value']
-            
-            roteiro += f"{i+1}. *{ponto}*: {distancia}, {tempo}\n"
-        
-        roteiro += f"\n*Total*: {total_distancia/1000:.1f} km, {total_tempo//60} minutos"
-        return roteiro
-    except Exception as e:
-        logger.error("Erro na criação da rota: %s", e)
-        return "Erro ao criar a rota. Tente novamente."
-
-# ------------------------------------------------------------------------------
-# Fluxo de Busca de Potenciais Clientes (Conversacional)
-# ------------------------------------------------------------------------------
-async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔍 *Busca de Potenciais Clientes*: Informe a região (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
-    return BUSCA_CRITERIOS
-
-async def buscapotenciais_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["busca_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
-    return BUSCA_CRITERIOS + 1
-
-async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        raio = float(update.message.text.strip())
-        if raio <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
-        return BUSCA_CRITERIOS + 1
-    
-    context.user_data["busca_raio"] = raio
-    localizacao = context.user_data["busca_localizacao"]
-    clientes = buscar_potenciais_clientes_google(localizacao, raio)
-    
-    if isinstance(clientes, str):  # Mensagem de erro
-        await update.message.reply_text(clientes)
-    else:
-        msg = "*Potenciais clientes encontrados:*\n"
-        for cliente in clientes[:5]:  # Limita a 5 para não sobrecarregar
-            msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
-        context.user_data["clientes_potenciais"] = clientes  # Salva para uso na rota
-        await update.message.reply_text(msg, parse_mode="Markdown")
-    return ConversationHandler.END
-
-async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Busca de potenciais clientes cancelada.")
-    return ConversationHandler.END
-
-# ------------------------------------------------------------------------------
-# Fluxo de Criação de Rota (Conversacional)
-# ------------------------------------------------------------------------------
-async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🗺️ *Criação de Rota*: Informe a região inicial (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
-    return ROTA_REGIAO
-
-async def criarrota_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["rota_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("Quantos clientes deseja visitar? (Digite um número, ex.: '3'):")
-    return ROTA_REGIAO + 1
-
-async def criarrota_num_clientes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        num_clientes = int(update.message.text.strip())
-        if num_clientes <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '3'):")
-        return ROTA_REGIAO + 1
-    
-    localizacao = context.user_data["rota_localizacao"]
-    clientes = context.user_data.get("clientes_potenciais", buscar_potenciais_clientes_google(localizacao, 10))  # Usa busca anterior ou nova
-    
-    if isinstance(clientes, str):  # Erro na busca
-        await update.message.reply_text(clientes)
-        return ConversationHandler.END
-    
-    if not clientes:
-        await update.message.reply_text("Nenhum cliente disponível para criar a rota.")
-        return ConversationHandler.END
-    
-    rota = criar_rota_google(localizacao, num_clientes, clientes)
-    await update.message.reply_text(rota, parse_mode="Markdown")
-    return ConversationHandler.END
-
-async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Criação de rota cancelada.")
-    return ConversationHandler.END
-
-# ------------------------------------------------------------------------------
 # Função Principal
-# ------------------------------------------------------------------------------
 async def main():
     token = os.environ.get("TELEGRAM_TOKEN")
     if not token:
@@ -1215,37 +1080,7 @@ async def main():
     # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
     application.add_handler(CommandHandler("ajuda", ajuda))
-    
-    # Comando para busca de potenciais clientes
-    application.add_handler(CommandHandler("buscapotenciais", buscapotenciais_start))
-    # Comando para criar rota
-    application.add_handler(CommandHandler("criarrota", criarrota_start))
-    
-    # Handler default para mensagens fora de fluxo
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem_default))
-    
-    # Handler para Relatório (Resumido) com Gráfico
-    relatorio_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("relatorio", relatorio_start)],
-        states={
-            REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
-            REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", relatorio_cancel)]
-    )
-    application.add_handler(relatorio_conv_handler)
-    
-    # Handler para Histórico (Detalhado)
-    historico_conv_handler = ConversationHandler(
-        entry_points=[CommandHandler("historico", historico_conv_start)],
-        states={
-            HIST_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_start_received)],
-            HIST_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_end_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", historico_conv_cancel)]
-    )
-    application.add_handler(historico_conv_handler)
-    
+
     # Handler para Follow-up
     followup_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("followup", followup_start)],
@@ -1257,7 +1092,7 @@ async def main():
         fallbacks=[CommandHandler("cancelar", followup_cancel)]
     )
     application.add_handler(followup_conv_handler)
-    
+
     # Handler para Visita
     visita_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("visita", visita_start)],
@@ -1269,10 +1104,11 @@ async def main():
             VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
             VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
         },
-        fallbacks=[CommandHandler("cancelar", visita_cancel)]
+        fallbacks=[CommandHandler("cancelar", visita_cancel)],
+        per_message=True
     )
     application.add_handler(visita_conv_handler)
-    
+
     # Handler para Interação
     interacao_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("interacao", interacao_start)],
@@ -1285,7 +1121,7 @@ async def main():
         fallbacks=[CommandHandler("cancelar", interacao_cancel)]
     )
     application.add_handler(interacao_conv_handler)
-    
+
     # Handler para Lembrete
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
@@ -1296,8 +1132,30 @@ async def main():
         fallbacks=[CommandHandler("cancelar", lembrete_cancel)]
     )
     application.add_handler(lembrete_conv_handler)
-    
-    # Handler para Edição de Registros
+
+    # Handler para Relatório
+    relatorio_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("relatorio", relatorio_start)],
+        states={
+            REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
+            REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
+        },
+        fallbacks=[CommandHandler("cancelar", relatorio_cancel)]
+    )
+    application.add_handler(relatorio_conv_handler)
+
+    # Handler para Histórico
+    historico_conv_handler = ConversationHandler(
+        entry_points=[CommandHandler("historico", historico_conv_start)],
+        states={
+            HIST_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_start_received)],
+            HIST_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_end_received)]
+        },
+        fallbacks=[CommandHandler("cancelar", historico_conv_cancel)]
+    )
+    application.add_handler(historico_conv_handler)
+
+    # Handler para Edição
     editar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("editar", editar_start)],
         states={
@@ -1306,11 +1164,12 @@ async def main():
             EDIT_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_field_received)],
             EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
         },
-        fallbacks=[CommandHandler("cancelar", editar_cancel)]
+        fallbacks=[CommandHandler("cancelar", editar_cancel)],
+        per_message=True
     )
     application.add_handler(editar_conv_handler)
-    
-    # Handler para Exclusão de Registros
+
+    # Handler para Exclusão
     excluir_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
         states={
@@ -1318,11 +1177,12 @@ async def main():
             DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
             DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
         },
-        fallbacks=[CommandHandler("cancelar", excluir_cancel)]
+        fallbacks=[CommandHandler("cancelar", excluir_cancel)],
+        per_message=True
     )
     application.add_handler(excluir_conv_handler)
-    
-    # Handler para Filtragem de Registros
+
+    # Handler para Filtragem
     filtrar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("filtrar", filtrar_start)],
         states={
@@ -1330,21 +1190,23 @@ async def main():
             FILTER_FIELD: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_field_received)],
             FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
         },
-        fallbacks=[CommandHandler("cancelar", filtrar_cancel)]
+        fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
+        per_message=True
     )
     application.add_handler(filtrar_conv_handler)
 
-    # Handler para Exportação de Registros
+    # Handler para Exportação
     exportar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("exportar", exportar_start)],
         states={
             EXPORT_CATEGORY: [CallbackQueryHandler(exportar_category_callback, pattern="^export_")]
         },
-        fallbacks=[CommandHandler("cancelar", exportar_cancel)]
+        fallbacks=[CommandHandler("cancelar", exportar_cancel)],
+        per_message=True
     )
     application.add_handler(exportar_conv_handler)
 
-    # Handler para Busca de Potenciais Clientes (Conversacional)
+    # Handler para Busca de Potenciais Clientes
     buscapotenciais_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
         states={
@@ -1355,7 +1217,7 @@ async def main():
     )
     application.add_handler(buscapotenciais_conv_handler)
 
-    # Handler para Criação de Rota (Conversacional)
+    # Handler para Criação de Rota
     criarrota_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("criarrota", criarrota_start)],
         states={
@@ -1366,7 +1228,7 @@ async def main():
     )
     application.add_handler(criarrota_conv_handler)
 
-    # Handler para confirmar Follow-up via Botão Inline
+    # Handler para Confirmar Follow-up
     application.add_handler(CallbackQueryHandler(confirm_followup_callback, pattern=r"^confirm_followup:"))
 
     # Error Handler
@@ -1377,6 +1239,9 @@ async def main():
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
     job_queue.run_daily(evening_summary_callback, time=time(18, 0, tzinfo=TIMEZONE))
+
+    # Handler de Mensagem Default (removido para evitar interferência nos fluxos)
+    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem_default))
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
