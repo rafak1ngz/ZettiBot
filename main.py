@@ -85,7 +85,7 @@ EDIT_CATEGORY, EDIT_RECORD, EDIT_FIELD, EDIT_NEW_VALUE = range(500, 504)
 DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
-BUSCA_CRITERIOS = 900
+BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO = range(900, 903)  # Ajustado para o novo fluxo
 ROTA_REGIAO = 901
 
 # Função para Gerar Gráfico com Matplotlib
@@ -122,9 +122,6 @@ if not GOOGLE_API_KEY:
     logger.error("GOOGLE_API_KEY não definida!")
     exit(1)
 gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
-
-# Novos estados para o fluxo de busca
-BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO = range(900, 903)
 
 # Função ajustada para buscar potenciais clientes
 def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
@@ -963,43 +960,6 @@ async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Exportação cancelada.")
     return ConversationHandler.END
 
-# Fluxo de Busca de Potenciais Clientes
-async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔍 *Busca de Potenciais Clientes*: Informe a região (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
-    return BUSCA_CRITERIOS
-
-async def buscapotenciais_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["busca_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
-    return BUSCA_CRITERIOS + 1
-
-async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        raio = float(update.message.text.strip())
-        if raio <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
-        return BUSCA_CRITERIOS + 1
-    
-    context.user_data["busca_raio"] = raio
-    localizacao = context.user_data["busca_localizacao"]
-    clientes = buscar_potenciais_clientes_google(localizacao, raio)
-    
-    if isinstance(clientes, str):
-        await update.message.reply_text(clientes)
-    else:
-        msg = "*Potenciais clientes encontrados:*\n"
-        for cliente in clientes[:5]:
-            msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
-        context.user_data["clientes_potenciais"] = clientes
-        await update.message.reply_text(msg, parse_mode="Markdown")
-    return ConversationHandler.END
-
-async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Busca de potenciais clientes cancelada.")
-    return ConversationHandler.END
-
 # Fluxo de Criação de Rota
 async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text("🗺️ *Criação de Rota*: Informe a região inicial (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
@@ -1020,7 +980,7 @@ async def criarrota_num_clientes(update: Update, context: ContextTypes.DEFAULT_T
         return ROTA_REGIAO + 1
     
     localizacao = context.user_data["rota_localizacao"]
-    clientes = context.user_data.get("clientes_potenciais", buscar_potenciais_clientes_google(localizacao, 10))
+    clientes = context.user_data.get("clientes_potenciais", buscar_potenciais_clientes_google(localizacao, "empilhadeiras", 10))  # Default para empilhadeiras
     
     if isinstance(clientes, str):
         await update.message.reply_text(clientes)
@@ -1283,9 +1243,6 @@ async def main():
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
     job_queue.run_daily(evening_summary_callback, time=time(18, 0, tzinfo=TIMEZONE))
-
-    # Handler de Mensagem Default (removido para evitar interferência nos fluxos)
-    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, mensagem_default))
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
