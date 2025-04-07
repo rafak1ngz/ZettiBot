@@ -85,7 +85,7 @@ EDIT_CATEGORY, EDIT_RECORD, EDIT_FIELD, EDIT_NEW_VALUE = range(500, 504)
 DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
-BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO = range(900, 903)
+BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO, BUSCA_QUANTIDADE = range(900, 904)
 ROTA_REGIAO, ROTA_TIPO, ROTA_NUM_CLIENTES = range(1000, 1003)
 
 # Função para Gerar Gráfico com Matplotlib
@@ -211,7 +211,10 @@ def buscar_clientes_firebase(chat_id, tipo_cliente):
 
 # Fluxo de Busca de Potenciais Clientes
 async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔍 *Busca de Potenciais Clientes*: Qual tipo de cliente ou produto você quer buscar? (ex.: 'empilhadeiras', 'móveis', 'alimentos'):", parse_mode="Markdown")
+    await update.message.reply_text(
+        "🔍 *Busca de Potenciais Clientes*: Quais segmentos de clientes você quer buscar? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
+        parse_mode="Markdown"
+    )
     return BUSCA_TIPO
 
 async def buscapotenciais_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -234,18 +237,49 @@ async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYP
         return BUSCA_RAIO
     
     context.user_data["busca_raio"] = raio
+    await update.message.reply_text("📋 Quantos clientes deseja ver? (ex.: '5', '10'):")
+    return BUSCA_QUANTIDADE
+
+async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        quantidade = int(update.message.text.strip())
+        if quantidade <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '5'):")
+        return BUSCA_QUANTIDADE
+    
     tipo_cliente = context.user_data["busca_tipo"]
     localizacao = context.user_data["busca_localizacao"]
-    clientes = buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio)
+    raio = context.user_data["busca_raio"]
     
-    if isinstance(clientes, str):
-        await update.message.reply_text(clientes)
-    else:
-        msg = f"*Potenciais clientes encontrados para '{tipo_cliente}':*\n"
-        for cliente in clientes[:5]:
-            msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
-        context.user_data["clientes_potenciais"] = clientes
-        await update.message.reply_text(msg, parse_mode="Markdown")
+    # Divide os segmentos em uma lista
+    segmentos = [seg.strip() for seg in tipo_cliente.split(",")]
+    clientes = []
+    
+    # Busca para cada segmento
+    for segmento in segmentos:
+        keyword = f"{segmento} empilhadeiras"  # Ex.: "logística empilhadeiras"
+        resultado = buscar_potenciais_clientes_google(localizacao, keyword, raio)
+        if isinstance(resultado, list):
+            clientes.extend(resultado)
+    
+    if not clientes:
+        await update.message.reply_text("Nenhum potencial cliente encontrado para os segmentos informados.")
+        return ConversationHandler.END
+    
+    # Remove duplicatas baseadas no nome
+    clientes_unicos = {cliente['nome']: cliente for cliente in clientes}.values()
+    clientes_unicos = list(clientes_unicos)
+    
+    # Exibe a quantidade solicitada ou todos se for menor
+    if quantidade > len(clientes_unicos):
+        quantidade = len(clientes_unicos)
+    msg = f"*Potenciais clientes encontrados para '{tipo_cliente}' (mostrando {quantidade} de {len(clientes_unicos)}):*\n"
+    for cliente in clientes_unicos[:quantidade]:
+        msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
+    context.user_data["clientes_potenciais"] = clientes_unicos
+    await update.message.reply_text(msg, parse_mode="Markdown")
     return ConversationHandler.END
 
 async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
