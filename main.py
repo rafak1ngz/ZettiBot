@@ -1244,7 +1244,6 @@ async def main():
             VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
         },
         fallbacks=[CommandHandler("cancelar", visita_cancel)],
-        per_message=True
     )
     application.add_handler(visita_conv_handler)
 
@@ -1304,7 +1303,6 @@ async def main():
             EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
-        per_message=True
     )
     application.add_handler(editar_conv_handler)
 
@@ -1317,7 +1315,6 @@ async def main():
             DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
         },
         fallbacks=[CommandHandler("cancelar", excluir_cancel)],
-        per_message=True
     )
     application.add_handler(excluir_conv_handler)
 
@@ -1330,7 +1327,6 @@ async def main():
             FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
         },
         fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
-        per_message=True
     )
     application.add_handler(filtrar_conv_handler)
 
@@ -1341,7 +1337,6 @@ async def main():
             EXPORT_CATEGORY: [CallbackQueryHandler(exportar_category_callback, pattern="^export_")]
         },
         fallbacks=[CommandHandler("cancelar", exportar_cancel)],
-        per_message=True
     )
     application.add_handler(exportar_conv_handler)
 
