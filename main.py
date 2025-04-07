@@ -316,27 +316,34 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
         total_distancia = 0
         total_tempo = 0
         
-        for i, perna in enumerate(pernas):
-            if i == 0:
-                ponto = "Origem"
-            elif i <= num_clientes:
-                cliente_idx = ordem[i-1] if i-1 < len(ordem) else i-1
-                ponto = clientes_selecionados[cliente_idx]['nome']
-            else:
-                ponto = "Retorno à Origem"
-            
+        # Adiciona a origem como ponto inicial
+        roteiro += f"1. *Origem* ({localizacao_inicial}): 0.0 km, 0 min\n"
+        
+        # Processa os waypoints na ordem otimizada
+        for i, idx in enumerate(ordem, start=2):
+            perna = pernas[i-1]  # Perna correspondente ao waypoint
+            cliente = clientes_selecionados[idx]
             distancia = perna['distance']['text']
             tempo = perna['duration']['text']
             total_distancia += perna['distance']['value']
             total_tempo += perna['duration']['value']
-            
-            roteiro += f"{i+1}. *{ponto}* ({clientes_selecionados[cliente_idx].get('fonte', 'Desconhecida')}): {distancia}, {tempo}\n"
+            roteiro += f"{i}. *{cliente['nome']}* ({cliente['fonte']}): {distancia}, {tempo}\n"
+        
+        # Adiciona o retorno à origem
+        if len(pernas) > len(ordem):  # Há uma perna extra para o retorno
+            perna_retorno = pernas[-1]
+            distancia = perna_retorno['distance']['text']
+            tempo = perna_retorno['duration']['text']
+            total_distancia += perna_retorno['distance']['value']
+            total_tempo += perna_retorno['duration']['value']
+            roteiro += f"{len(ordem) + 2}. *Retorno à Origem* ({localizacao_inicial}): {distancia}, {tempo}\n"
         
         roteiro += f"\n*Total*: {total_distancia/1000:.1f} km, {total_tempo//60} minutos"
         return roteiro
     except Exception as e:
         logger.error("Erro na criação da rota: %s", e)
-        return "Erro ao criar a rota. Tente novamente."
+        return f"Erro ao criar a rota: {str(e)}. Tente novamente."
+
 
 # Fluxo de Criação de Rota (Ajustado para o padrão do /buscapotenciais)
 async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
