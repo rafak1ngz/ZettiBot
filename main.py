@@ -212,7 +212,7 @@ def buscar_clientes_firebase(chat_id, tipo_cliente):
 # Fluxo de Busca de Potenciais Clientes
 async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "🔍 *Busca de Potenciais Clientes*: Quais segmentos de clientes você quer buscar? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
+        "🔍 *Busca de Potenciais Clientes*: Quais segmentos ou termos você quer buscar? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
         parse_mode="Markdown"
     )
     return BUSCA_TIPO
@@ -253,19 +253,18 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
     localizacao = context.user_data["busca_localizacao"]
     raio = context.user_data["busca_raio"]
     
-    # Divide os segmentos em uma lista
-    segmentos = [seg.strip() for seg in tipo_cliente.split(",")]
+    # Divide os termos em uma lista
+    termos = [termo.strip() for termo in tipo_cliente.split(",")]
     clientes = []
     
-    # Busca para cada segmento
-    for segmento in segmentos:
-        keyword = f"{segmento} empilhadeiras"  # Ex.: "logística empilhadeiras"
-        resultado = buscar_potenciais_clientes_google(localizacao, keyword, raio)
+    # Busca para cada termo fornecido pelo usuário
+    for termo in termos:
+        resultado = buscar_potenciais_clientes_google(localizacao, termo, raio)
         if isinstance(resultado, list):
             clientes.extend(resultado)
     
     if not clientes:
-        await update.message.reply_text("Nenhum potencial cliente encontrado para os segmentos informados.")
+        await update.message.reply_text("Nenhum potencial cliente encontrado para os termos informados.")
         return ConversationHandler.END
     
     # Remove duplicatas baseadas no nome
