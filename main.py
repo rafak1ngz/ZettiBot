@@ -76,7 +76,7 @@ from telegram.ext import (
 
 # Estados para os fluxos
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
-VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 9)
+VISIT_COMPANY, VISIT_DATE, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 8)
 INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 REPORT_START, REPORT_END = range(300, 302)
@@ -93,11 +93,11 @@ def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_
     categorias = ['Follow-ups', 'Confirmados', 'Pendentes', 'Visitas', 'Interações']
     valores = [total_followups, confirmados, pendentes, total_visitas, total_interacoes]
     plt.figure(figsize=(8, 4))
-    barras = plt.bar(categorias, valores, color=['blue', 'green', 'orange', 'purple', 'red'])
-    plt.title(f"Relatório {periodo_info}")
+    barras = plt.bar(categorias, valores, color=['#2F80ED', '#6FCF97', '#F4F6F8', '#2F80ED', '#6FCF97'])  # Paleta da marca
+    plt.title(f"Relatório {periodo_info}", fontfamily="Montserrat")
     for barra in barras:
         yval = barra.get_height()
-        plt.text(barra.get_x() + barra.get_width() / 2, yval + 0.1, yval, ha='center', va='bottom')
+        plt.text(barra.get_x() + barra.get_width() / 2, yval + 0.1, yval, ha='center', va='bottom', fontfamily="Roboto Mono")
     tmp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
     plt.savefig(tmp_file.name, dpi=150)
     plt.close()
@@ -169,7 +169,6 @@ def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
 def buscar_clientes_firebase(chat_id, localizacao, tipo_cliente):
     clientes = []
     try:
-        # Busca em followups
         followups = db.collection("users").document(chat_id).collection("followups").stream()
         for doc in followups:
             data = doc.to_dict()
@@ -187,7 +186,6 @@ def buscar_clientes_firebase(chat_id, localizacao, tipo_cliente):
                         'fonte': 'Firebase (Follow-up)'
                     })
 
-        # Busca em visitas
         visitas = db.collection("users").document(chat_id).collection("visitas").stream()
         for doc in visitas:
             data = doc.to_dict()
@@ -213,19 +211,19 @@ def buscar_clientes_firebase(chat_id, localizacao, tipo_cliente):
 # Fluxo de Busca de Potenciais Clientes
 async def buscapotenciais_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "🔍 *Busca de Potenciais Clientes*: Quais segmentos ou termos você quer buscar? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
+        "🚀 *ZettiBot na área!* Vamos achar novos clientes pra você. Qual segmento ou termo quer buscar? (ex.: 'indústria', 'logística')",
         parse_mode="Markdown"
     )
     return BUSCA_TIPO
 
 async def buscapotenciais_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["busca_tipo"] = update.message.text.strip()
-    await update.message.reply_text("📍 Informe a região (ex.: 'Vale Encantado, Vila Velha - ES'):")
+    await update.message.reply_text("📍 Beleza, agora me diz a região (ex.: 'Vila Velha - ES'):")
     return BUSCA_LOCALIZACAO
 
 async def buscapotenciais_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["busca_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
+    await update.message.reply_text("📏 Qual o raio de busca em km? (ex.: '10')")
     return BUSCA_RAIO
 
 async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -234,11 +232,11 @@ async def buscapotenciais_raio(update: Update, context: ContextTypes.DEFAULT_TYP
         if raio <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
+        await update.message.reply_text("⚠️ Ops, precisa ser um número maior que 0 (ex.: '10'). Tenta de novo:")
         return BUSCA_RAIO
     
     context.user_data["busca_raio"] = raio
-    await update.message.reply_text("📋 Quantos clientes deseja ver? (ex.: '5', '10'):")
+    await update.message.reply_text("📋 Quantos clientes quer ver? (ex.: '5', '10')")
     return BUSCA_QUANTIDADE
 
 async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -247,7 +245,7 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
         if quantidade <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '5'):")
+        await update.message.reply_text("⚠️ Tem que ser um número maior que 0 (ex.: '5'). Tenta novamente:")
         return BUSCA_QUANTIDADE
     
     tipo_cliente = context.user_data["busca_tipo"]
@@ -263,7 +261,7 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
             clientes.extend(resultado)
     
     if not clientes:
-        await update.message.reply_text("Nenhum potencial cliente encontrado para os termos informados.")
+        await update.message.reply_text("🤔 Nenhum cliente encontrado pra esse termo. Quer tentar outro?")
         return ConversationHandler.END
     
     clientes_unicos = {cliente['nome']: cliente for cliente in clientes}.values()
@@ -271,7 +269,7 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
     
     if quantidade > len(clientes_unicos):
         quantidade = len(clientes_unicos)
-    msg = f"*Potenciais clientes encontrados para '{tipo_cliente}' (mostrando {quantidade} de {len(clientes_unicos)}):*\n"
+    msg = f"✅ *Aqui estão {quantidade} potenciais clientes pra '{tipo_cliente}':*\n"
     for cliente in clientes_unicos[:quantidade]:
         msg += f"- *{cliente['nome']}* ({cliente['fonte']})\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
     context.user_data["clientes_potenciais"] = clientes_unicos
@@ -279,7 +277,7 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
     return ConversationHandler.END
 
 async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Busca de potenciais clientes cancelada.")
+    await update.message.reply_text("🔍 Busca cancelada. Qualquer coisa, é só chamar!")
     return ConversationHandler.END
 
 # Função para Criar Rota com Google Directions API
@@ -315,10 +313,8 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
         total_distancia = 0
         total_tempo = 0
         
-        # Adiciona a origem como ponto inicial
         roteiro += f"1. *Origem* ({localizacao_inicial}): 0.0 km, 0 min\n"
         
-        # Processa os waypoints na ordem otimizada
         for i, idx in enumerate(ordem, start=2):
             perna = pernas[i-1]
             cliente = clientes_selecionados[idx]
@@ -328,7 +324,6 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
             total_tempo += perna['duration']['value']
             roteiro += f"{i}. *{cliente['nome']}* ({cliente['fonte']}): {distancia}, {tempo}\n"
         
-        # Adiciona o retorno à origem
         if len(pernas) > len(ordem):
             perna_retorno = pernas[-1]
             distancia = perna_retorno['distance']['text']
@@ -346,19 +341,19 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
 # Fluxo de Criação de Rota
 async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     await update.message.reply_text(
-        "🗺️ *Criar Rota*: Quais segmentos ou termos você quer buscar para a rota? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
+        "🗺️ *ZettiBot ao seu lado!* Vamos criar uma rota pra suas visitas. Qual segmento quer incluir? (ex.: 'indústria')",
         parse_mode="Markdown"
     )
     return ROTA_TIPO
 
 async def criarrota_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["rota_tipo"] = update.message.text.strip()
-    await update.message.reply_text("📍 Informe a região base para a rota (ex.: 'Vale Encantado, Vila Velha - ES'):")
+    await update.message.reply_text("📍 Perfeito, qual a região base? (ex.: 'Vila Velha - ES')")
     return ROTA_LOCALIZACAO
 
 async def criarrota_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["rota_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
+    await update.message.reply_text("📏 Qual o raio de busca em km? (ex.: '10')")
     return ROTA_RAIO
 
 async def criarrota_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -367,11 +362,11 @@ async def criarrota_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if raio <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
+        await update.message.reply_text("⚠️ Precisa ser um número maior que 0 (ex.: '10'). Tenta de novo:")
         return ROTA_RAIO
     
     context.user_data["rota_raio"] = raio
-    await update.message.reply_text("📋 Quantos clientes deseja incluir na rota? (ex.: '5', '10'):")
+    await update.message.reply_text("📋 Quantos clientes na rota? (ex.: '5')")
     return ROTA_QUANTIDADE
 
 async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -380,7 +375,7 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
         if quantidade <= 0:
             raise ValueError
     except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '5'):")
+        await update.message.reply_text("⚠️ Número maior que 0, por favor (ex.: '5'). Tenta novamente:")
         return ROTA_QUANTIDADE
     
     tipo_cliente = context.user_data["rota_tipo"]
@@ -404,7 +399,7 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
     todos_clientes = clientes_firebase + clientes_google
     
     if not todos_clientes:
-        await update.message.reply_text("Nenhum cliente encontrado (nem no Firebase, nem no Google Maps) para criar a rota.")
+        await update.message.reply_text("🤔 Nenhum cliente encontrado pra essa rota. Quer ajustar os dados?")
         return ConversationHandler.END
     
     clientes_unicos = {cliente['nome']: cliente for cliente in todos_clientes}.values()
@@ -414,7 +409,7 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
         quantidade = len(clientes_unicos)
     clientes_selecionados = clientes_unicos[:quantidade]
     
-    msg = f"*Rota criada para '{tipo_cliente}' (incluindo {quantidade} clientes):*\n"
+    msg = f"✅ *Rota pronta pra '{tipo_cliente}' ({quantidade} clientes):*\n"
     for i, cliente in enumerate(clientes_selecionados, 1):
         msg += f"{i}. *{cliente['nome']}* ({cliente['fonte']})\n   Endereço: {cliente['endereco']}\n   Telefone: {cliente['telefone']}\n"
     
@@ -427,63 +422,54 @@ async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYP
     return ConversationHandler.END
 
 async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Criação de rota cancelada.")
+    await update.message.reply_text("🗺️ Rota cancelada. Quando precisar, é só me chamar!")
     return ConversationHandler.END
 
 # Comando /inicio
 async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = (
-        "Olá! Seja bem-vindo ao ZettiBot.\n"
-        "Para saber mais sobre as funções disponíveis, envie /ajuda.\n"
-        "Comandos úteis:\n"
-        "• /followup – Registrar um follow-up\n"
+        "🧠 *Olá, eu sou o ZettiBot!* Seu parceiro inteligente de campo: visitas, vendas, follow-ups e resultados no seu ritmo.\n\n"
+        "Pronto pra organizar sua rotina e turbinar suas vendas? Veja o que posso fazer por você com /ajuda.\n"
+        "Ou já comece com:\n"
         "• /visita – Registrar uma visita\n"
-        "• /interacao – Registrar uma interação\n"
-        "• /lembrete – Agendar um lembrete\n"
-        "• /relatorio – Gerar um relatório resumido\n"
-        "• /historico – Consultar o histórico detalhado\n"
-        "• /editar – Editar um registro\n"
-        "• /excluir – Excluir um registro\n"
-        "• /filtrar – Filtrar registros\n"
-        "• /exportar – Exportar registros em CSV\n"
-        "• /buscapotenciais – Buscar potenciais clientes\n"
-        "• /criarrota – Criar uma rota de visita"
+        "• /followup – Anotar um follow-up\n"
+        "• /buscapotenciais – Encontrar novos clientes\n"
+        "Vamos juntos?"
     )
-    await update.message.reply_text(msg)
+    await update.message.reply_text(msg, parse_mode="Markdown")
     logger.info("Comando /inicio executado.")
 
 # Comando /ajuda
 async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     msg = (
-        "*Ajuda - ZettiBot*\n\n"
-        "Este bot ajuda a gerenciar vendas externas.\n\n"
-        "*Comandos disponíveis:*\n"
-        "• /inicio – Mensagem de boas-vindas\n"
-        "• /ajuda – Esta mensagem\n"
-        "• /followup – Registrar follow-up\n"
-        "• /visita – Registrar visita\n"
-        "• /interacao – Registrar interação\n"
-        "• /lembrete – Agendar lembrete\n"
-        "• /relatorio – Relatório resumido com gráfico\n"
-        "• /historico – Histórico detalhado\n"
-        "• /editar – Editar registro\n"
-        "• /excluir – Excluir registro\n"
-        "• /filtrar – Filtrar registros\n"
-        "• /exportar – Exportar em CSV\n"
-        "• /buscapotenciais – Buscar potenciais clientes\n"
-        "• /criarrota – Criar rota de visita\n\n"
-        "Use /cancelar para sair de um fluxo."
+        "🧠 *ZettiBot - Seu parceiro de campo*\n\n"
+        "Estou aqui pra simplificar sua vida de vendedor externo. Veja como posso ajudar:\n\n"
+        "• /inicio – Boas-vindas e primeiros passos\n"
+        "• /ajuda – Essa lista aqui\n"
+        "• /followup – Registrar um follow-up\n"
+        "• /visita – Anotar uma visita\n"
+        "• /interacao – Guardar uma interação\n"
+        "• /lembrete – Agendar um aviso\n"
+        "• /relatorio – Ver seu desempenho\n"
+        "• /historico – Consultar tudo detalhado\n"
+        "• /editar – Ajustar um registro\n"
+        "• /excluir – Remover algo\n"
+        "• /filtrar – Buscar registros específicos\n"
+        "• /exportar – Baixar dados em CSV\n"
+        "• /buscapotenciais – Encontrar novos clientes\n"
+        "• /criarrota – Planejar suas visitas\n\n"
+        "Se precisar sair de um comando, é só dizer /cancelar. Vamos vender mais juntos?"
     )
     await update.message.reply_text(msg, parse_mode="Markdown")
 
 # Fluxo de Follow-up
 async def followup_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🤝 *Follow-up*: Qual o nome do cliente?", parse_mode="Markdown")
+    await update.message.reply_text("🤝 *ZettiBot na ativa!* Qual o cliente do follow-up?")
     return FOLLOWUP_CLIENT
 
 async def followup_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["client"] = update.message.text.strip()
-    await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):")
+    await update.message.reply_text("📅 Quando é o follow-up? (DD/MM/AAAA)")
     return FOLLOWUP_DATE
 
 async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -491,10 +477,10 @@ async def followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA.")
+        await update.message.reply_text("⚠️ Formato errado! Use DD/MM/AAAA. Tenta de novo:")
         return FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
-    await update.message.reply_text("📝 Descreva a ação do follow-up:")
+    await update.message.reply_text("📝 O que você precisa fazer nesse follow-up?")
     return FOLLOWUP_DESCRIPTION
 
 async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -510,23 +496,23 @@ async def followup_description(update: Update, context: ContextTypes.DEFAULT_TYP
               "chat_id": chat_id,
               "criado_em": datetime.now().isoformat()
           })
-        await update.message.reply_text("Follow-up registrado com sucesso! ✅")
+        await update.message.reply_text("✅ *Follow-up guardado!* Pode mandar mais quando quiser.")
     except Exception as e:
-        await update.message.reply_text("Erro ao registrar follow-up: " + str(e))
+        await update.message.reply_text(f"⚠️ Ops, algo deu errado: {str(e)}. Vamos tentar de novo?")
     return ConversationHandler.END
 
 async def followup_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Follow-up cancelado. ❌")
+    await update.message.reply_text("🤝 Follow-up cancelado. Qualquer coisa, é só chamar!")
     return ConversationHandler.END
 
 # Fluxo de Visita
 async def visita_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🏢 *Visita*: Qual a empresa visitada?", parse_mode="Markdown")
+    await update.message.reply_text("🏢 *ZettiBot pronto pra registrar!* Qual empresa você visitou?")
     return VISIT_COMPANY
 
 async def visita_company(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["company"] = update.message.text.strip()
-    await update.message.reply_text("📅 Informe a data da visita (formato DD/MM/AAAA):")
+    await update.message.reply_text("📅 Qual foi o dia da visita? (DD/MM/AAAA)")
     return VISIT_DATE
 
 async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -534,7 +520,7 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
     try:
         data_visita = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA.")
+        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Tenta novamente:")
         return VISIT_DATE
     context.user_data["visit_date"] = data_visita.isoformat()
     options = [
@@ -550,21 +536,21 @@ async def visita_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int
         [InlineKeyboardButton("Sem Interesse", callback_data="visit_category:Sem Interesse")]
     ]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("📋 Selecione a categoria do cliente:", reply_markup=reply_markup)
-    return VISIT_MOTIVE  # Pula VISIT_CATEGORY, pois o callback será tratado fora
+    await update.message.reply_text("📋 Como esse cliente se encaixa?", reply_markup=reply_markup)
+    return VISIT_MOTIVE
 
 async def visita_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     category = query.data.split(":", 1)[1]
     context.user_data["category"] = category
-    await query.edit_message_text(text=f"✔️ Categoria: *{category}*\nInforme o motivo da visita:", parse_mode="Markdown")
+    await query.edit_message_text(text=f"✔️ *{category} selecionado!* Agora, qual foi o motivo da visita?", parse_mode="Markdown")
 
 async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["motive"] = update.message.text.strip()
     reply_keyboard = [["Sim", "Não"]]
     await update.message.reply_text(
-        "Deseja agendar follow-up para a visita? (Sim/Não)",
+        "📅 Quer agendar um follow-up pra essa visita? (Sim/Não)",
         reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
     )
     return VISIT_FOLLOWUP_CHOICE
@@ -572,7 +558,7 @@ async def visita_motive(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
 async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("📅 Beleza, quando é o follow-up? (DD/MM/AAAA)", reply_markup=ReplyKeyboardRemove())
         return VISIT_FOLLOWUP_DATE
     else:
         try:
@@ -585,9 +571,9 @@ async def visita_followup_choice(update: Update, context: ContextTypes.DEFAULT_T
                 "followup": "Não agendado",
                 "criado_em": datetime.now().isoformat()
             })
-            await update.message.reply_text("Visita registrada com sucesso!", reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text("✅ *Visita registrada!* Mais alguma coisa pra organizar?", reply_markup=ReplyKeyboardRemove())
         except Exception as e:
-            await update.message.reply_text("Erro ao registrar visita: " + str(e), reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text(f"⚠️ Algo deu errado: {str(e)}. Vamos tentar novamente?", reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
 
 async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -595,7 +581,7 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
     try:
         data_followup = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA.")
+        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Tenta de novo:")
         return VISIT_FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
     chat_id = str(update.message.chat.id)
@@ -616,36 +602,36 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
             "chat_id": chat_id,
             "criado_em": datetime.now().isoformat()
         })
-        await update.message.reply_text("Visita e follow-up registrados com sucesso! ✅")
+        await update.message.reply_text("✅ *Visita e follow-up no bolso!* Vamos continuar vendendo?")
     except Exception as e:
-        await update.message.reply_text("Erro ao registrar visita com follow-up: " + str(e))
+        await update.message.reply_text(f"⚠️ Erro ao salvar: {str(e)}. Tenta novamente?")
     return ConversationHandler.END
 
 async def visita_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Visita cancelada.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("🏢 Visita cancelada. Estou aqui pra próxima!")
     return ConversationHandler.END
 
 # Fluxo de Interação
 async def interacao_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("💬 *Interação*: Informe o nome do cliente ou empresa com quem interagiu:", parse_mode="Markdown")
+    await update.message.reply_text("💬 *ZettiBot em ação!* Com quem você interagiu?")
     return INTER_CLIENT
 
 async def interacao_client(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["client_interacao"] = update.message.text.strip()
-    await update.message.reply_text("📝 Digite um resumo da interação:")
+    await update.message.reply_text("📝 Resuma rapidinho essa interação:")
     return INTER_SUMMARY
 
 async def interacao_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["resumo_interacao"] = update.message.text.strip()
     reply_keyboard = [["Sim", "Não"]]
-    await update.message.reply_text("Deseja agendar follow-up para essa interação? (Sim/Não)",
+    await update.message.reply_text("📅 Quer um follow-up pra essa interação? (Sim/Não)",
                                     reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True))
     return INTER_FOLLOWUP_CHOICE
 
 async def interacao_followup_choice(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     choice = update.message.text.strip().lower()
     if choice == "sim":
-        await update.message.reply_text("📅 Informe a data do follow-up (formato DD/MM/AAAA):", reply_markup=ReplyKeyboardRemove())
+        await update.message.reply_text("📅 Quando é o follow-up? (DD/MM/AAAA)", reply_markup=ReplyKeyboardRemove())
         return INTER_FOLLOWUP_DATE
     else:
         context.user_data["followup_interacao"] = None
@@ -657,9 +643,9 @@ async def interacao_followup_choice(update: Update, context: ContextTypes.DEFAUL
                 "followup": None,
                 "criado_em": datetime.now().isoformat()
             })
-            await update.message.reply_text("Interação registrada com sucesso!", reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text("✅ *Interação registrada!* O que mais posso fazer por você?", reply_markup=ReplyKeyboardRemove())
         except Exception as e:
-            await update.message.reply_text("Erro ao registrar interação: " + str(e), reply_markup=ReplyKeyboardRemove())
+            await update.message.reply_text(f"⚠️ Deu erro: {str(e)}. Vamos tentar de novo?", reply_markup=ReplyKeyboardRemove())
         return ConversationHandler.END
 
 async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -667,7 +653,7 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
     try:
         data_follow = datetime.strptime(data_str, "%d/%m/%Y").date()
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA.")
+        await update.message.reply_text("⚠️ Formato errado! Use DD/MM/AAAA. Tenta novamente:")
         return INTER_FOLLOWUP_DATE
     context.user_data["followup_interacao"] = data_follow.isoformat()
     try:
@@ -678,23 +664,23 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
             "followup": context.user_data["followup_interacao"],
             "criado_em": datetime.now().isoformat()
         })
-        await update.message.reply_text("Interação registrada com sucesso!")
+        await update.message.reply_text("✅ *Interação e follow-up salvos!* Vamos manter o ritmo?")
     except Exception as e:
-        await update.message.reply_text("Erro ao registrar interação: " + str(e))
+        await update.message.reply_text(f"⚠️ Algo deu errado: {str(e)}. Tenta de novo?")
     return ConversationHandler.END
 
 async def interacao_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Interação cancelada.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("💬 Interação cancelada. Estou pronto pra próxima!")
     return ConversationHandler.END
 
 # Fluxo de Lembrete
 async def lembrete_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🔔 *Lembrete*: Informe o texto do lembrete:", parse_mode="Markdown")
+    await update.message.reply_text("🔔 *ZettiBot te lembra!* O que você quer anotar?")
     return REMINDER_TEXT
 
 async def lembrete_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     context.user_data["lembrete_text"] = update.message.text.strip()
-    await update.message.reply_text("⏳ Agora, informe a data e horário para o lembrete (formato DD/MM/AAAA HH:MM):")
+    await update.message.reply_text("⏳ Quando te aviso? (DD/MM/AAAA HH:MM)")
     return REMINDER_DATETIME
 
 async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -702,21 +688,21 @@ async def lembrete_datetime(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     try:
         target_datetime = datetime.strptime(input_str, "%d/%m/%Y %H:%M").replace(tzinfo=TIMEZONE)
     except ValueError:
-        await update.message.reply_text("⚠️ Formato inválido! Utilize DD/MM/AAAA HH:MM")
+        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA HH:MM. Tenta de novo:")
         return REMINDER_DATETIME
     now = datetime.now(TIMEZONE)
     delay_seconds = (target_datetime - now).total_seconds()
     if delay_seconds <= 0:
-        await update.message.reply_text("⚠️ A data/hora informada já passou. Informe um horário futuro:")
+        await update.message.reply_text("⚠️ Esse horário já passou! Me dá uma data futura:")
         return REMINDER_DATETIME
     chat_id = str(update.message.chat.id)
     lembrete_text_value = context.user_data["lembrete_text"]
     context.job_queue.run_once(lembrete_callback, delay_seconds, data={"chat_id": chat_id, "lembrete_text": lembrete_text_value})
-    await update.message.reply_text(f"✅ Lembrete agendado para {target_datetime.strftime('%d/%m/%Y %H:%M')}!", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text(f"✅ *Lembrete agendado pra {target_datetime.strftime('%d/%m/%Y %H:%M')}!* Pode contar comigo.", reply_markup=ReplyKeyboardRemove())
     return ConversationHandler.END
 
 async def lembrete_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Agendamento de lembrete cancelado.", reply_markup=ReplyKeyboardRemove())
+    await update.message.reply_text("🔔 Lembrete cancelado. Qualquer coisa, é só me chamar!")
     return ConversationHandler.END
 
 async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -724,13 +710,13 @@ async def lembrete_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         job_data = context.job.data
         chat_id = job_data["chat_id"]
         lembrete_text_value = job_data["lembrete_text"]
-        await context.bot.send_message(chat_id=chat_id, text=f"🔔 *Lembrete*: {lembrete_text_value}", parse_mode="Markdown")
+        await context.bot.send_message(chat_id=chat_id, text=f"🔔 *ZettiBot te avisa:* {lembrete_text_value}", parse_mode="Markdown")
     except Exception as e:
         logger.error("Erro no lembrete_callback: %s", e)
 
 # Fluxo de Relatório
 async def relatorio_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("📊 *Relatório*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
+    await update.message.reply_text("📊 *ZettiBot analisa pra você!* Qual o início do período? (DD/MM/AAAA)")
     return REPORT_START
 
 async def relatorio_start_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -739,10 +725,10 @@ async def relatorio_start_received(update: Update, context: ContextTypes.DEFAULT
         start_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
         context.user_data["report_start"] = date_str
         context.user_data["report_start_dt"] = start_date_dt
-    except Exception as e:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Informe novamente a data de início:")
+    except Exception:
+        await update.message.reply_text("⚠️ Formato errado! Use DD/MM/AAAA. Tenta novamente:")
         return REPORT_START
-    await update.message.reply_text("Agora, informe a data de fim (formato DD/MM/AAAA):", parse_mode="Markdown")
+    await update.message.reply_text("📅 E o fim do período? (DD/MM/AAAA)")
     return REPORT_END
 
 async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -751,8 +737,8 @@ async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_T
         end_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
         context.user_data["report_end"] = date_str
         context.user_data["report_end_dt"] = end_date_dt
-    except Exception as e:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Informe novamente a data de fim:")
+    except Exception:
+        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Tenta de novo:")
         return REPORT_END
     chat_id = str(update.message.chat.id)
     followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
@@ -785,25 +771,26 @@ async def relatorio_end_received(update: Update, context: ContextTypes.DEFAULT_T
     pendentes = total_followups - confirmados
     periodo_info = f"de {context.user_data['report_start']} até {context.user_data['report_end']}"
     texto_relatorio = (
-        f"📊 *Relatório ({periodo_info})*\n\n"
+        f"📊 *Seu desempenho no campo ({periodo_info}):*\n\n"
         f"Follow-ups:\n - Total: {total_followups}\n - Confirmados: {confirmados}\n - Pendentes: {pendentes}\n\n"
         f"Visitas: {total_visitas}\n"
-        f"Interações: {total_interacoes}"
+        f"Interações: {total_interacoes}\n\n"
+        "Quer melhorar esses números? Vamos planejar juntos!"
     )
     await update.message.reply_text(texto_relatorio, parse_mode="Markdown")
     grafico_path = gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info)
     with open(grafico_path, "rb") as photo:
-        await update.message.reply_photo(photo=photo, caption="Gráfico do relatório")
+        await update.message.reply_photo(photo=photo, caption="📈 Veja seu progresso em gráfico!")
     os.remove(grafico_path)
     return ConversationHandler.END
 
 async def relatorio_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Relatório cancelado.")
+    await update.message.reply_text("📊 Relatório cancelado. Quando precisar, é só chamar!")
     return ConversationHandler.END
 
 # Fluxo de Histórico
 async def historico_conv_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("📜 *Histórico Detalhado*: Informe a data de início (formato DD/MM/AAAA):", parse_mode="Markdown")
+    await update.message.reply_text("📜 *ZettiBot organiza tudo!* Qual o início do período? (DD/MM/AAAA)")
     return HIST_START
 
 async def historico_conv_start_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -812,10 +799,10 @@ async def historico_conv_start_received(update: Update, context: ContextTypes.DE
         start_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
         context.user_data["historico_start"] = date_str
         context.user_data["historico_start_dt"] = start_date_dt
-    except Exception as e:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Informe novamente a data de início:")
+    except Exception:
+        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Tenta de novo:")
         return HIST_START
-    await update.message.reply_text("Agora, informe a data de fim (formato DD/MM/AAAA):", parse_mode="Markdown")
+    await update.message.reply_text("📅 E o fim do período? (DD/MM/AAAA)")
     return HIST_END
 
 async def historico_conv_end_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -824,8 +811,8 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
         end_date_dt = datetime.strptime(date_str, "%d/%m/%Y")
         context.user_data["historico_end"] = date_str
         context.user_data["historico_end_dt"] = end_date_dt
-    except Exception as e:
-        await update.message.reply_text("⚠️ Formato inválido! Use DD/MM/AAAA. Informe novamente a data de fim:")
+    except Exception:
+        await update.message.reply_text("⚠️ Formato errado! Use DD/MM/AAAA. Tenta novamente:")
         return HIST_END
     chat_id = str(update.message.chat.id)
     followups_docs = list(db.collection("users").document(chat_id).collection("followups").stream())
@@ -837,7 +824,7 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
         except Exception:
             return False
         return context.user_data["historico_start_dt"] <= doc_date <= context.user_data["historico_end_dt"]
-    mensagem = "*📜 Histórico Detalhado*\n\n"
+    mensagem = "*📜 Seu histórico no campo*\n\n"
     if followups_docs:
         mensagem += "📋 *Follow-ups*\n"
         for doc in followups_docs:
@@ -845,7 +832,7 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
             if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
                 mensagem += f" - ID: {doc.id} - {data}\n"
     else:
-        mensagem += "📋 *Follow-ups*: Nenhum registro encontrado.\n\n"
+        mensagem += "📋 *Follow-ups*: Nada por aqui ainda.\n\n"
     if visitas_docs:
         mensagem += "🏢 *Visitas*\n"
         for doc in visitas_docs:
@@ -853,7 +840,7 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
             if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
                 mensagem += f" - ID: {doc.id} - {data}\n"
     else:
-        mensagem += "🏢 *Visitas*: Nenhum registro encontrado.\n\n"
+        mensagem += "🏢 *Visitas*: Nenhuma registrada.\n\n"
     if interacoes_docs:
         mensagem += "💬 *Interações*\n"
         for doc in interacoes_docs:
@@ -861,14 +848,14 @@ async def historico_conv_end_received(update: Update, context: ContextTypes.DEFA
             if data.get("criado_em", "") and in_interval(data.get("criado_em", "")):
                 mensagem += f" - ID: {doc.id} - {data}\n"
     else:
-        mensagem += "💬 *Interações*: Nenhum registro encontrado.\n\n"
-    if mensagem.strip() == "*📜 Histórico Detalhado*\n\n":
-        mensagem = "⚠️ Nenhum registro encontrado no intervalo fornecido."
+        mensagem += "💬 *Interações*: Ainda sem registros.\n\n"
+    if mensagem.strip() == "*📜 Seu histórico no campo*\n\n":
+        mensagem = "🤔 Nenhum registro nesse período. Vamos criar alguns?"
     await update.message.reply_text(mensagem, parse_mode="Markdown")
     return ConversationHandler.END
 
 async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Histórico cancelado.")
+    await update.message.reply_text("📜 Histórico cancelado. Estou aqui pra próxima!")
     return ConversationHandler.END
 
 # Fluxo de Edição
@@ -876,11 +863,11 @@ async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     options = [[
         InlineKeyboardButton("Followup", callback_data="edit_category:followup"),
         InlineKeyboardButton("Visita", callback_data="edit_category:visita"),
-        InlineKeyboardButton("Interacao", callback_data="edit_category:interacao")
+        InlineKeyboardButton("Interação", callback_data="edit_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("❓ *Edição*: Escolha a categoria para editar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return EDIT_RECORD  # Pula EDIT_CATEGORY, pois o callback será tratado fora
+    await update.message.reply_text("✏️ *ZettiBot ajusta pra você!* O que quer editar?", reply_markup=reply_markup)
+    return EDIT_RECORD
 
 async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -896,24 +883,24 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não foram encontrados registros para {category}.")
+        await query.edit_message_text(f"🤔 Nenhum {category} encontrado. Quer registrar um?")
         return
-    msg = f"*Registros de {category}:*\n"
+    msg = f"*Seus {category}s:*\n"
     for doc in docs:
         msg += f"ID: {doc.id} - {doc.to_dict()}\n"
     await query.edit_message_text(msg, parse_mode="Markdown")
-    await query.message.reply_text("Digite o ID do registro que deseja editar:")
+    await query.message.reply_text("🔍 Qual o ID do registro pra editar?")
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
     context.user_data["edit_record_id"] = record_id
-    await update.message.reply_text("Qual campo deseja editar? (Ex.: followup: cliente, data_follow, descricao, status; visita: empresa, data_visita, classificacao, motivo, followup; interacao: cliente, resumo, followup)")
+    await update.message.reply_text("✏️ Qual campo quer mudar? (ex.: followup: cliente, data_follow; visita: empresa, motivo)")
     return EDIT_FIELD
 
 async def editar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = update.message.text.strip()
     context.user_data["edit_field"] = field
-    await update.message.reply_text(f"Digite o novo valor para o campo '{field}':")
+    await update.message.reply_text(f"✅ Campo '{field}' escolhido. Qual o novo valor?")
     return EDIT_NEW_VALUE
 
 async def editar_new_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -930,13 +917,13 @@ async def editar_new_value_received(update: Update, context: ContextTypes.DEFAUL
         col = db.collection("users").document(chat_id).collection("interacoes")
     try:
         col.document(record_id).update({field: new_value})
-        await update.message.reply_text("Registro atualizado com sucesso!")
+        await update.message.reply_text("✅ *Registro atualizado!* Tudo em ordem agora?")
     except Exception as e:
-        await update.message.reply_text("Erro ao atualizar registro: " + str(e))
+        await update.message.reply_text(f"⚠️ Deu erro: {str(e)}. Vamos tentar de novo?")
     return ConversationHandler.END
 
 async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Edição cancelada.")
+    await update.message.reply_text("✏️ Edição cancelada. Estou aqui pra próxima!")
     return ConversationHandler.END
 
 # Fluxo de Exclusão
@@ -944,11 +931,11 @@ async def excluir_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     options = [[
         InlineKeyboardButton("Followup", callback_data="delete_category:followup"),
         InlineKeyboardButton("Visita", callback_data="delete_category:visita"),
-        InlineKeyboardButton("Interacao", callback_data="delete_category:interacao")
+        InlineKeyboardButton("Interação", callback_data="delete_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("❓ *Exclusão*: Escolha a categoria para excluir:", reply_markup=reply_markup, parse_mode="Markdown")
-    return DELETE_RECORD  # Pula DELETE_CATEGORY, pois o callback será tratado fora
+    await update.message.reply_text("🗑️ *ZettiBot limpa pra você!* O que quer excluir?", reply_markup=reply_markup)
+    return DELETE_RECORD
 
 async def excluir_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -964,24 +951,24 @@ async def excluir_category_callback(update: Update, context: ContextTypes.DEFAUL
         col = db.collection("users").document(chat_id).collection("interacoes")
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não foram encontrados registros para {category}.")
+        await query.edit_message_text(f"🤔 Nenhum {category} pra excluir. Quer registrar algo?")
         return
-    msg = f"*Registros de {category}:*\n"
+    msg = f"*Seus {category}s:*\n"
     for doc in docs:
         msg += f"ID: {doc.id} - {doc.to_dict()}\n"
     await query.edit_message_text(msg, parse_mode="Markdown")
-    await query.message.reply_text("Digite o ID do registro que deseja excluir:")
+    await query.message.reply_text("🔍 Qual o ID do registro pra apagar?")
 
 async def excluir_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     record_id = update.message.text.strip()
     context.user_data["delete_record_id"] = record_id
-    await update.message.reply_text("Tem certeza que deseja excluir esse registro? (sim/nao)")
+    await update.message.reply_text("🗑️ Tem certeza? (sim/nao)")
     return DELETE_CONFIRMATION
 
 async def excluir_confirmation_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     response = update.message.text.strip().lower()
     if response != "sim":
-        await update.message.reply_text("Exclusão cancelada.")
+        await update.message.reply_text("✅ Cancelado. Nada foi excluído!")
         return ConversationHandler.END
     cat = context.user_data["delete_category"]
     record_id = context.user_data["delete_record_id"]
@@ -994,13 +981,13 @@ async def excluir_confirmation_received(update: Update, context: ContextTypes.DE
         col = db.collection("users").document(chat_id).collection("interacoes")
     try:
         col.document(record_id).delete()
-        await update.message.reply_text("Registro excluído com sucesso!")
+        await update.message.reply_text("✅ *Registro apagado!* O que mais precisa?")
     except Exception as e:
-        await update.message.reply_text("Erro ao excluir registro: " + str(e))
+        await update.message.reply_text(f"⚠️ Erro ao excluir: {str(e)}. Tenta de novo?")
     return ConversationHandler.END
 
 async def excluir_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Exclusão cancelada.")
+    await update.message.reply_text("🗑️ Exclusão cancelada. Estou aqui pra ajudar!")
     return ConversationHandler.END
 
 # Fluxo de Filtragem
@@ -1008,23 +995,23 @@ async def filtrar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> i
     options = [[
         InlineKeyboardButton("Followup", callback_data="filter_category:followup"),
         InlineKeyboardButton("Visita", callback_data="filter_category:visita"),
-        InlineKeyboardButton("Interacao", callback_data="filter_category:interacao")
+        InlineKeyboardButton("Interação", callback_data="filter_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("🔍 *Filtragem*: Escolha a categoria para filtrar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return FILTER_FIELD  # Pula FILTER_CATEGORY, pois o callback será tratado fora
+    await update.message.reply_text("🔍 *ZettiBot acha pra você!* O que quer filtrar?", reply_markup=reply_markup)
+    return FILTER_FIELD
 
 async def filtrar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     category = query.data.split(":", 1)[1]
     context.user_data["filter_category"] = category
-    await query.edit_message_text("Qual campo deseja utilizar para filtrar? (Ex.: followup: cliente, data_follow, status; visita: empresa, data_visita, classificacao, motivo; interacao: cliente, resumo, followup)")
+    await query.edit_message_text("🔍 Qual campo quer usar pra filtrar? (ex.: followup: cliente, status; visita: empresa, motivo)")
 
 async def filtrar_field_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     field = update.message.text.strip()
     context.user_data["filter_field"] = field
-    await update.message.reply_text(f"Digite o valor para filtrar o campo '{field}':")
+    await update.message.reply_text(f"✅ Campo '{field}' ok. Qual valor tá procurando?")
     return FILTER_VALUE
 
 async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1045,16 +1032,16 @@ async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_T
         if str(data.get(context.user_data["filter_field"], "")).lower() == value.lower():
             matched.append((doc.id, data))
     if not matched:
-        await update.message.reply_text("Nenhum registro encontrado com esse critério.")
+        await update.message.reply_text("🤔 Nada encontrado com esse filtro. Quer tentar outro?")
     else:
-        msg = f"*Registros filtrados em {cat}:*\n"
+        msg = f"✅ *Resultados em {cat}:*\n"
         for rec in matched:
             msg += f"ID: {rec[0]} - {rec[1]}\n"
         await update.message.reply_text(msg, parse_mode="Markdown")
     return ConversationHandler.END
 
 async def filtrar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Filtragem cancelada.")
+    await update.message.reply_text("🔍 Filtragem cancelada. Estou pronto pra próxima!")
     return ConversationHandler.END
 
 # Fluxo de Exportação
@@ -1062,11 +1049,11 @@ async def exportar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     options = [[
         InlineKeyboardButton("Followup", callback_data="export_category:followup"),
         InlineKeyboardButton("Visita", callback_data="export_category:visita"),
-        InlineKeyboardButton("Interacao", callback_data="export_category:interacao")
+        InlineKeyboardButton("Interação", callback_data="export_category:interacao")
     ]]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("🔄 *Exportar*: Escolha a categoria que deseja exportar:", reply_markup=reply_markup, parse_mode="Markdown")
-    return EXPORT_PROCESS  # Pula EXPORT_CATEGORY, pois o callback será tratado fora
+    await update.message.reply_text("📦 *ZettiBot exporta pra você!* O que quer baixar?", reply_markup=reply_markup)
+    return EXPORT_PROCESS
 
 async def exportar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
@@ -1084,16 +1071,16 @@ async def exportar_category_callback(update: Update, context: ContextTypes.DEFAU
         categoria_nome = "interacoes"
     docs = list(col.stream())
     if not docs:
-        await query.edit_message_text(f"Não existem registros na categoria {categoria_nome}.")
+        await query.edit_message_text(f"🤔 Nenhum {categoria_nome} pra exportar. Quer registrar algo?")
         return
     csv_file = exportar_csv(docs)
-    await query.edit_message_text("Gerando arquivo CSV...")
+    await query.edit_message_text("📦 Gerando seu arquivo...")
     with open(csv_file, "rb") as f:
-        await query.message.reply_document(document=f, filename=f"{categoria_nome}.csv", caption="Arquivo exportado")
+        await query.message.reply_document(document=f, filename=f"{categoria_nome}.csv", caption="✅ Aqui está seu CSV!")
     os.remove(csv_file)
 
 async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Exportação cancelada.")
+    await update.message.reply_text("📦 Exportação cancelada. Estou aqui pra ajudar!")
     return ConversationHandler.END
 
 # Jobs Diários
@@ -1109,10 +1096,10 @@ async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             if user_chat_id:
                 followup_id = doc.id
                 message_text = (
-                    f"🔔 *Lembrete de Follow-up:*\n"
+                    f"🔔 *ZettiBot te lembra:*\n"
                     f"Cliente: {data.get('cliente')}\n"
-                    f"Descrição: {data.get('descricao')}\n\n"
-                    "Confirme se o contato foi realizado:"
+                    f"Ação: {data.get('descricao')}\n\n"
+                    "Já fez esse follow-up? Confirma aí:"
                 )
                 keyboard = InlineKeyboardMarkup(
                     [[InlineKeyboardButton("Confirmar", callback_data=f"confirm_followup:{user_chat_id}:{followup_id}")]]
@@ -1141,10 +1128,10 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
             pending_count = len(pending_items[user_chat_id])
             confirmed = confirmed_count.get(user_chat_id, 0)
             summary_text = (
-                f"📝 *Resumo do dia {today}:*\n\n"
+                f"📝 *Resumo do seu dia {today}:*\n\n"
                 f"Follow-ups confirmados: {confirmed}\n"
-                f"Follow-ups pendentes: {pending_count}\n"
-                f"Os pendentes foram reagendados para {tomorrow}."
+                f"Pendentes: {pending_count}\n"
+                f"Os pendentes foram jogados pra {tomorrow}. Vamos fechar amanhã?"
             )
             await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode="Markdown")
             for doc_id, _ in pending_items[user_chat_id]:
@@ -1160,14 +1147,16 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         _, user_chat_id, doc_id = query.data.split(":", 2)
         db.collection("users").document(user_chat_id)\
           .collection("followups").document(doc_id).update({"status": "realizado"})
-        await query.edit_message_text(text="✅ Follow-up confirmado!")
+        await query.edit_message_text(text="✅ *Follow-up confirmado!* Parabéns pelo progresso!")
     except Exception as e:
         logger.error("Erro ao confirmar follow-up: %s", e)
-        await query.edit_message_text(text="Erro ao confirmar follow-up.")
+        await query.edit_message_text(text="⚠️ Erro ao confirmar. Tenta de novo?")
 
 # Error Handler
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
+    if update and hasattr(update, "message"):
+        await update.message.reply_text("⚠️ Ops, algo deu errado. Vamos tentar de novo?")
 
 # Função Principal
 async def main():
@@ -1178,11 +1167,9 @@ async def main():
 
     application = ApplicationBuilder().token(token).build()
 
-    # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
     application.add_handler(CommandHandler("ajuda", ajuda))
 
-    # Handler para Follow-up
     followup_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("followup", followup_start)],
         states={
@@ -1196,7 +1183,6 @@ async def main():
     )
     application.add_handler(followup_conv_handler)
 
-    # Handler para Visita
     visita_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("visita", visita_start)],
         states={
@@ -1213,7 +1199,6 @@ async def main():
     application.add_handler(visita_conv_handler)
     application.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
 
-    # Handler para Interação
     interacao_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("interacao", interacao_start)],
         states={
@@ -1228,7 +1213,6 @@ async def main():
     )
     application.add_handler(interacao_conv_handler)
 
-    # Handler para Lembrete
     lembrete_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("lembrete", lembrete_start)],
         states={
@@ -1241,7 +1225,6 @@ async def main():
     )
     application.add_handler(lembrete_conv_handler)
 
-    # Handler para Relatório
     relatorio_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("relatorio", relatorio_start)],
         states={
@@ -1254,7 +1237,6 @@ async def main():
     )
     application.add_handler(relatorio_conv_handler)
 
-    # Handler para Histórico
     historico_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("historico", historico_conv_start)],
         states={
@@ -1267,7 +1249,6 @@ async def main():
     )
     application.add_handler(historico_conv_handler)
 
-    # Handler para Edição
     editar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("editar", editar_start)],
         states={
@@ -1282,7 +1263,6 @@ async def main():
     application.add_handler(editar_conv_handler)
     application.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
 
-    # Handler para Exclusão
     excluir_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
         states={
@@ -1296,7 +1276,6 @@ async def main():
     application.add_handler(excluir_conv_handler)
     application.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
 
-    # Handler para Filtragem
     filtrar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("filtrar", filtrar_start)],
         states={
@@ -1310,20 +1289,18 @@ async def main():
     application.add_handler(filtrar_conv_handler)
     application.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
 
-    # Handler para Exportação
     exportar_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("exportar", exportar_start)],
         states={
-            EXPORT_PROCESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, exportar_cancel)]  # Estado vazio, pois o callback faz tudo
+            EXPORT_PROCESS: [MessageHandler(filters.TEXT & ~filters.COMMAND, exportar_cancel)]
         },
         fallbacks=[CommandHandler("cancelar", exportar_cancel)],
         per_chat=True,
         per_message=False
     )
     application.add_handler(exportar_conv_handler)
-    application.add_handler(CallbackQueryHandler(exportar_category_callback, pattern="^export_category:"))
+    application.add_handler(CallbackQueryHandler(export Dining_category_callback, pattern="^export_category:"))
 
-    # Handler para Busca de Potenciais Clientes
     buscapotenciais_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
         states={
@@ -1338,7 +1315,6 @@ async def main():
     )
     application.add_handler(buscapotenciais_conv_handler)
 
-    # Handler para Criação de Rota
     criarrota_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("criarrota", criarrota_start)],
         states={
@@ -1353,13 +1329,9 @@ async def main():
     )
     application.add_handler(criarrota_conv_handler)
 
-    # Handler para Confirmar Follow-up
     application.add_handler(CallbackQueryHandler(confirm_followup_callback, pattern=r"^confirm_followup:"))
-
-    # Error Handler
     application.add_error_handler(error_handler)
 
-    # Agendamento dos Jobs Diários
     job_queue = application.job_queue
     job_queue.run_daily(daily_reminder_callback, time=time(8, 30, tzinfo=TIMEZONE))
     job_queue.run_daily(daily_reminder_callback, time=time(13, 0, tzinfo=TIMEZONE))
@@ -1367,11 +1339,14 @@ async def main():
 
     logger.info("Iniciando o bot...")
     await application.bot.delete_webhook(drop_pending_updates=True)
-    await asyncio.sleep(1)
+    await asyncio.sleep(5)
+    logger.info("Webhook limpo, preparando polling...")
     try:
-        await application.run_polling(drop_pending_updates=True)
+        logger.info("Iniciando polling...")
+        await application.run_polling(drop_pending_updates=True, timeout=20)
     except Exception as e:
         logger.error("Erro durante polling: %s", e)
+        raise
 
 if __name__ == '__main__':
     asyncio.run(main())
