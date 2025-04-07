@@ -86,7 +86,7 @@ DELETE_CATEGORY, DELETE_RECORD, DELETE_CONFIRMATION = range(600, 603)
 FILTER_CATEGORY, FILTER_FIELD, FILTER_VALUE = range(700, 703)
 EXPORT_CATEGORY, EXPORT_PROCESS = range(800, 802)
 BUSCA_TIPO, BUSCA_LOCALIZACAO, BUSCA_RAIO, BUSCA_QUANTIDADE = range(900, 904)
-ROTA_REGIAO, ROTA_TIPO, ROTA_NUM_CLIENTES = range(1000, 1003)
+ROTA_TIPO, ROTA_LOCALIZACAO, ROTA_RAIO, ROTA_QUANTIDADE = range(910, 914)  # Ajustado para 4 passos
 
 # Função para Gerar Gráfico com Matplotlib
 def gerar_grafico(total_followups, confirmados, pendentes, total_visitas, total_interacoes, periodo_info):
@@ -153,7 +153,8 @@ def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
                 'nome': nome,
                 'endereco': endereco,
                 'telefone': telefone,
-                'coordenadas': lugar['geometry']['location']
+                'coordenadas': lugar['geometry']['location'],
+                'fonte': 'Google Maps'  # Adicionada fonte
             })
         
         if not resultados:
@@ -165,7 +166,7 @@ def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10):
         return f"Erro ao buscar clientes: {str(e)}. Tente novamente."
 
 # Função para buscar clientes existentes no Firebase
-def buscar_clientes_firebase(chat_id, tipo_cliente):
+def buscar_clientes_firebase(chat_id, localizacao, tipo_cliente):
     clientes = []
     try:
         # Busca em followups
@@ -173,17 +174,18 @@ def buscar_clientes_firebase(chat_id, tipo_cliente):
         for doc in followups:
             data = doc.to_dict()
             nome = data.get("cliente", "Sem nome")
-            if tipo_cliente.lower() in nome.lower():  # Filtra por tipo no nome, se aplicável
-                endereco = f"{nome}, localização desconhecida"  # Follow-ups não têm endereço
+            # Usa o endereço do cliente se disponível, senão tenta geolocalizar pelo nome
+            endereco = data.get("endereco", f"{nome}, {localizacao}")
+            if tipo_cliente.lower() in nome.lower() or tipo_cliente.lower() in endereco.lower():
                 geocode_result = gmaps.geocode(endereco)
                 if geocode_result:
                     coordenadas = geocode_result[0]['geometry']['location']
                     clientes.append({
                         'nome': nome,
                         'endereco': endereco,
-                        'telefone': 'Não disponível',
+                        'telefone': data.get('telefone', 'Não disponível'),
                         'coordenadas': coordenadas,
-                        'origem': 'followup'
+                        'fonte': 'Firebase (Follow-up)'
                     })
 
         # Busca em visitas
@@ -191,17 +193,17 @@ def buscar_clientes_firebase(chat_id, tipo_cliente):
         for doc in visitas:
             data = doc.to_dict()
             nome = data.get("empresa", "Sem nome")
-            if tipo_cliente.lower() in nome.lower():  # Filtra por tipo no nome, se aplicável
-                endereco = f"{nome}, localização desconhecida"  # Visitas não têm endereço
+            endereco = data.get("endereco", f"{nome}, {localizacao}")
+            if tipo_cliente.lower() in nome.lower() or tipo_cliente.lower() in endereco.lower():
                 geocode_result = gmaps.geocode(endereco)
                 if geocode_result:
                     coordenadas = geocode_result[0]['geometry']['location']
                     clientes.append({
                         'nome': nome,
                         'endereco': endereco,
-                        'telefone': 'Não disponível',
+                        'telefone': data.get('telefone', 'Não disponível'),
                         'coordenadas': coordenadas,
-                        'origem': 'visita'
+                        'fonte': 'Firebase (Visita)'
                     })
         
         return clientes
@@ -253,11 +255,9 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
     localizacao = context.user_data["busca_localizacao"]
     raio = context.user_data["busca_raio"]
     
-    # Divide os termos em uma lista
     termos = [termo.strip() for termo in tipo_cliente.split(",")]
     clientes = []
     
-    # Busca para cada termo fornecido pelo usuário
     for termo in termos:
         resultado = buscar_potenciais_clientes_google(localizacao, termo, raio)
         if isinstance(resultado, list):
@@ -267,16 +267,14 @@ async def buscapotenciais_quantidade(update: Update, context: ContextTypes.DEFAU
         await update.message.reply_text("Nenhum potencial cliente encontrado para os termos informados.")
         return ConversationHandler.END
     
-    # Remove duplicatas baseadas no nome
     clientes_unicos = {cliente['nome']: cliente for cliente in clientes}.values()
     clientes_unicos = list(clientes_unicos)
     
-    # Exibe a quantidade solicitada ou todos se for menor
     if quantidade > len(clientes_unicos):
         quantidade = len(clientes_unicos)
     msg = f"*Potenciais clientes encontrados para '{tipo_cliente}' (mostrando {quantidade} de {len(clientes_unicos)}):*\n"
     for cliente in clientes_unicos[:quantidade]:
-        msg += f"- *{cliente['nome']}*\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
+        msg += f"- *{cliente['nome']}* ({cliente['fonte']})\n  Endereço: {cliente['endereco']}\n  Telefone: {cliente['telefone']}\n"
     context.user_data["clientes_potenciais"] = clientes_unicos
     await update.message.reply_text(msg, parse_mode="Markdown")
     return ConversationHandler.END
@@ -285,7 +283,7 @@ async def buscapotenciais_cancel(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("Busca de potenciais clientes cancelada.")
     return ConversationHandler.END
 
-# Função para Criar Rota com Google Directions API
+# Função para Criar Rota com Google Directions API (mantida como opcional)
 def criar_rota_google(localizacao_inicial, num_clientes, clientes):
     try:
         geocode_result = gmaps.geocode(localizacao_inicial)
@@ -332,13 +330,104 @@ def criar_rota_google(localizacao_inicial, num_clientes, clientes):
             total_distancia += perna['distance']['value']
             total_tempo += perna['duration']['value']
             
-            roteiro += f"{i+1}. *{ponto}* ({clientes_selecionados[cliente_idx].get('origem', 'novo')}): {distancia}, {tempo}\n"
+            roteiro += f"{i+1}. *{ponto}* ({clientes_selecionados[cliente_idx].get('fonte', 'Desconhecida')}): {distancia}, {tempo}\n"
         
         roteiro += f"\n*Total*: {total_distancia/1000:.1f} km, {total_tempo//60} minutos"
         return roteiro
     except Exception as e:
         logger.error("Erro na criação da rota: %s", e)
         return "Erro ao criar a rota. Tente novamente."
+
+# Fluxo de Criação de Rota (Ajustado para o padrão do /buscapotenciais)
+async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text(
+        "🗺️ *Criar Rota*: Quais segmentos ou termos você quer buscar para a rota? (ex.: 'indústria', 'logística, depósitos', 'fábrica'):",
+        parse_mode="Markdown"
+    )
+    return ROTA_TIPO
+
+async def criarrota_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["rota_tipo"] = update.message.text.strip()
+    await update.message.reply_text("📍 Informe a região base para a rota (ex.: 'Vale Encantado, Vila Velha - ES'):")
+    return ROTA_LOCALIZACAO
+
+async def criarrota_localizacao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["rota_localizacao"] = update.message.text.strip()
+    await update.message.reply_text("📏 Informe o raio de busca em quilômetros (ex.: '10' para 10 km):")
+    return ROTA_RAIO
+
+async def criarrota_raio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        raio = float(update.message.text.strip())
+        if raio <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '10'):")
+        return ROTA_RAIO
+    
+    context.user_data["rota_raio"] = raio
+    await update.message.reply_text("📋 Quantos clientes deseja incluir na rota? (ex.: '5', '10'):")
+    return ROTA_QUANTIDADE
+
+async def criarrota_quantidade(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    try:
+        quantidade = int(update.message.text.strip())
+        if quantidade <= 0:
+            raise ValueError
+    except ValueError:
+        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '5'):")
+        return ROTA_QUANTIDADE
+    
+    tipo_cliente = context.user_data["rota_tipo"]
+    localizacao = context.user_data["rota_localizacao"]
+    raio = context.user_data["rota_raio"]
+    chat_id = str(update.message.chat.id)
+    
+    # Busca clientes do Firebase
+    termos = [termo.strip() for termo in tipo_cliente.split(",")]
+    clientes_firebase = []
+    for termo in termos:
+        resultado = buscar_clientes_firebase(chat_id, localizacao, termo)
+        if resultado:
+            clientes_firebase.extend(resultado)
+    
+    # Busca clientes do Google Maps
+    clientes_google = []
+    for termo in termos:
+        resultado = buscar_potenciais_clientes_google(localizacao, termo, raio)
+        if isinstance(resultado, list):
+            clientes_google.extend(resultado)
+    
+    todos_clientes = clientes_firebase + clientes_google
+    
+    if not todos_clientes:
+        await update.message.reply_text("Nenhum cliente encontrado (nem no Firebase, nem no Google Maps) para criar a rota.")
+        return ConversationHandler.END
+    
+    clientes_unicos = {cliente['nome']: cliente for cliente in todos_clientes}.values()
+    clientes_unicos = list(clientes_unicos)
+    
+    if quantidade > len(clientes_unicos):
+        quantidade = len(clientes_unicos)
+    clientes_selecionados = clientes_unicos[:quantidade]
+    
+    # Exibição da rota básica
+    msg = f"*Rota criada para '{tipo_cliente}' (incluindo {quantidade} clientes):*\n"
+    for i, cliente in enumerate(clientes_selecionados, 1):
+        msg += f"{i}. *{cliente['nome']}* ({cliente['fonte']})\n   Endereço: {cliente['endereco']}\n   Telefone: {cliente['telefone']}\n"
+    
+    # Opcional: Rota otimizada com Directions API
+    rota_otimizada = criar_rota_google(localizacao, quantidade, clientes_selecionados)
+    if not isinstance(rota_otimizada, str) or "Erro" not in rota_otimizada:
+        msg += "\n" + rota_otimizada
+    
+    context.user_data["clientes_rota"] = clientes_selecionados
+    await update.message.reply_text(msg, parse_mode="Markdown")
+    return ConversationHandler.END
+
+async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    await update.message.reply_text("Criação de rota cancelada.")
+    return ConversationHandler.END
 
 # Comando /inicio
 async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1038,63 +1127,6 @@ async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Exportação cancelada.")
     return ConversationHandler.END
 
-# Fluxo de Criação de Rota
-async def criarrota_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("🗺️ *Criação de Rota*: Informe a região inicial (ex.: 'Vale Encantado, Vila Velha - ES'):", parse_mode="Markdown")
-    return ROTA_REGIAO
-
-async def criarrota_regiao(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["rota_localizacao"] = update.message.text.strip()
-    await update.message.reply_text("🔍 Qual tipo de cliente ou produto você quer incluir na rota? (ex.: 'empilhadeiras', 'móveis', 'alimentos'):")
-    return ROTA_TIPO
-
-async def criarrota_tipo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    context.user_data["rota_tipo"] = update.message.text.strip()
-    await update.message.reply_text("Quantos clientes deseja visitar? (Digite um número, ex.: '3'):")
-    return ROTA_NUM_CLIENTES
-
-async def criarrota_num_clientes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    try:
-        num_clientes = int(update.message.text.strip())
-        if num_clientes <= 0:
-            raise ValueError
-    except ValueError:
-        await update.message.reply_text("⚠️ Informe um número válido maior que 0 (ex.: '3'):")
-        return ROTA_NUM_CLIENTES
-    
-    localizacao = context.user_data["rota_localizacao"]
-    tipo_cliente = context.user_data["rota_tipo"]
-    chat_id = str(update.message.chat.id)
-
-    # Busca clientes potenciais no Google Maps (raio padrão de 10 km)
-    clientes_google = buscar_potenciais_clientes_google(localizacao, tipo_cliente, 10)
-    if isinstance(clientes_google, str):
-        clientes_google = []  # Se houver erro ou nenhum resultado, usa lista vazia
-    else:
-        for cliente in clientes_google:
-            cliente['origem'] = 'novo'  # Marca como cliente novo do Google
-
-    # Busca clientes existentes no Firebase
-    clientes_firebase = buscar_clientes_firebase(chat_id, tipo_cliente)
-
-    # Combina as listas e remove duplicatas por nome (prioriza Firebase se duplicado)
-    clientes_combinados = {cliente['nome']: cliente for cliente in clientes_firebase}.values()
-    for cliente in clientes_google:
-        if cliente['nome'] not in {c['nome'] for c in clientes_combinados}:
-            clientes_combinados = list(clientes_combinados) + [cliente]
-    
-    if not clientes_combinados:
-        await update.message.reply_text("Nenhum cliente disponível para criar a rota.")
-        return ConversationHandler.END
-    
-    rota = criar_rota_google(localizacao, num_clientes, clientes_combinados)
-    await update.message.reply_text(rota, parse_mode="Markdown")
-    return ConversationHandler.END
-
-async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    await update.message.reply_text("Criação de rota cancelada.")
-    return ConversationHandler.END
-
 # Jobs Diários
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -1323,9 +1355,10 @@ async def main():
     criarrota_conv_handler = ConversationHandler(
         entry_points=[CommandHandler("criarrota", criarrota_start)],
         states={
-            ROTA_REGIAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_regiao)],
             ROTA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_tipo)],
-            ROTA_NUM_CLIENTES: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_num_clientes)]
+            ROTA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_localizacao)],
+            ROTA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_raio)],
+            ROTA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_quantidade)]
         },
         fallbacks=[CommandHandler("cancelar", criarrota_cancel)]
     )
