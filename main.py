@@ -1448,6 +1448,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
+        per_message=False  # Adicionando para eliminar o aviso
     )
     excluir_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
