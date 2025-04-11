@@ -1177,6 +1177,15 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         logger.error("Erro ao confirmar follow-up: %s", e)
         await query.edit_message_text(text="Erro ao confirmar follow-up.")
 
+# Teste de Avisos
+async def test_daily_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await daily_reminder_callback(context)
+    await update.message.reply_text("Teste de lembrete de follow-up executado.")
+
+async def test_evening_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    await evening_summary_callback(context)
+    await update.message.reply_text("Teste de resumo noturno executado.")
+
 # Error Handler
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
@@ -1193,6 +1202,10 @@ async def main():
     # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
     application.add_handler(CommandHandler("ajuda", ajuda))
+
+    # Comandos de Teste de Avisos
+    application.add_handler(CommandHandler("test_daily_reminder", test_daily_reminder))
+    application.add_handler(CommandHandler("test_evening_summary", test_evening_summary))
 
     # Handler para Follow-up
     followup_conv_handler = ConversationHandler(
