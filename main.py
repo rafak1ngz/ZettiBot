@@ -4,7 +4,7 @@ import logging
 import asyncio
 import nest_asyncio
 import sys
-import warnings  # Movido para o topo
+import warnings
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import tempfile
@@ -15,13 +15,13 @@ import random
 from google.cloud.firestore_v1 import FieldFilter
 from telegram import (
     InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup,
-    ReplyKeyboardRemove, Update, BadRequest
+    ReplyKeyboardRemove, Update  # Removido BadRequest daqui
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
     ConversationHandler, MessageHandler, filters
 )
-from telegram.error import PTBUserWarning  # Import correto
+from telegram.error import PTBUserWarning, BadRequest  # Adicionado BadRequest aqui
 
 # Patch para nest_asyncio
 nest_asyncio.apply()
@@ -34,9 +34,9 @@ logging.basicConfig(
     format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
     level=logging.INFO
 )
-logger = logging.getLogger("__main__")  # Corrigido para string
-logging.getLogger("httpx").setLevel(logging.WARNING)  # Silencia logs INFO do httpx
-warnings.filterwarnings("ignore", category=PTBUserWarning)  # Silencia PTBUserWarning
+logger = logging.getLogger("__main__")
+logging.getLogger("httpx").setLevel(logging.WARNING)
+warnings.filterwarnings("ignore", category=PTBUserWarning)
 
 # Inicialização do Firebase
 import firebase_admin
