@@ -1426,14 +1426,55 @@ async def quem_visitar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             await update.message.reply_text("🌟 Hoje tá tranquilo, parceiro! Nenhum follow-up pendente. Que tal prospectar com /buscapotenciais?")
             return
         
+        # Construir a mensagem
         msg = "📅 *Quem visitar hoje:*\n"
+        options = []
         for i, doc in enumerate(followups, 1):
             data = doc.to_dict()
-            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
+            # Formatar a data do follow-up
+            data_follow = data.get('data_follow', hoje)
+            try:
+                data_fmt = datetime.fromisoformat(data_follow).strftime("%d/%m/%Y")
+            except (ValueError, TypeError):
+                data_fmt = data_follow  # Usa o valor bruto se não puder formatar
+            # Descrição com limite de 100 caracteres
+            descricao = data.get('descricao', 'Sem descrição')
+            if len(descricao) > 100:
+                descricao = descricao[:100] + "..."
+            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data_fmt} - {descricao}\n"
+            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"quemvisitar_done:{doc.id}")])
         
-        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"quemvisitar_done:{doc.id}")] for i, doc in enumerate(followups, 1)]
-        reply_markup = InlineKeyboardMarkup(options)
-        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
+        # Verificar o limite de caracteres do Telegram (4096)
+        if len(msg) > 4096:
+            mensagens = []
+            parte_atual = "📅 *Quem visitar hoje:*\n"
+            for i, doc in enumerate(followups, 1):
+                data = doc.to_dict()
+                data_follow = data.get('data_follow', hoje)
+                try:
+                    data_fmt = datetime.fromisoformat(data_follow).strftime("%d/%m/%Y")
+                except (ValueError, TypeError):
+                    data_fmt = data_follow
+                descricao = data.get('descricao', 'Sem descrição')
+                if len(descricao) > 100:
+                    descricao = descricao[:100] + "..."
+                linha = f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data_fmt} - {descricao}\n"
+                if len(parte_atual) + len(linha) > 4096:
+                    mensagens.append(parte_atual)
+                    parte_atual = "📅 *Continuação:*\n" + linha
+                else:
+                    parte_atual += linha
+            if parte_atual:
+                mensagens.append(parte_atual)
+            
+            # Enviar mensagens separadas
+            for parte in mensagens:
+                reply_markup = InlineKeyboardMarkup(options[:len(followups)]) if parte == mensagens[-1] else None
+                await update.message.reply_text(parte, parse_mode="Markdown", reply_markup=reply_markup)
+        else:
+            reply_markup = InlineKeyboardMarkup(options)
+            await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
+            
     except Exception as e:
         logger.error("Erro ao executar /quemvisitar: %s", e)
         await update.message.reply_text("😅 Deu um erro ao listar os follow-ups. Tenta de novo?")
@@ -1765,7 +1806,7 @@ def main() -> None:
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
-    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(0,))   # Segunda
+    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))  # Segunda
 
     logger.info("Bot iniciado com sucesso!")
     app.run_polling()
