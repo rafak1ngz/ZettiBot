@@ -1258,20 +1258,20 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
             try:
                 start_date = datetime.strptime(start_str.strip(), "%d/%m/%Y").date()
                 end_date = datetime.strptime(end_str.strip(), "%d/%m/%Y").date()
-                docs = col.where(filter_type, ">=", start_date.isoformat())\
-                          .where(filter_type, "<=", end_date.isoformat()).stream()
+                docs = col.where(filter=FieldFilter(filter_type, ">=", start_date.isoformat()))\
+                          .where(filter=FieldFilter(filter_type, "<=", end_date.isoformat())).stream()
             except ValueError:
                 await update.effective_message.reply_text("😅 Data errada! Usa assim: 01/04/2025 a 10/04/2025")
                 return
         else:
             try:
                 date = datetime.strptime(value, "%d/%m/%Y").date()
-                docs = col.where(filter_type, "==", date.isoformat()).stream()
+                docs = col.where(filter=FieldFilter(filter_type, "==", date.isoformat())).stream()
             except ValueError:
                 await update.effective_message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
                 return
     else:
-        docs = col.where(filter_type, "==", value).stream()
+        docs = col.where(filter=FieldFilter(filter_type, "==", value)).stream()
     
     docs_list = list(docs)
     if not docs_list:
@@ -1329,14 +1329,17 @@ async def quem_visitar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # Lembretes Automáticos
 async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
-    if now.hour != 8 or now.minute != 0:
+    logger.debug(f"Checando lembrete diário: {now.strftime('%H:%M:%S')}")
+    # Permitir disparo entre 8h00 e 8h05 para evitar falha por desalinhamento
+    if now.hour != 8 or now.minute > 5:
         return
+    logger.info("Executando lembrete diário às 8h")
     for user in db.collection("users").stream():
         chat_id = user.id
         hoje = now.date().isoformat()
         followups = list(db.collection("users").document(chat_id).collection("followups")
-                         .where("data_follow", "==", hoje)
-                         .where("status", "==", "pendente").stream())
+                         .where(filter=FieldFilter("data_follow", "==", hoje))
+                         .where(filter=FieldFilter("status", "==", "pendente")).stream())
         if followups:
             msg = "☀️ *Bom dia, parceiro! Hoje tem follow-up!*\n"
             for i, doc in enumerate(followups[:5], 1):
@@ -1345,8 +1348,11 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
             msg += "\n🚀 Vamos fazer esses contatos hoje?"
             try:
                 await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
+                logger.info(f"Lembrete diário enviado para {chat_id}")
             except BadRequest as e:
                 logger.error(f"Erro ao enviar lembrete diário para {chat_id}: {e}")
+        else:
+            logger.debug(f"Nenhum follow-up pendente hoje para {chat_id}")
 
 async def lembrete_semanal(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
@@ -1378,6 +1384,7 @@ async def lembrete_semanal(context: ContextTypes.DEFAULT_TYPE) -> None:
 
 # Inicialização da Aplicação
 def main():
+    logger.info(f"Horário atual do servidor: {datetime.now(TIMEZONE).strftime('%Y-%m-%d %H:%M:%S %Z')}")
     TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
 
@@ -1461,7 +1468,12 @@ def main():
     filtrar_handler = ConversationHandler(
         entry_points=[CommandHandler("filtrar", filtrar_start)],
         states={
-            FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)],
+            FILTER_CATEGORY: [CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:")],
+            FILTER_TYPE: [CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:")],
+            FILTER_VALUE: [
+                CallbackQueryHandler(filtrar_value_callback, pattern="^filter_value:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)
+            ],
         },
         fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
     )
