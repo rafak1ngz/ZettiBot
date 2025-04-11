@@ -939,21 +939,25 @@ async def historico_conv_cancel(update: Update, context: ContextTypes.DEFAULT_TY
 
 # Fluxo de Edição
 async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info("Iniciando /editar para chat_id %s", update.message.chat.id)
     options = [
-        [InlineKeyboardButton("📋 Follow-up", callback_data="edit_category:followup")],
-        [InlineKeyboardButton("🏢 Visita", callback_data="edit_category:visita")],
-        [InlineKeyboardButton("💬 Interação", callback_data="edit_category:interacao")]
+        [InlineKeyboardButton("Follow-up", callback_data="edit_category:followup")],
+        [InlineKeyboardButton("Visita", callback_data="edit_category:visita")],
+        [InlineKeyboardButton("Interação", callback_data="edit_category:interacao")],
     ]
     reply_markup = InlineKeyboardMarkup(options)
-    await update.message.reply_text("📝 Opa, o que você quer ajustar?", reply_markup=reply_markup)
-    return EDIT_CATEGORY
+    await update.message.reply_text("📝 O que você quer editar?", reply_markup=reply_markup)
+    logger.info("Opções de categoria enviadas")
+    return EDIT_RECORD
 
-async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
     await query.answer()
     category = query.data.split(":", 1)[1]
     context.user_data["edit_category"] = category
     chat_id = str(query.message.chat.id)
+    logger.info("Categoria escolhida: %s para chat_id %s", category, chat_id)
+    
     try:
         if category == "followup":
             col = db.collection("users").document(chat_id).collection("followups")
@@ -965,14 +969,15 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
             col = db.collection("users").document(chat_id).collection("interacoes")
             prefix = "💬 Interações"
         
-        docs = list(col.limit(50).stream())
+        docs = list(col.limit(10).stream())
         if not docs:
-            await query.edit_message_text(f"😕 Não achei nada em {prefix.lower()}. Registre algo antes!")
-            return ConversationHandler.END
+            await query.edit_message_text(f"😕 Não achei nada em {prefix.lower()} pra editar.")
+            return
         
-        context.user_data["edit_docs"] = [(doc.id, doc.to_dict()) for doc in docs]
-        msg = f"{prefix}:\n"
-        for i, (_, data) in enumerate(context.user_data["edit_docs"][:10], 1):
+        context.user_data["edit_docs"] = docs
+        msg = f"{prefix} disponíveis pra editar:\n"
+        for i, doc in enumerate(docs, 1):
+            data = doc.to_dict()
             if category == "followup":
                 data_follow = data.get("data_follow", "Sem data")
                 try:
@@ -989,14 +994,11 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
                 msg += f"{i}. {data.get('empresa', 'Sem empresa')}, {data_fmt}, {data.get('classificacao', 'Sem classificação')}\n"
             else:
                 msg += f"{i}. {data.get('cliente', 'Sem cliente')}, {data.get('resumo', 'Sem resumo')[:20]}...\n"
-        msg += "\nQual número você quer editar? (Ex.: 1)"
-        await query.edit_message_text(msg)
-        await query.message.reply_text("Digite o número do registro:")
-        return EDIT_RECORD
+        await query.edit_message_text(f"{msg}\nDigite o número do que quer editar (ex.: 1):")
+        logger.info("Lista de registros enviada para chat_id %s", chat_id)
     except Exception as e:
-        logger.error("Erro ao listar registros para edição: %s", e)
+        logger.error("Erro ao listar registros para editar: %s", e)
         await query.edit_message_text("😅 Deu um erro ao listar os registros. Tenta de novo?")
-        return ConversationHandler.END
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     logger.info("Entrou em editar_record_received para chat_id %s", update.message.chat.id)
@@ -1504,16 +1506,20 @@ async def quem_visitar_callback(update: Update, context: ContextTypes.DEFAULT_TY
 async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
     hoje = now.date().isoformat()
+    logger.info("Iniciando lembrete_diario às %s", now.strftime("%H:%M:%S"))
     try:
         users = db.collection("users").limit(50).stream()  # Limite de 50 usuários por vez
         for user in users:
             chat_id = user.id
+            logger.info("Processando usuário %s", chat_id)
             try:
                 followups = list(db.collection("users").document(chat_id).collection("followups")
                                 .where(filter=FieldFilter("data_follow", "==", hoje)).limit(10).stream())
                 pendentes = [f for f in followups if f.to_dict().get("status") == "pendente"]
                 realizados = [f for f in followups if f.to_dict().get("status") == "realizado"]
 
+                msg = None
+                reply_markup = None
                 if now.hour == 8:
                     if pendentes:
                         msg = "☀️ *Bom dia, parceiro!* Hoje tem follow-up na área:\n"
@@ -1522,11 +1528,10 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
                         options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
-                        await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
                     else:
-                        await context.bot.send_message(chat_id, "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?", parse_mode="Markdown")
-
-                elif now.hour == 12:
+                        msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
+                
+                elif now.hour == 15:
                     if pendentes:
                         msg = "🍲 *Hora do almoço!* Ainda tem follow-ups pendentes:\n"
                         for i, f in enumerate(pendentes[:5], 1):
@@ -1534,8 +1539,9 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
                         options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
-                        await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
-
+                    else:
+                        msg = "🍲 *Hora do almoço!* Sem follow-ups pendentes, tá de boa!"
+                
                 elif now.hour == 17:
                     visitas = list(db.collection("users").document(chat_id).collection("visitas")
                                   .where(filter=FieldFilter("data_visita", "==", hoje)).limit(10).stream())
@@ -1552,17 +1558,7 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
                         options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
-                    else:
-                        reply_markup = None
-                    await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
-                    grafico_path = gerar_grafico(len(followups), len(realizados), len(pendentes), len(visitas), len(interacoes), "do dia")
-                    try:
-                        with open(grafico_path, "rb") as photo:
-                            await context.bot.send_photo(chat_id, photo=photo, caption="📈 Seu desempenho de hoje!")
-                    finally:
-                        if os.path.exists(grafico_path):
-                            os.remove(grafico_path)
-
+                
                 elif now.hour == 23:
                     if pendentes:
                         msg = "🌙 *Fim do dia!* Ainda tem pendentes:\n"
@@ -1571,9 +1567,18 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
                         options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
-                        await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
                     else:
-                        await context.bot.send_message(chat_id, "🌙 *Fim do dia!* Tudo em dia, parabéns, parceiro!", parse_mode="Markdown")
+                        msg = "🌙 *Fim do dia!* Tudo em dia, parabéns, parceiro!"
+                
+                else:
+                    logger.info("Horário %s não configurado para envio, ignorando", now.hour)
+                    continue  # Pula para o próximo usuário se o horário não for reconhecido
+
+                if msg:  # Só envia se houver mensagem
+                    logger.info("Enviando lembrete para chat_id %s: %s", chat_id, msg[:50] + "...")
+                    await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
+                else:
+                    logger.info("Nenhuma mensagem gerada para chat_id %s", chat_id)
                 
                 await asyncio.sleep(0.5)  # Atraso para evitar limites da API
             except (BadRequest, NetworkError, TimedOut) as e:
@@ -1750,15 +1755,12 @@ def main() -> None:
         states={
             EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
             EDIT_FIELD: [CallbackQueryHandler(editar_field_callback, pattern="^edit_field:")],
-            EDIT_NEW_VALUE: [
-                MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received),
-                CallbackQueryHandler(editar_value_callback, pattern="^edit_value:")
-            ]
+            EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received),
+                            CallbackQueryHandler(editar_value_callback, pattern="^edit_value:")]
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
-        conversation_timeout=300  # Timeout de 5 minutos
+        conversation_timeout=300
     )
-
     app.add_handler(editar_conv)
     app.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
     app.add_handler(CallbackQueryHandler(editar_field_callback, pattern="^edit_field:"))
@@ -1818,11 +1820,11 @@ def main() -> None:
 
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=14, minute=35, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=15, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
-    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))  # Segunda
+    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))  # Segunda corrigido
 
     logger.info("Bot iniciado com sucesso!")
     app.run_polling()
