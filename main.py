@@ -1802,7 +1802,7 @@ def main() -> None:
 
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=0, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=13, minute=10, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
