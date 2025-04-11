@@ -12,29 +12,25 @@ import csv
 import googlemaps
 import random
 from google.cloud.firestore_v1 import FieldFilter
+from telegram import (
+    InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup,
+    ReplyKeyboardRemove, Update
+)
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
+    ConversationHandler, MessageHandler, filters
+)
 from telegram.error import BadRequest
-
-# Fuso horário
-TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Patch para nest_asyncio
 nest_asyncio.apply()
 
+# Fuso horário
+TIMEZONE = ZoneInfo("America/Sao_Paulo")
+
 # Configuração do Logger
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
-handler.setFormatter(formatter)
-if not logger.handlers:
-    logger.addHandler(handler)
-else:
-    for h in logger.handlers:
-        logger.removeHandler(h)
-    logger.addHandler(handler)
-logging.getLogger("httpx").setLevel(logging.WARNING)
-logging.getLogger("telegram.ext").setLevel(logging.WARNING)
+logging.basicConfig(level=logging.INFO)
 
 # Inicialização do Firebase
 import firebase_admin
@@ -60,20 +56,12 @@ logger.info("Firebase inicializado com sucesso!")
 
 # Integração com Telegram
 from telegram import (
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    Update
+    InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup,
+    ReplyKeyboardRemove, Update
 )
 from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ConversationHandler,
-    filters,
-    ContextTypes
+    ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
+    ConversationHandler, MessageHandler, filters
 )
 
 # Estados para fluxos
@@ -1329,58 +1317,189 @@ async def quem_visitar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 # Lembretes Automáticos
 async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
-    logger.debug(f"Checando lembrete diário: {now.strftime('%H:%M:%S')}")
-    # Permitir disparo entre 8h00 e 8h05 para evitar falha por desalinhamento
-    if now.hour != 8 or now.minute > 5:
+    hoje = now.date().isoformat()
+    
+    # Definir horários e janelas
+    if (now.hour == 8 and now.minute <= 5) or \
+       (now.hour == 12 and now.minute <= 5) or \
+       (now.hour == 17 and 25 <= now.minute <= 35) or \
+       (now.hour == 23 and now.minute <= 5):
+        logger.debug(f"Checando lembrete diário: {now.strftime('%H:%M:%S')}")
+    else:
         return
-    logger.info("Executando lembrete diário às 8h")
+    
     for user in db.collection("users").stream():
         chat_id = user.id
-        hoje = now.date().isoformat()
         followups = list(db.collection("users").document(chat_id).collection("followups")
-                         .where(filter=FieldFilter("data_follow", "==", hoje))
-                         .where(filter=FieldFilter("status", "==", "pendente")).stream())
-        if followups:
-            msg = "☀️ *Bom dia, parceiro! Hoje tem follow-up!*\n"
-            for i, doc in enumerate(followups[:5], 1):
-                data = doc.to_dict()
-                msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
-            msg += "\n🚀 Vamos fazer esses contatos hoje?"
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
-                logger.info(f"Lembrete diário enviado para {chat_id}")
-            except BadRequest as e:
-                logger.error(f"Erro ao enviar lembrete diário para {chat_id}: {e}")
-        else:
-            logger.debug(f"Nenhum follow-up pendente hoje para {chat_id}")
+                         .where(filter=FieldFilter("data_follow", "==", hoje)).stream())
+        pendentes = [f for f in followups if f.to_dict().get("status") == "pendente"]
+        realizados = [f for f in followups if f.to_dict().get("status") == "realizado"]
+        
+        try:
+            # 08h00 - Bom dia
+            if now.hour == 8 and now.minute <= 5:
+                if not pendentes:
+                    await context.bot.send_message(chat_id, "☀️ *Bom dia, parceiro!* Hoje não tem follow-ups pendentes. Bora planejar o dia? 🚀", parse_mode="Markdown")
+                    continue
+                msg = "☀️ *Bom dia, parceiro! Hoje tem follow-up!*\n"
+                buttons = []
+                for i, doc in enumerate(pendentes[:5], 1):
+                    data = doc.to_dict()
+                    msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
+                    buttons.append([InlineKeyboardButton(f"Feito #{i}", callback_data=f"done:{doc.id}")])
+                msg += "\nClique para marcar como feito ou use /feito!"
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
+                logger.info(f"Lembrete de 8h enviado para {chat_id}")
+            
+            # 12h00 - Atualização
+            elif now.hour == 12 and now.minute <= 5:
+                if not pendentes:
+                    await context.bot.send_message(chat_id, "🌞 *Meio-dia, parceiro!* Todos os follow-ups de hoje estão concluídos. Parabéns! 🎉", parse_mode="Markdown")
+                    continue
+                msg = "🌞 *Meio-dia, parceiro!* Ainda tem follow-ups pendentes:\n"
+                buttons = []
+                for i, doc in enumerate(pendentes[:5], 1):
+                    data = doc.to_dict()
+                    msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
+                    buttons.append([InlineKeyboardButton(f"Feito #{i}", callback_data=f"done:{doc.id}")])
+                msg += "\nClique para marcar como feito!"
+                reply_markup = InlineKeyboardMarkup(buttons)
+                await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
+                logger.info(f"Lembrete de 12h enviado para {chat_id}")
+            
+            # 17h30 - Resumo com confirmação
+            elif now.hour == 17 and 25 <= now.minute <= 35:
+                visitas = list(db.collection("users").document(chat_id).collection("visitas")
+                               .where(filter=FieldFilter("data_visita", "==", hoje)).stream())
+                interacoes = list(db.collection("users").document(chat_id).collection("interacoes")
+                                  .where(filter=FieldFilter("criado_em", ">=", hoje)).stream())
+                msg = "🌅 *Fim de expediente, parceiro!* Aqui vai o resumo do dia:\n"
+                msg += f"- Follow-ups feitos: {len(realizados)}\n"
+                msg += f"- Visitas: {len(visitas)}\n"
+                msg += f"- Interações: {len(interacoes)}\n"
+                if pendentes:
+                    msg += "\nConfirme os follow-ups pendentes de hoje:\n"
+                    buttons = []
+                    for i, doc in enumerate(pendentes[:5], 1):
+                        data = doc.to_dict()
+                        msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
+                        buttons.append([
+                            InlineKeyboardButton(f"Feito #{i}", callback_data=f"done:{doc.id}"),
+                            InlineKeyboardButton(f"Pendente #{i}", callback_data=f"pending:{doc.id}")
+                        ])
+                    msg += "\nSe não responder até 23h, serão marcados como atrasados."
+                    reply_markup = InlineKeyboardMarkup(buttons)
+                else:
+                    msg += "\nNenhum follow-up pendente. Bom descanso! 😎"
+                    reply_markup = None
+                await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
+                logger.info(f"Lembrete de 17h30 enviado para {chat_id}")
+            
+            # 23h00 - Marcação de atrasados
+            elif now.hour == 23 and now.minute <= 5:
+                if pendentes:
+                    for doc in pendentes:
+                        db.collection("users").document(chat_id).collection("followups").document(doc.id).update({"status": "atrasado"})
+                    await context.bot.send_message(chat_id, "🌙 *Fim do dia!* Follow-ups não confirmados foram marcados como atrasados. Até amanhã! 🚀", parse_mode="Markdown")
+                    logger.info(f"Follow-ups pendentes de {chat_id} marcados como atrasados às 23h")
+        
+        except BadRequest as e:
+            logger.error(f"Erro ao enviar lembrete diário para {chat_id}: {e}")
+            continue  # Continua para o próximo usuário
+        except Exception as e:
+            logger.error(f"Erro inesperado no lembrete diário para {chat_id}: {e}")
+            continue  # Continua para o próximo usuário
 
+# Lembrete semanal
 async def lembrete_semanal(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
-    if now.weekday() != 0 or now.hour != 9 or now.minute != 0:  # Segunda-feira às 9h
+    hoje = now.date()
+    inicio_semana_atual = hoje - timedelta(days=hoje.weekday())
+    fim_semana_atual = inicio_semana_atual + timedelta(days=6)
+    inicio_prox_semana = fim_semana_atual + timedelta(days=1)
+    fim_prox_semana = inicio_prox_semana + timedelta(days=6)
+    
+    if (now.weekday() == 4 and now.hour == 19 and 25 <= now.minute <= 35) or \
+       (now.weekday() == 0 and now.hour == 7 and 25 <= now.minute <= 35):
+        logger.debug(f"Checando lembrete semanal: {now.strftime('%H:%M:%S')}")
+    else:
         return
+    
     for user in db.collection("users").stream():
         chat_id = user.id
-        inicio_semana = now.date()
-        fim_semana = inicio_semana + timedelta(days=6)
-        followups = list(db.collection("users").document(chat_id).collection("followups")
-                         .where("data_follow", ">=", inicio_semana.isoformat())
-                         .where("data_follow", "<=", fim_semana.isoformat())
-                         .where("status", "==", "pendente").stream())
-        if followups:
-            msg = "📅 *Planejamento da semana, parceiro!*\n"
-            for i, doc in enumerate(followups[:5], 1):
-                data = doc.to_dict()
-                data_follow = data.get("data_follow", "Sem data")
-                try:
-                    data_fmt = datetime.fromisoformat(data_follow).strftime("%d/%m/%Y")
-                except:
-                    data_fmt = data_follow
-                msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data_fmt}\n"
-            msg += "\n🚀 Bora organizar essa semana pra vender mais?"
-            try:
-                await context.bot.send_message(chat_id=chat_id, text=msg, parse_mode="Markdown")
-            except BadRequest as e:
-                logger.error(f"Erro ao enviar lembrete semanal para {chat_id}: {e}")
+        
+        try:
+            # Sexta, 19h30 - Resumo da semana e prévia
+            if now.weekday() == 4 and now.hour == 19 and 25 <= now.minute <= 35:
+                followups = list(db.collection("users").document(chat_id).collection("followups")
+                                 .where(filter=FieldFilter("data_follow", ">=", inicio_semana_atual.isoformat()))
+                                 .where(filter=FieldFilter("data_follow", "<=", fim_semana_atual.isoformat())).stream())
+                realizados = [f for f in followups if f.to_dict().get("status") == "realizado"]
+                pendentes = [f for f in followups if f.to_dict().get("status") == "pendente"]
+                atrasados = [f for f in followups if f.to_dict().get("status") == "atrasado"]
+                visitas = list(db.collection("users").document(chat_id).collection("visitas")
+                               .where(filter=FieldFilter("data_visita", ">=", inicio_semana_atual.isoformat()))
+                               .where(filter=FieldFilter("data_visita", "<=", fim_semana_atual.isoformat())).stream())
+                interacoes = list(db.collection("users").document(chat_id).collection("interacoes")
+                                  .where(filter=FieldFilter("criado_em", ">=", inicio_semana_atual.isoformat())).stream())
+                prox_followups = list(db.collection("users").document(chat_id).collection("followups")
+                                      .where(filter=FieldFilter("data_follow", ">=", inicio_prox_semana.isoformat()))
+                                      .where(filter=FieldFilter("data_follow", "<=", fim_prox_semana.isoformat()))
+                                      .where(filter=FieldFilter("status", "in", ["pendente", "atrasado"])).stream())
+                msg = "📅 *Resumo da semana, parceiro!*\n"
+                msg += f"- Follow-ups feitos: {len(realizados)}\n"
+                msg += f"- Follow-ups pendentes: {len(pendentes)}\n"
+                msg += f"- Follow-ups atrasados: {len(atrasados)}\n"
+                msg += f"- Visitas: {len(visitas)}\n"
+                msg += f"- Interações: {len(interacoes)}\n"
+                msg += "\n*Prévia da próxima semana:*\n"
+                for i, doc in enumerate(prox_followups[:3], 1):
+                    data = doc.to_dict()
+                    data_fmt = datetime.fromisoformat(data.get("data_follow")).strftime("%d/%m")
+                    msg += f"{i}. {data.get('cliente', 'Sem cliente')} - {data_fmt} ({data.get('status')})\n"
+                msg += "\nBom fim de semana! 🎉"
+                await context.bot.send_message(chat_id, msg, parse_mode="Markdown")
+                logger.info(f"Lembrete de sexta 19h30 enviado para {chat_id}")
+            
+            # Segunda, 07h30 - Planejamento da semana
+            elif now.weekday() == 0 and now.hour == 7 and 25 <= now.minute <= 35:
+                followups = list(db.collection("users").document(chat_id).collection("followups")
+                                 .where(filter=FieldFilter("data_follow", ">=", inicio_semana_atual.isoformat()))
+                                 .where(filter=FieldFilter("data_follow", "<=", fim_semana_atual.isoformat()))
+                                 .where(filter=FieldFilter("status", "in", ["pendente", "atrasado"])).stream())
+                if not followups:
+                    await context.bot.send_message(chat_id, "📅 *Segunda-feira, parceiro!* Sem follow-ups pendentes ou atrasados pra essa semana. Bora planejar? 🚀", parse_mode="Markdown")
+                    continue
+                msg = "📅 *Segunda-feira, parceiro! Aqui vai o plano da semana:*\n"
+                for i, doc in enumerate(followups[:5], 1):
+                    data = doc.to_dict()
+                    data_fmt = datetime.fromisoformat(data.get("data_follow")).strftime("%d/%m")
+                    msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data_fmt} ({data.get('status')})\n"
+                msg += "\n🚀 Vamos vender mais essa semana?"
+                await context.bot.send_message(chat_id, msg, parse_mode="Markdown")
+                logger.info(f"Lembrete de segunda 07h30 enviado para {chat_id}")
+        
+        except BadRequest as e:
+            logger.error(f"Erro ao enviar lembrete semanal para {chat_id}: {e}")
+            continue  # Continua para o próximo usuário
+        except Exception as e:
+            logger.error(f"Erro inesperado no lembrete semanal para {chat_id}: {e}")
+            continue  # Continua para o próximo usuário
+
+# Marcação de Follow-ups
+async def marcar_feito_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    action, doc_id = query.data.split(":", 1)
+    chat_id = str(query.message.chat.id)
+    if action == "done":
+        db.collection("users").document(chat_id).collection("followups").document(doc_id).update({"status": "realizado"})
+        await query.edit_message_text(f"✅ Follow-up marcado como realizado!", reply_markup=None)
+        logger.info(f"Follow-up {doc_id} marcado como realizado por {chat_id}")
+    elif action == "pending":
+        await query.edit_message_text(f"⏳ Follow-up mantido como pendente. Confirme até 23h!", reply_markup=None)
+        logger.info(f"Follow-up {doc_id} mantido como pendente por {chat_id}")
 
 # Inicialização da Aplicação
 def main():
@@ -1455,7 +1574,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
-        per_message=False  # Adicionando para eliminar o aviso
+        per_message=False
     )
     excluir_handler = ConversationHandler(
         entry_points=[CommandHandler("excluir", excluir_start)],
@@ -1476,6 +1595,7 @@ def main():
             ],
         },
         fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
+        per_message=False
     )
     busca_handler = ConversationHandler(
         entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
@@ -1498,13 +1618,6 @@ def main():
         fallbacks=[CommandHandler("cancelar", criarrota_cancel)],
     )
 
-    # Handlers de Callback
-    app.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
-    app.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
-    app.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
-    app.add_handler(CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:"))
-    app.add_handler(CallbackQueryHandler(filtrar_value_callback, pattern="^filter_value:"))
-
     # Handlers Simples
     app.add_handler(CommandHandler("inicio", inicio))
     app.add_handler(CommandHandler("ajuda", ajuda))
@@ -1523,9 +1636,12 @@ def main():
     app.add_handler(busca_handler)
     app.add_handler(rota_handler)
 
-    # Jobs de Lembretes Automáticos
-    app.job_queue.run_repeating(lembrete_diario, interval=60)  # Checa a cada minuto
-    app.job_queue.run_repeating(lembrete_semanal, interval=60)
+    # Handler para marcar follow-ups
+    app.add_handler(CallbackQueryHandler(marcar_feito_callback, pattern="^(done|pending):"))
+
+    # Jobs para lembretes
+    app.job_queue.run_repeating(lembrete_diario, interval=300)  # 5 minutos
+    app.job_queue.run_repeating(lembrete_semanal, interval=300)  # 5 minutos
 
     # Iniciar o bot
     logger.info("Bot iniciado!")
