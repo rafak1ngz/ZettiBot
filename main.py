@@ -4,6 +4,7 @@ import logging
 import asyncio
 import nest_asyncio
 import sys
+import warnings  # Movido para o topo
 from datetime import datetime, timedelta, time
 from zoneinfo import ZoneInfo
 import tempfile
@@ -14,13 +15,13 @@ import random
 from google.cloud.firestore_v1 import FieldFilter
 from telegram import (
     InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup,
-    ReplyKeyboardRemove, Update
+    ReplyKeyboardRemove, Update, BadRequest
 )
 from telegram.ext import (
     ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
     ConversationHandler, MessageHandler, filters
 )
-from telegram.error import BadRequest
+from telegram.error import PTBUserWarning  # Import correto
 
 # Patch para nest_asyncio
 nest_asyncio.apply()
@@ -29,8 +30,13 @@ nest_asyncio.apply()
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
 
 # Configuração do Logger
-logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(
+    format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+    level=logging.INFO
+)
+logger = logging.getLogger("__main__")  # Corrigido para string
+logging.getLogger("httpx").setLevel(logging.WARNING)  # Silencia logs INFO do httpx
+warnings.filterwarnings("ignore", category=PTBUserWarning)  # Silencia PTBUserWarning
 
 # Inicialização do Firebase
 import firebase_admin
@@ -53,16 +59,6 @@ cred = credentials.Certificate(cred_dict)
 firebase_admin.initialize_app(cred)
 db = firestore.client()
 logger.info("Firebase inicializado com sucesso!")
-
-# Integração com Telegram
-from telegram import (
-    InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardMarkup,
-    ReplyKeyboardRemove, Update
-)
-from telegram.ext import (
-    ApplicationBuilder, CommandHandler, ContextTypes, CallbackQueryHandler,
-    ConversationHandler, MessageHandler, filters
-)
 
 # Estados para fluxos
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
