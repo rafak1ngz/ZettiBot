@@ -1488,9 +1488,6 @@ def main():
 
     # Handlers de Callback
     app.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
-    app.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
-    app.add_handler(CallbackQueryHandler(editar_field_callback, pattern="^edit_field:"))
-    app.add_handler(CallbackQueryHandler(editar_value_callback, pattern="^edit_value:"))
     app.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
     app.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
     app.add_handler(CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:"))
