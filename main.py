@@ -11,6 +11,8 @@ import matplotlib.pyplot as plt
 import csv
 import googlemaps
 import random
+from google.cloud.firestore_v1 import FieldFilter
+from telegram.error import BadRequest
 
 # Define o fuso horário desejado
 TIMEZONE = ZoneInfo("America/Sao_Paulo")
@@ -1101,8 +1103,8 @@ async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
         today = datetime.now(TIMEZONE).date().isoformat()
         docs = db.collection_group("followups")\
-                 .where("data_follow", "==", today)\
-                 .where("status", "==", "pendente").stream()
+                 .where(filter=FieldFilter("data_follow", "==", today))\
+                 .where(filter=FieldFilter("status", "==", "pendente")).stream()
         for doc in docs:
             data = doc.to_dict()
             user_chat_id = data.get("chat_id")
@@ -1117,7 +1119,12 @@ async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
                 keyboard = InlineKeyboardMarkup(
                     [[InlineKeyboardButton("Confirmar", callback_data=f"confirm_followup:{user_chat_id}:{followup_id}")]]
                 )
-                await context.bot.send_message(chat_id=user_chat_id, text=message_text, reply_markup=keyboard, parse_mode="Markdown")
+                logger.info(f"Enviando lembrete para {user_chat_id}: {message_text}")
+                try:
+                    await context.bot.send_message(chat_id=user_chat_id, text=message_text, reply_markup=keyboard, parse_mode="Markdown")
+                except BadRequest as e:
+                    logger.error(f"Erro de parsing na mensagem: {message_text} - {e}")
+                    await context.bot.send_message(chat_id=user_chat_id, text="⚠️ Erro ao enviar lembrete.")
     except Exception as e:
         logger.error("Erro no daily_reminder_callback: %s", e)
 
@@ -1126,7 +1133,7 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
         today = datetime.now(TIMEZONE).date().isoformat()
         confirmed_count = {}
         pending_items = {}
-        docs = db.collection_group("followups").where("data_follow", "==", today).stream()
+        docs = db.collection_group("followups").where(filter=FieldFilter("data_follow", "==", today)).stream()
         for doc in docs:
             data = doc.to_dict()
             user_chat_id = data.get("chat_id")
@@ -1146,7 +1153,12 @@ async def evening_summary_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
                 f"Follow-ups pendentes: {pending_count}\n"
                 f"Os pendentes foram reagendados para {tomorrow}."
             )
-            await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode="Markdown")
+            logger.info(f"Enviando resumo para {user_chat_id}: {summary_text}")
+            try:
+                await context.bot.send_message(chat_id=user_chat_id, text=summary_text, parse_mode="Markdown")
+            except BadRequest as e:
+                logger.error(f"Erro de parsing na mensagem: {summary_text} - {e}")
+                await context.bot.send_message(chat_id=user_chat_id, text="⚠️ Erro ao enviar resumo.")
             for doc_id, _ in pending_items[user_chat_id]:
                 db.collection("users").document(user_chat_id)\
                   .collection("followups").document(doc_id).update({"data_follow": tomorrow})
@@ -1176,7 +1188,7 @@ async def main():
         logger.error("TELEGRAM_TOKEN não definido!")
         return
 
-    application = ApplicationBuilder().token(token).build()
+    application = ApplicationBuilder().token(token).read_timeout(10).write_timeout(10).build()
 
     # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
