@@ -999,15 +999,21 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
         return ConversationHandler.END
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info("Entrou em editar_record_received para chat_id %s", update.message.chat.id)
     try:
         index = int(update.message.text.strip()) - 1
+        logger.info("Número recebido: %s, convertido para index: %s", update.message.text, index)
         if index < 0 or index >= len(context.user_data["edit_docs"]):
-            raise ValueError
-    except ValueError:
+            raise ValueError("Número fora do intervalo")
+    except ValueError as e:
+        logger.error("Erro ao processar número em /editar: %s", e)
         await update.message.reply_text("😅 Número inválido! Escolhe um da lista, tipo '1'.")
         return EDIT_RECORD
+    
     context.user_data["edit_index"] = index
     category = context.user_data["edit_category"]
+    logger.info("Selecionado index %s na categoria %s", index, category)
+    
     if category == "followup":
         options = [
             [InlineKeyboardButton("Cliente", callback_data="edit_field:cliente")],
@@ -1031,6 +1037,7 @@ async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_T
         ]
     reply_markup = InlineKeyboardMarkup(options)
     await update.message.reply_text("📝 O que você quer mudar nesse registro?", reply_markup=reply_markup)
+    logger.info("Enviada solicitação de campo para editar")
     return EDIT_FIELD
 
 async def editar_field_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1291,6 +1298,7 @@ async def filtrar_value_callback(update: Update, context: ContextTypes.DEFAULT_T
 
 async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     value = update.message.text.strip()
+    logger.info("Valor recebido para filtrar: %s, chat_id: %s", value, update.message.chat.id)
     await filtrar_execute(update, context, value)
     return ConversationHandler.END
 
@@ -1345,6 +1353,7 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
     category = context.user_data["filter_category"]
     filter_type = context.user_data["filter_type"]
     chat_id = str(update.effective_chat.id)
+    logger.info("Executando filtro: category=%s, filter_type=%s, value=%s", category, filter_type, value)
     try:
         if category == "followup":
             col = db.collection("users").document(chat_id).collection("followups")
@@ -1365,6 +1374,7 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
                     docs = col.where(filter=FieldFilter(filter_type, ">=", start_date.isoformat()))\
                               .where(filter=FieldFilter(filter_type, "<=", end_date.isoformat())).limit(50).stream()
                 except ValueError:
+                    logger.error("Erro no formato de intervalo de data: %s", value)
                     await update.effective_message.reply_text("😅 Data errada! Usa assim: 01/04/2025 a 10/04/2025")
                     return
             else:
@@ -1372,6 +1382,7 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
                     date = datetime.strptime(value, "%d/%m/%Y").date()
                     docs = col.where(filter=FieldFilter(filter_type, "==", date.isoformat())).limit(50).stream()
                 except ValueError:
+                    logger.error("Erro no formato de data: %s", value)
                     await update.effective_message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
                     return
         else:
@@ -1379,6 +1390,7 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
         
         docs_list = list(docs)
         if not docs_list:
+            logger.info("Nenhum resultado encontrado para o filtro")
             await update.effective_message.reply_text(f"😕 Não achei nada em {prefix.lower()} com esse filtro.")
             return
         
@@ -1401,11 +1413,8 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
                 msg += f"{i}. {data.get('empresa', 'Sem empresa')}, {data_fmt}, {data.get('classificacao', 'Sem classificação')}\n"
             else:
                 msg += f"{i}. {data.get('cliente', 'Sem cliente')}, {data.get('resumo', 'Sem resumo')[:20]}...\n"
-        try:
-            await update.effective_message.reply_text(msg, parse_mode="Markdown")
-        except (BadRequest, NetworkError, TimedOut) as e:
-            logger.error("Erro ao enviar resultado do filtro: %s", e)
-            await update.effective_message.reply_text("😅 Deu um erro ao mostrar os resultados. Tenta de novo?")
+        logger.info("Resultados encontrados: %d", len(docs_list))
+        await update.effective_message.reply_text(msg, parse_mode="Markdown")
     except Exception as e:
         logger.error("Erro ao executar filtro: %s", e)
         await update.effective_message.reply_text("😅 Deu um erro ao buscar. Tenta de novo?")
@@ -1740,10 +1749,16 @@ def main() -> None:
         entry_points=[CommandHandler("editar", editar_start)],
         states={
             EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
-            EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)]
+            EDIT_FIELD: [CallbackQueryHandler(editar_field_callback, pattern="^edit_field:")],
+            EDIT_NEW_VALUE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received),
+                CallbackQueryHandler(editar_value_callback, pattern="^edit_value:")
+            ]
         },
-        fallbacks=[CommandHandler("cancelar", editar_cancel)]
+        fallbacks=[CommandHandler("cancelar", editar_cancel)],
+        conversation_timeout=300  # Timeout de 5 minutos
     )
+
     app.add_handler(editar_conv)
     app.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
     app.add_handler(CallbackQueryHandler(editar_field_callback, pattern="^edit_field:"))
@@ -1767,7 +1782,8 @@ def main() -> None:
         states={
             FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
         },
-        fallbacks=[CommandHandler("cancelar", filtrar_cancel)]
+        fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
+        conversation_timeout=300
     )
     app.add_handler(filtrar_conv)
     app.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
