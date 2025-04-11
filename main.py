@@ -1439,8 +1439,13 @@ def main():
     editar_handler = ConversationHandler(
         entry_points=[CommandHandler("editar", editar_start)],
         states={
+            EDIT_CATEGORY: [CallbackQueryHandler(editar_category_callback, pattern="^edit_category:")],
             EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
-            EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)],
+            EDIT_FIELD: [CallbackQueryHandler(editar_field_callback, pattern="^edit_field:")],
+            EDIT_NEW_VALUE: [
+                CallbackQueryHandler(editar_value_callback, pattern="^edit_value:"),
+                MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received)
+            ],
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
     )
