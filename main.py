@@ -1098,6 +1098,36 @@ async def exportar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await update.message.reply_text("Exportação cancelada.")
     return ConversationHandler.END
 
+# Fluxo de consulta follow up
+async def listar_pendentes(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.chat.id)
+    try:
+        followups = db.collection("users").document(chat_id).collection("followups")\
+            .where(filter=FieldFilter("status", "==", "pendente"))\
+            .order_by("data_follow")\
+            .stream()
+
+        followups_list = list(followups)
+        if not followups_list:
+            await update.message.reply_text("✅ Você não possui follow-ups pendentes!")
+            return
+
+        mensagem = "📋 *Follow-ups Pendentes*:\n\n"
+        for i, doc in enumerate(followups_list, 1):
+            data = doc.to_dict()
+            cliente = data.get("cliente", "Cliente não informado")
+            data_follow = data.get("data_follow", "Data não informada")
+            try:
+                data_fmt = datetime.fromisoformat(data_follow).strftime("%d/%m/%Y")
+            except:
+                data_fmt = data_follow
+            mensagem += f"{i}. {cliente} – agendado para {data_fmt}\n"
+
+        await update.message.reply_text(mensagem, parse_mode="Markdown")
+
+    except Exception as e:
+        await update.message.reply_text("Erro ao buscar follow-ups pendentes: " + str(e))
+
 # Jobs Diários
 async def daily_reminder_callback(context: ContextTypes.DEFAULT_TYPE) -> None:
     try:
@@ -1177,15 +1207,6 @@ async def confirm_followup_callback(update: Update, context: ContextTypes.DEFAUL
         logger.error("Erro ao confirmar follow-up: %s", e)
         await query.edit_message_text(text="Erro ao confirmar follow-up.")
 
-# Teste de Avisos
-async def test_daily_reminder(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await daily_reminder_callback(context)
-    await update.message.reply_text("Teste de lembrete de follow-up executado.")
-
-async def test_evening_summary(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await evening_summary_callback(context)
-    await update.message.reply_text("Teste de resumo noturno executado.")
-
 # Error Handler
 async def error_handler(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
     logger.error("Exception while handling an update: %s", context.error)
@@ -1202,10 +1223,7 @@ async def main():
     # Comandos Básicos
     application.add_handler(CommandHandler("inicio", inicio))
     application.add_handler(CommandHandler("ajuda", ajuda))
-
-    # Comandos de Teste de Avisos
-    application.add_handler(CommandHandler("test_daily_reminder", test_daily_reminder))
-    application.add_handler(CommandHandler("test_evening_summary", test_evening_summary))
+    application.add_handler(CommandHandler("pendentes", listar_pendentes))
 
     # Handler para Follow-up
     followup_conv_handler = ConversationHandler(
