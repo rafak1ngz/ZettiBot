@@ -908,7 +908,7 @@ async def editar_start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> in
     await update.message.reply_text("📝 Opa, o que você quer ajustar?", reply_markup=reply_markup)
     return EDIT_CATEGORY
 
-async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     category = query.data.split(":", 1)[1]
@@ -926,7 +926,7 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
     docs = list(col.stream())
     if not docs:
         await query.edit_message_text(f"😕 Não achei nada em {prefix.lower()}. Registre algo antes!")
-        return
+        return ConversationHandler.END
     context.user_data["edit_docs"] = [(doc.id, doc.to_dict()) for doc in docs]
     msg = f"{prefix}:\n"
     for i, (_, data) in enumerate(context.user_data["edit_docs"][:10], 1):
@@ -947,8 +947,9 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
         else:
             msg += f"{i}. {data.get('cliente', 'Sem cliente')}, {data.get('resumo', 'Sem resumo')[:20]}...\n"
     msg += "\nQual número você quer editar? (Ex.: 1)"
-    await query.edit_message_text(msg, parse_mode="Markdown")
+    await query.edit_message_text(msg)
     await query.message.reply_text("Digite o número do registro:")
+    return EDIT_RECORD
 
 async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     try:
@@ -985,7 +986,7 @@ async def editar_record_received(update: Update, context: ContextTypes.DEFAULT_T
     await update.message.reply_text("📝 O que você quer mudar nesse registro?", reply_markup=reply_markup)
     return EDIT_FIELD
 
-async def editar_field_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def editar_field_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     field = query.data.split(":", 1)[1]
@@ -997,7 +998,6 @@ async def editar_field_callback(update: Update, context: ContextTypes.DEFAULT_TY
         ]
         reply_markup = InlineKeyboardMarkup(options)
         await query.edit_message_text("📝 Novo status:", reply_markup=reply_markup)
-        return
     elif field == "classificacao":
         options = [
             [InlineKeyboardButton("Potencial Cliente", callback_data="edit_value:Potencial Cliente"),
@@ -1013,25 +1013,25 @@ async def editar_field_callback(update: Update, context: ContextTypes.DEFAULT_TY
         ]
         reply_markup = InlineKeyboardMarkup(options)
         await query.edit_message_text("📝 Nova classificação:", reply_markup=reply_markup)
-        return
     elif field in ["data_follow", "data_visita", "followup"]:
         await query.edit_message_text("📅 Digite a nova data (Ex.: 10/04/2025):")
     else:
         await query.edit_message_text(f"📝 Digite o novo valor para '{field}':")
-    await query.message.reply_text("Qual o novo valor?")
+    return EDIT_NEW_VALUE
 
-async def editar_value_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def editar_value_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     query = update.callback_query
     await query.answer()
     new_value = query.data.split(":", 1)[1]
     await editar_save(update, context, new_value)
+    return ConversationHandler.END
 
 async def editar_new_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     new_value = update.message.text.strip()
     await editar_save(update, context, new_value)
     return ConversationHandler.END
 
-async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_value: str):
+async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_value: str) -> int:
     category = context.user_data["edit_category"]
     index = context.user_data["edit_index"]
     field = context.user_data["edit_field"]
@@ -1045,7 +1045,6 @@ async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_va
         col = db.collection("users").document(chat_id).collection("interacoes")
     try:
         if field in ["data_follow", "data_visita", "followup"]:
-            datetime.strptime(new_value, "%d/%m/%Y")
             new_value = datetime.strptime(new_value, "%d/%m/%Y").date().isoformat()
         col.document(doc_id).update({field: new_value})
         await update.effective_message.reply_text("✅ Registro atualizado! Tô orgulhoso, parceiro!")
@@ -1054,6 +1053,7 @@ async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_va
         return EDIT_NEW_VALUE
     except Exception as e:
         await update.effective_message.reply_text(f"😅 Erro ao salvar: {str(e)}")
+        return ConversationHandler.END
     return ConversationHandler.END
 
 async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
