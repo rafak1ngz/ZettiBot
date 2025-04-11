@@ -1508,13 +1508,20 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
     hoje = now.date().isoformat()
     logger.info("Iniciando lembrete_diario às %s", now.strftime("%H:%M:%S"))
     try:
-        users = db.collection("users").limit(50).stream()  # Limite de 50 usuários por vez
+        users = list(db.collection("users").limit(50).stream())
+        logger.info("Encontrados %d usuários na coleção 'users'", len(users))
+        
+        if not users:
+            logger.warning("Nenhum usuário encontrado na coleção 'users'")
+            return  # Sem usuários, apenas loga e sai
+        
         for user in users:
             chat_id = user.id
             logger.info("Processando usuário %s", chat_id)
             try:
                 followups = list(db.collection("users").document(chat_id).collection("followups")
                                 .where(filter=FieldFilter("data_follow", "==", hoje)).limit(10).stream())
+                logger.info("Encontrados %d follow-ups para %s", len(followups), chat_id)
                 pendentes = [f for f in followups if f.to_dict().get("status") == "pendente"]
                 realizados = [f for f in followups if f.to_dict().get("status") == "realizado"]
 
@@ -1531,7 +1538,7 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                     else:
                         msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
                 
-                elif now.hour == 15:
+                elif now.hour == 15 and now.minute == 16:  # Alterado para 15:10
                     if pendentes:
                         msg = "🍲 *Hora do almoço!* Ainda tem follow-ups pendentes:\n"
                         for i, f in enumerate(pendentes[:5], 1):
@@ -1571,10 +1578,10 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                         msg = "🌙 *Fim do dia!* Tudo em dia, parabéns, parceiro!"
                 
                 else:
-                    logger.info("Horário %s não configurado para envio, ignorando", now.hour)
-                    continue  # Pula para o próximo usuário se o horário não for reconhecido
+                    logger.info("Horário %s:%s não configurado para envio, ignorando", now.hour, now.minute)
+                    continue
 
-                if msg:  # Só envia se houver mensagem
+                if msg:
                     logger.info("Enviando lembrete para chat_id %s: %s", chat_id, msg[:50] + "...")
                     await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
                 else:
@@ -1820,7 +1827,7 @@ def main() -> None:
 
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=15, minute=0, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=15, minute=16, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
