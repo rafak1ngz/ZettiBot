@@ -1733,9 +1733,9 @@ async def atrasados(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
             options.append([
-                InlineKeyboardButton(f"Atrasado #{i}: Feito", callback_data=f"atrasado_done:{f.id}"),
-                InlineKeyboardButton(f"Atrasado #{i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
-                InlineKeyboardButton(f"Atrasado #{i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+                InlineKeyboardButton(f"✅ #{i}", callback_data=f"atrasado_done:{f.id}"),
+                InlineKeyboardButton(f"📅 #{i}", callback_data=f"atrasado_reagendar:{f.id}"),
+                InlineKeyboardButton(f"🗑️ #{i}", callback_data=f"atrasado_excluir:{f.id}")
             ])
         
         reply_markup = InlineKeyboardMarkup(options)
