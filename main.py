@@ -1684,32 +1684,47 @@ async def handle_atrasado_reagendar(update: Update, context: ContextTypes.DEFAUL
     await query.message.reply_text("📅 Qual a nova data para esse follow-up? (Ex.: 15/04/2025)")
     return "REAGENDAR_DATA"
 
-async def reagendar_data_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def reagendar_data_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     chat_id = str(update.message.chat.id)
     followup_id = context.user_data.get("reagendar_followup_id")
+    
     if not followup_id:
         logger.error("Nenhum followup_id encontrado para reagendamento em chat_id %s", chat_id)
         await update.message.reply_text("😅 Algo deu errado. Tenta reagendar de novo?")
         return ConversationHandler.END
     
     nova_data = update.message.text.strip()
+    logger.info("Recebida nova data '%s' para follow-up %s em chat_id %s", nova_data, followup_id, chat_id)
+    
     try:
         data_obj = datetime.strptime(nova_data, "%d/%m/%Y")
         data_iso = data_obj.date().isoformat()
+        
+        # Verificar se o follow-up existe antes de atualizar
         followup_ref = db.collection("users").document(chat_id).collection("followups").document(followup_id)
+        if not followup_ref.get().exists:
+            logger.error("Follow-up %s não encontrado para chat_id %s", followup_id, chat_id)
+            await update.message.reply_text("😅 Esse follow-up não existe mais. Tenta outro?")
+            return ConversationHandler.END
+        
+        # Atualizar o follow-up
         followup_ref.update({
             "data_follow": data_iso,
             "status": "pendente"
         })
         logger.info("Follow-up %s reagendado para %s para chat_id %s", followup_id, data_iso, chat_id)
         await update.message.reply_text(f"✅ Follow-up reagendado para {nova_data}!")
+        # Limpar user_data
+        context.user_data.pop("reagendar_followup_id", None)
         return ConversationHandler.END
+    
     except ValueError:
         logger.error("Formato de data inválido '%s' para chat_id %s", nova_data, chat_id)
         await update.message.reply_text("😅 Formato de data inválido. Usa DD/MM/AAAA, tipo 15/04/2025.")
-        return "REAGENDAR_DATA"
+        return REAGENDAR_DATA
+    
     except Exception as e:
-        logger.error("Erro ao reagendar follow-up para %s: %s", chat_id, e)
+        logger.error("Erro ao reagendar follow-up %s para chat_id %s: %s", followup_id, chat_id, str(e))
         await update.message.reply_text("😅 Deu um erro ao reagendar. Tenta de novo?")
         return ConversationHandler.END
 
@@ -1858,7 +1873,7 @@ def main() -> None:
     # Handlers para atrasados
     app.add_handler(CallbackQueryHandler(handle_atrasado_done, pattern="^atrasado_done:"))
     app.add_handler(CallbackQueryHandler(handle_atrasado_excluir, pattern="^atrasado_excluir:"))
-    app.add_handler(CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:"))
+    # Mover handle_atrasado_reagendar para o ConversationHandler
 
     # Handlers de comandos simples
     app.add_handler(CommandHandler("inicio", inicio))
@@ -1869,7 +1884,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(quem_visitar_callback, pattern="^quemvisitar_done:"))
 
     # Handler para callback de lembretes diários
-    app.add_handler(CallbackQueryHandler(handle_daily_done, pattern="^daily_done:"))
+    app.add_handler(CallbackQueryHandler(daily_done_callback, pattern="^daily_done:"))
 
     # Conversação para Follow-up
     followup_conv = ConversationHandler(
@@ -2014,7 +2029,7 @@ def main() -> None:
     )
     app.add_handler(criarrota_conv)
 
-    # ConversationHandler para reagendamento
+    # Conversação para Reagendamento
     reagendar_conv = ConversationHandler(
         entry_points=[CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:")],
         states={
@@ -2031,7 +2046,6 @@ def main() -> None:
     # Adicionar comando de teste
     app.add_handler(CommandHandler("testar_relatorios", testar_relatorios))
 
-
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=7, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=30, tzinfo=TIMEZONE))
@@ -2042,6 +2056,3 @@ def main() -> None:
 
     logger.info("Bot iniciado com sucesso!")
     app.run_polling()
-
-if __name__ == "__main__":
-    main()
