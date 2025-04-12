@@ -436,28 +436,24 @@ async def criarrota_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -
 
 # Comando /inicio
 async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    msg = (
-        "E aí, parceiro! 🚀 Bem-vindo ao *ZettiBot*, seu ajudante pra turbinar as vendas!\n"
-        "Tô aqui pra organizar seus follow-ups, visitas e muito mais. Quer dar um gás?\n"
-        "• /ajuda – Veja tudo que posso fazer\n"
-        "• /followup – Planeje um contato\n"
-        "• /visita – Registre uma visita\n"
-        "• /interacao – Anote uma conversa\n"
-        "• /lembrete – Não esqueça de nada\n"
-        "• /relatorio – Resumo das suas ações\n"
-        "• /historico – Veja tudo que rolou\n"
-        "• /editar – Ajuste algo\n"
-        "• /excluir – Apague um registro\n"
-        "• /filtrar – Ache o que precisa\n"
-        "• /buscapotenciais – Encontre novos clientes\n"
-        "• /criarrota – Monte uma rota esperta\n"
-        "• /quemvisitar – Sugestões de quem ver hoje"
+    chat_id = str(update.effective_chat.id)
+    logger.info("Comando /inicio recebido de chat_id %s", chat_id)
+    
+    # Verifica se o usuário já está registrado no Firestore
+    user_ref = db.collection("users").document(chat_id)
+    if not user_ref.get().exists:
+        # Registra o usuário com o chat_id como ID do documento
+        user_ref.set({"criado_em": datetime.now(TIMEZONE).isoformat()})
+        logger.info("Novo usuário registrado: %s", chat_id)
+    else:
+        logger.info("Usuário %s já registrado", chat_id)
+    
+    await update.message.reply_text(
+        "👋 *Bem-vindo ao ZettiBot, parceiro!* Estou aqui pra te ajudar a organizar visitas, follow-ups e interações.\n\n"
+        "Usa /visita pra registrar uma visita, /followup pra adicionar um follow-up ou /interacao pra uma interação.\n"
+        "Quer ver quem visitar hoje? É só dizer /quemvisitar!",
+        parse_mode="Markdown"
     )
-    try:
-        await update.message.reply_text(msg, parse_mode="Markdown")
-        logger.info("Comando /inicio executado por %s", update.message.chat.id)
-    except (BadRequest, NetworkError, TimedOut) as e:
-        logger.error("Erro ao executar /inicio: %s", e)
 
 # Comando /ajuda
 async def ajuda(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1513,7 +1509,7 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
         
         if not users:
             logger.warning("Nenhum usuário encontrado na coleção 'users'")
-            return  # Sem usuários, apenas loga e sai
+            return
         
         for user in users:
             chat_id = user.id
@@ -1538,7 +1534,7 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                     else:
                         msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
                 
-                elif now.hour == 15 and now.minute == 16:  # Alterado para 15:10
+                elif now.hour == 21 and now.minute == 15:
                     if pendentes:
                         msg = "🍲 *Hora do almoço!* Ainda tem follow-ups pendentes:\n"
                         for i, f in enumerate(pendentes[:5], 1):
@@ -1827,7 +1823,7 @@ def main() -> None:
 
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=15, minute=16, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=21, minute=15, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
