@@ -442,7 +442,6 @@ async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Verifica se o usuário já está registrado no Firestore
     user_ref = db.collection("users").document(chat_id)
     if not user_ref.get().exists:
-        # Registra o usuário com o chat_id como ID do documento
         user_ref.set({"criado_em": datetime.now(TIMEZONE).isoformat()})
         logger.info("Novo usuário registrado: %s", chat_id)
     else:
@@ -451,7 +450,8 @@ async def inicio(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "👋 *Bem-vindo ao ZettiBot, parceiro!* Estou aqui pra te ajudar a organizar visitas, follow-ups e interações.\n\n"
         "Usa /visita pra registrar uma visita, /followup pra adicionar um follow-up ou /interacao pra uma interação.\n"
-        "Quer ver quem visitar hoje? É só dizer /quemvisitar!",
+        "Quer ver quem visitar hoje? É só dizer /quemvisitar!\n\n"
+        "📖 Não sabe por onde começar? Digita /ajuda pra ver todos os comandos disponíveis!",
         parse_mode="Markdown"
     )
 
@@ -1499,10 +1499,11 @@ async def quem_visitar_callback(update: Update, context: ContextTypes.DEFAULT_TY
         await query.edit_message_text("😅 Deu um erro ao atualizar. Tenta de novo?")
 
 # Lembretes Diários e Semanais Otimizados
-async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
+async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = None, force_minute: int = None) -> None:
     now = datetime.now(TIMEZONE)
     hoje = now.date().isoformat()
-    logger.info("Iniciando lembrete_diario às %s", now.strftime("%H:%M:%S"))
+    logger.info("Iniciando lembrete_diario às %s (force_hour=%s, force_minute=%s)", 
+               now.strftime("%H:%M:%S"), force_hour, force_minute)
     try:
         users = list(db.collection("users").limit(50).stream())
         logger.info("Encontrados %d usuários na coleção 'users'", len(users))
@@ -1523,29 +1524,35 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
 
                 msg = None
                 reply_markup = None
-                if now.hour == 8:
+                # Usar force_hour/force_minute se fornecidos, senão usar now.hour/now.minute
+                check_hour = force_hour if force_hour is not None else now.hour
+                check_minute = force_minute if force_minute is not None else now.minute
+
+                if check_hour == 8:
                     if pendentes:
                         msg = "☀️ *Bom dia, parceiro!* Hoje tem follow-up na área:\n"
                         for i, f in enumerate(pendentes[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
+                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] 
+                                  for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                     else:
                         msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
                 
-                elif now.hour == 21 and now.minute == 15:
+                elif check_hour == 12:
                     if pendentes:
                         msg = "🍲 *Hora do almoço!* Ainda tem follow-ups pendentes:\n"
                         for i, f in enumerate(pendentes[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
+                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] 
+                                  for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                     else:
                         msg = "🍲 *Hora do almoço!* Sem follow-ups pendentes, tá de boa!"
                 
-                elif now.hour == 17:
+                elif check_hour == 17:
                     visitas = list(db.collection("users").document(chat_id).collection("visitas")
                                   .where(filter=FieldFilter("data_visita", "==", hoje)).limit(10).stream())
                     interacoes = list(db.collection("users").document(chat_id).collection("interacoes")
@@ -1559,22 +1566,24 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                         for i, f in enumerate(pendentes[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
+                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] 
+                                  for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                 
-                elif now.hour == 23:
+                elif check_hour == 23:
                     if pendentes:
                         msg = "🌙 *Fim do dia!* Ainda tem pendentes:\n"
                         for i, f in enumerate(pendentes[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:30]}...\n"
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] for i, f in enumerate(pendentes[:5], 1)]
+                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")] 
+                                  for i, f in enumerate(pendentes[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                     else:
                         msg = "🌙 *Fim do dia!* Tudo em dia, parabéns, parceiro!"
                 
                 else:
-                    logger.info("Horário %s:%s não configurado para envio, ignorando", now.hour, now.minute)
+                    logger.info("Horário %s:%s não configurado para envio, ignorando", check_hour, check_minute)
                     continue
 
                 if msg:
@@ -1590,6 +1599,19 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logger.error("Erro ao processar lembrete diário para %s: %s", chat_id, e)
     except Exception as e:
         logger.error("Erro geral no lembrete diário: %s", e)
+
+async def testar_relatorios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.effective_chat.id)
+    logger.info("Comando /testar_relatorios recebido de chat_id %s", chat_id)
+    
+    # Simula cada horário
+    horarios = [(8, 0), (12, 0), (17, 30), (23, 0)]
+    for hour, minute in horarios:
+        logger.info("Simulando lembrete_diario para %d:%d", hour, minute)
+        await lembrete_diario(context, force_hour=hour, force_minute=minute)
+        await asyncio.sleep(1)  # Pequeno atraso entre simulações
+    
+    await update.message.reply_text("✅ Teste concluído! Verifique os relatórios enviados.")
 
 async def lembrete_semanal(context: ContextTypes.DEFAULT_TYPE) -> None:
     now = datetime.now(TIMEZONE)
@@ -1821,9 +1843,13 @@ def main() -> None:
     )
     app.add_handler(criarrota_conv)
 
+    # Adicionar comando de teste
+    app.add_handler(CommandHandler("testar_relatorios", testar_relatorios))
+
+
     # Agendamento de Jobs Otimizados
     app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=21, minute=15, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=00, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=23, minute=0, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
