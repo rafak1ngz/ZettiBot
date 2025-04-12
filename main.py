@@ -2042,6 +2042,7 @@ def main() -> None:
         excluir_conv = ConversationHandler(
             entry_points=[CommandHandler("excluir", excluir_start)],
             states={
+                DELETE_CATEGORY: [CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:")],
                 DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)]
             },
             fallbacks=[CommandHandler("cancelar", excluir_cancel)]
@@ -2053,7 +2054,10 @@ def main() -> None:
         filtrar_conv = ConversationHandler(
             entry_points=[CommandHandler("filtrar", filtrar_start)],
             states={
-                FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
+                FILTER_CATEGORY: [CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:")],
+                FILTER_TYPE: [CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:")],
+                FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received),
+                            CallbackQueryHandler(filtrar_value_callback, pattern="^filter_value:")]
             },
             fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
             conversation_timeout=300
