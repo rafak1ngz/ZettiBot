@@ -38,20 +38,26 @@ logger = logging.getLogger("__main__")
 logging.getLogger("httpx").setLevel(logging.WARNING)
 
 # Inicialização do Firebase
+logger.info("Verificando TELEGRAM_TOKEN")
 if not os.environ.get("TELEGRAM_TOKEN"):
     logger.error("TELEGRAM_TOKEN não definido!")
     exit(1)
+logger.info("Verificando FIREBASE_CREDENTIALS")
 if not os.environ.get("FIREBASE_CREDENTIALS"):
     logger.error("FIREBASE_CREDENTIALS não definida!")
     exit(1)
 
+logger.info("Inicializando Firebase")
 firebase_credentials = os.environ.get("FIREBASE_CREDENTIALS")
 try:
     cred_dict = json.loads(firebase_credentials)
+    logger.info("Credenciais Firebase parseadas")
     cred = credentials.Certificate(cred_dict)
+    logger.info("Certificado Firebase criado")
     firebase_admin.initialize_app(cred)
+    logger.info("Firebase app inicializado")
     db = firestore.client()
-    logger.info("Firebase inicializado com sucesso!")
+    logger.info("Cliente Firestore criado")
 except Exception as e:
     logger.error("Erro ao inicializar Firebase: %s", e)
     exit(1)
@@ -108,11 +114,18 @@ def exportar_csv(docs):
         raise
 
 # Configuração do Google Maps
+logger.info("Verificando GOOGLE_API_KEY")
 GOOGLE_API_KEY = os.environ.get("GOOGLE_API_KEY")
 if not GOOGLE_API_KEY:
     logger.error("GOOGLE_API_KEY não definida!")
     exit(1)
-gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
+logger.info("Inicializando Google Maps")
+try:
+    gmaps = googlemaps.Client(key=GOOGLE_API_KEY)
+    logger.info("Cliente Google Maps criado")
+except Exception as e:
+    logger.error("Erro ao inicializar Google Maps: %s", e)
+    exit(1)
 
 # Função para buscar clientes no Google Maps com cache
 def buscar_potenciais_clientes_google(localizacao, tipo_cliente, raio_km=10, chat_id=None):
@@ -2096,3 +2109,7 @@ def main() -> None:
         logger.info("Polling iniciado com sucesso")
     except Exception as e:
         logger.error("Erro no polling: %s", e)
+
+if __name__ == "__main__":
+    logger.info("Chamando função main()")
+    main()
