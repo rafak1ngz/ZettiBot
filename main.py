@@ -1304,53 +1304,6 @@ async def filtrar_category_callback(update: Update, context: ContextTypes.DEFAUL
     reply_markup = InlineKeyboardMarkup(options)
     await query.edit_message_text("🔍 Como você quer filtrar?", reply_markup=reply_markup)
 
-async def filtrar_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    filter_type = query.data.split(":", 1)[1]
-    context.user_data["filter_type"] = filter_type
-    if filter_type == "status":
-        options = [
-            [InlineKeyboardButton("Pendente", callback_data="filter_value:Pendente")],
-            [InlineKeyboardButton("Realizado", callback_data="filter_value:Realizado")]
-        ]
-        reply_markup = InlineKeyboardMarkup(options)
-        await query.edit_message_text("🔍 Qual status?", reply_markup=reply_markup)
-        return
-    elif filter_type == "classificacao":
-        options = [
-            [InlineKeyboardButton("Potencial Cliente", callback_data="filter_value:Potencial Cliente"),
-             InlineKeyboardButton("Cliente Ativo", callback_data="filter_value:Cliente Ativo")],
-            [InlineKeyboardButton("Cliente Inativo", callback_data="filter_value:Cliente Inativo"),
-             InlineKeyboardButton("Cliente Novo", callback_data="filter_value:Cliente Novo")],
-            [InlineKeyboardButton("Cliente de Aluguel", callback_data="filter_value:Cliente de Aluguel"),
-             InlineKeyboardButton("Cliente de Venda", callback_data="filter_value:Cliente de Venda")],
-            [InlineKeyboardButton("Cliente de Manutenção", callback_data="filter_value:Cliente de Manutenção")],
-            [InlineKeyboardButton("Cliente em Negociação", callback_data="filter_value:Cliente em Negociação")],
-            [InlineKeyboardButton("Cliente Perdido", callback_data="filter_value:Cliente Perdido")],
-            [InlineKeyboardButton("Sem Interesse", callback_data="filter_value:Sem Interesse")]
-        ]
-        reply_markup = InlineKeyboardMarkup(options)
-        await query.edit_message_text("🔍 Qual classificação?", reply_markup=reply_markup)
-        return
-    elif filter_type in ["data_follow", "data_visita"]:
-        await query.edit_message_text("📅 Digite a data ou intervalo (Ex.: 10/04/2025 ou 01/04/2025 a 10/04/2025):")
-    else:
-        await query.edit_message_text(f"🔍 Digite o que quer buscar em '{filter_type}':")
-    await query.message.reply_text("Qual o valor pra buscar?")
-
-async def filtrar_value_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    query = update.callback_query
-    await query.answer()
-    value = query.data.split(":", 1)[1]
-    await filtrar_execute(update, context, value)
-
-async def filtrar_value_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    value = update.message.text.strip()
-    logger.info("Valor recebido para filtrar: %s, chat_id: %s", value, update.message.chat.id)
-    await filtrar_execute(update, context, value)
-    return ConversationHandler.END
-
 # Fluxo de Filtragem (continuação)
 async def filtrar_type_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     query = update.callback_query
