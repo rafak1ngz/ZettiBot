@@ -1449,7 +1449,7 @@ async def quem_visitar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             if len(descricao) > 100:
                 descricao = descricao[:100] + "..."
             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data_fmt} - {descricao}\n"
-            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"quemvisitar_done:{doc.id}")])
+            options.append([InlineKeyboardButton(f"Marcar follow up #{i} como feito", callback_data=f"quemvisitar_done:{doc.id}")])
         
         # Verificar o limite de caracteres do Telegram (4096)
         if len(msg) > 4096:
@@ -1516,14 +1516,12 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
             chat_id = user.id
             logger.info("Processando usuário %s", chat_id)
             try:
-                # Buscar follow-ups pendentes do dia atual
                 followups_hoje = list(db.collection("users").document(chat_id).collection("followups")
                                      .where(filter=FieldFilter("data_follow", "==", hoje))
                                      .where(filter=FieldFilter("status", "==", "pendente")).limit(10).stream())
-                # Buscar follow-ups atrasados (data anterior a hoje e status pendente)
                 followups_atrasados = list(db.collection("users").document(chat_id).collection("followups")
                                           .where(filter=FieldFilter("data_follow", "<", hoje))
-                                          .where(filter=FieldFilter("status", "==", "pendente")).limit(10).stream())
+                                          .where(filter=FieldFilter("status", "in", ["pendente", "atrasado"])).limit(10).stream())
                 
                 pendentes_hoje = [f for f in followups_hoje]
                 pendentes_atrasados = [f for f in followups_atrasados]
@@ -1555,8 +1553,15 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                     if not pendentes_hoje and not pendentes_atrasados:
                         msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
                     else:
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")]
-                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
+                        options = []
+                        for i, f in enumerate(pendentes_hoje[:5], 1):
+                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
+                        for i, f in enumerate(pendentes_atrasados[:5], 1):
+                            options.append([
+                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+                            ])
                         reply_markup = InlineKeyboardMarkup(options)
                 
                 elif check_hour == 15 and check_minute == 10:
@@ -1575,8 +1580,15 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                     if not pendentes_hoje and not pendentes_atrasados:
                         msg = "🍲 *Tarde na área!* Sem follow-ups pendentes, tá de boa!"
                     else:
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")]
-                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
+                        options = []
+                        for i, f in enumerate(pendentes_hoje[:5], 1):
+                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
+                        for i, f in enumerate(pendentes_atrasados[:5], 1):
+                            options.append([
+                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+                            ])
                         reply_markup = InlineKeyboardMarkup(options)
                 
                 elif check_hour == 17:
@@ -1599,9 +1611,16 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                             data = f.to_dict()
                             data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if pendentes_hoje:
-                        options = [[InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")]
-                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
+                    if pendentes_hoje or pendentes_atrasados:
+                        options = []
+                        for i, f in enumerate(pendentes_hoje[:5], 1):
+                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
+                        for i, f in enumerate(pendentes_atrasados[:5], 1):
+                            options.append([
+                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
+                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+                            ])
                         reply_markup = InlineKeyboardMarkup(options)
                 
                 else:
@@ -1609,6 +1628,8 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                     continue
 
                 if msg:
+                    if len(msg) > 4000:
+                        msg = msg[:4000] + "..."
                     logger.info("Enviando lembrete para chat_id %s: %s", chat_id, msg[:50] + "...")
                     await context.bot.send_message(chat_id, msg, parse_mode="Markdown", reply_markup=reply_markup)
                 else:
@@ -1653,6 +1674,107 @@ async def marcar_atrasados(context: ContextTypes.DEFAULT_TYPE) -> None:
                 logger.error("Erro ao processar atrasados para %s: %s", chat_id, e)
     except Exception as e:
         logger.error("Erro geral no marcar_atrasados: %s", e)
+
+async def handle_atrasado_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    followup_id = query.data.split(":")[1]
+    chat_id = str(query.message.chat.id)
+    
+    try:
+        followup_ref = db.collection("users").document(chat_id).collection("followups").document(followup_id)
+        followup_ref.update({"status": "realizado"})
+        logger.info("Follow-up %s marcado como realizado para chat_id %s", followup_id, chat_id)
+        await query.edit_message_text("✅ Follow-up atrasado marcado como realizado!")
+    except Exception as e:
+        logger.error("Erro ao marcar follow-up atrasado como realizado para %s: %s", chat_id, e)
+        await query.edit_message_text("😅 Deu um erro ao marcar como realizado. Tenta de novo?")
+
+async def handle_atrasado_excluir(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    followup_id = query.data.split(":")[1]
+    chat_id = str(query.message.chat.id)
+    
+    try:
+        followup_ref = db.collection("users").document(chat_id).collection("followups").document(followup_id)
+        followup_ref.delete()
+        logger.info("Follow-up %s excluído para chat_id %s", followup_id, chat_id)
+        await query.edit_message_text("🗑️ Follow-up atrasado excluído com sucesso!")
+    except Exception as e:
+        logger.error("Erro ao excluir follow-up atrasado para %s: %s", chat_id, e)
+        await query.edit_message_text("😅 Deu um erro ao excluir. Tenta de novo?")
+
+async def handle_atrasado_reagendar(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    followup_id = query.data.split(":")[1]
+    chat_id = str(query.message.chat.id)
+    
+    context.user_data["reagendar_followup_id"] = followup_id
+    logger.info("Iniciando reagendamento de follow-up %s para chat_id %s", followup_id, chat_id)
+    await query.message.reply_text("📅 Qual a nova data para esse follow-up? (Ex.: 15/04/2025)")
+    return "REAGENDAR_DATA"
+
+async def reagendar_data_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.message.chat.id)
+    followup_id = context.user_data.get("reagendar_followup_id")
+    if not followup_id:
+        logger.error("Nenhum followup_id encontrado para reagendamento em chat_id %s", chat_id)
+        await update.message.reply_text("😅 Algo deu errado. Tenta reagendar de novo?")
+        return ConversationHandler.END
+    
+    nova_data = update.message.text.strip()
+    try:
+        data_obj = datetime.strptime(nova_data, "%d/%m/%Y")
+        data_iso = data_obj.date().isoformat()
+        followup_ref = db.collection("users").document(chat_id).collection("followups").document(followup_id)
+        followup_ref.update({
+            "data_follow": data_iso,
+            "status": "pendente"
+        })
+        logger.info("Follow-up %s reagendado para %s para chat_id %s", followup_id, data_iso, chat_id)
+        await update.message.reply_text(f"✅ Follow-up reagendado para {nova_data}!")
+        return ConversationHandler.END
+    except ValueError:
+        logger.error("Formato de data inválido '%s' para chat_id %s", nova_data, chat_id)
+        await update.message.reply_text("😅 Formato de data inválido. Usa DD/MM/AAAA, tipo 15/04/2025.")
+        return "REAGENDAR_DATA"
+    except Exception as e:
+        logger.error("Erro ao reagendar follow-up para %s: %s", chat_id, e)
+        await update.message.reply_text("😅 Deu um erro ao reagendar. Tenta de novo?")
+        return ConversationHandler.END
+
+async def atrasados(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    chat_id = str(update.effective_chat.id)
+    logger.info("Comando /atrasados recebido de chat_id %s", chat_id)
+    
+    try:
+        followups_atrasados = list(db.collection("users").document(chat_id).collection("followups")
+                                  .where(filter=FieldFilter("data_follow", "<", datetime.now(TIMEZONE).date().isoformat()))
+                                  .where(filter=FieldFilter("status", "in", ["pendente", "atrasado"])).limit(10).stream())
+        
+        if not followups_atrasados:
+            await update.message.reply_text("🎉 Nenhum follow-up atrasado! Tudo em dia, parceiro!")
+            return
+        
+        msg = "⏰ *Follow-ups atrasados*:\n"
+        options = []
+        for i, f in enumerate(followups_atrasados[:5], 1):
+            data = f.to_dict()
+            data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
+            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
+            options.append([
+                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
+                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
+                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+            ])
+        
+        reply_markup = InlineKeyboardMarkup(options)
+        await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=reply_markup)
+    except Exception as e:
+        logger.error("Erro ao listar atrasados para %s: %s", chat_id, e)
+        await update.message.reply_text("😅 Deu um erro ao listar atrasados. Tenta de novo?")
 
 async def testar_relatorios(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     chat_id = str(update.effective_chat.id)
@@ -1734,6 +1856,9 @@ async def daily_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error("Erro ao marcar follow-up como feito: %s", e)
         await query.edit_message_text("😅 Deu um erro ao atualizar. Tenta de novo?")
 
+# Estados para o ConversationHandler
+REAGENDAR_DATA = "REAGENDAR_DATA"
+
 # Função Principal
 def main() -> None:
     TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
@@ -1742,6 +1867,11 @@ def main() -> None:
         return
     
     app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+
+    # Handlers para atrasados
+    app.add_handler(CallbackQueryHandler(handle_atrasado_done, pattern="^atrasado_done:"))
+    app.add_handler(CallbackQueryHandler(handle_atrasado_excluir, pattern="^atrasado_excluir:"))
+    app.add_handler(CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:"))
 
     # Handlers de comandos simples
     app.add_handler(CommandHandler("inicio", inicio))
@@ -1896,6 +2026,20 @@ def main() -> None:
         fallbacks=[CommandHandler("cancelar", criarrota_cancel)]
     )
     app.add_handler(criarrota_conv)
+
+    # ConversationHandler para reagendamento
+    reagendar_conv = ConversationHandler(
+        entry_points=[CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:")],
+        states={
+            REAGENDAR_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, reagendar_data_received)],
+        },
+        fallbacks=[CommandHandler("cancelar", lambda u, c: ConversationHandler.END)],
+        conversation_timeout=300
+    )
+    app.add_handler(reagendar_conv)
+
+    # Comando /atrasados
+    app.add_handler(CommandHandler("atrasados", atrasados))
 
     # Adicionar comando de teste
     app.add_handler(CommandHandler("testar_relatorios", testar_relatorios))
