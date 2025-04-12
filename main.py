@@ -64,8 +64,8 @@ except Exception as e:
 
 # Estados para fluxos
 FOLLOWUP_CLIENT, FOLLOWUP_DATE, FOLLOWUP_DESCRIPTION = range(3)
-VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE = range(3, 9)
-INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE = range(4)
+VISIT_COMPANY, VISIT_DATE, VISIT_CATEGORY, VISIT_MOTIVE, VISIT_FOLLOWUP_CHOICE, VISIT_FOLLOWUP_DATE, VISIT_FOLLOWUP_MOTIVO = range(3, 10)
+INTER_CLIENT, INTER_SUMMARY, INTER_FOLLOWUP_CHOICE, INTER_FOLLOWUP_DATE, INTER_FOLLOWUP_MOTIVO = range(4, 9)
 REMINDER_TEXT, REMINDER_DATETIME = range(100, 102)
 REPORT_START, REPORT_END = range(300, 302)
 HIST_START, HIST_END = range(400, 402)
@@ -618,6 +618,12 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
         return VISIT_FOLLOWUP_DATE
     context.user_data["followup_date"] = data_followup.isoformat()
+    await update.message.reply_text("📝 Qual o motivo desse follow-up?")
+    return VISIT_FOLLOWUP_MOTIVO
+
+async def visita_followup_motivo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    logger.info("Registrando motivo do follow-up para visita, chat_id: %s", update.message.chat.id)
+    context.user_data["followup_motivo"] = update.message.text.strip()
     chat_id = str(update.message.chat.id)
     try:
         db.collection("users").document(chat_id).collection("visitas").document().set({
@@ -631,14 +637,15 @@ async def visita_followup_date(update: Update, context: ContextTypes.DEFAULT_TYP
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["company"],
             "data_follow": context.user_data["followup_date"],
-            "descricao": "Follow-up de visita: " + context.user_data["motive"],
+            "descricao": f"Follow-up de visita: {context.user_data['followup_motivo']}",
             "status": "pendente",
             "chat_id": chat_id,
             "criado_em": datetime.now(TIMEZONE).isoformat()
         })
-        await update.message.reply_text("🚀 Visita e follow-up salvos! Tô orgulhoso, parceiro!")
+        logger.info("Visita e follow-up salvos com sucesso para chat_id: %s", chat_id)
+        await update.message.reply_text("🚀 Visita e follow-up salvos com sucesso!")
     except Exception as e:
-        logger.error("Erro ao salvar visita e follow-up: %s", e)
+        logger.error("Erro ao salvar visita e follow-up para chat_id %s: %s", chat_id, e)
         await update.message.reply_text("😅 Deu um erro ao salvar. Tenta de novo?")
     return ConversationHandler.END
 
@@ -693,8 +700,13 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
         return INTER_FOLLOWUP_DATE
     context.user_data["followup_interacao"] = data_follow.isoformat()
+    await update.message.reply_text("📝 Qual o motivo desse follow-up?")
+    return INTER_FOLLOWUP_MOTIVO
+
+async def interacao_followup_motivo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    context.user_data["followup_motivo"] = update.message.text.strip()
+    chat_id = str(update.message.chat.id)
     try:
-        chat_id = str(update.message.chat.id)
         db.collection("users").document(chat_id).collection("interacoes").document().set({
             "cliente": context.user_data["client_interacao"],
             "resumo": context.user_data["resumo_interacao"],
@@ -704,12 +716,12 @@ async def interacao_followup_date(update: Update, context: ContextTypes.DEFAULT_
         db.collection("users").document(chat_id).collection("followups").document().set({
             "cliente": context.user_data["client_interacao"],
             "data_follow": context.user_data["followup_interacao"],
-            "descricao": "Follow-up de interação: " + context.user_data["resumo_interacao"],
+            "descricao": f"Follow-up de interação: {context.user_data['followup_motivo']}",
             "status": "pendente",
             "chat_id": chat_id,
             "criado_em": datetime.now(TIMEZONE).isoformat()
         })
-        await update.message.reply_text("🚀 Interação e follow-up salvos! Mandou bem!")
+        await update.message.reply_text("🚀 Interação e follow-up salvos com sucesso!")
     except Exception as e:
         logger.error("Erro ao salvar interação e follow-up: %s", e)
         await update.message.reply_text("😅 Deu um erro ao salvar. Tenta de novo?")
@@ -965,7 +977,6 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
     category = query.data.split(":", 1)[1]
     context.user_data["edit_category"] = category
     chat_id = str(query.message.chat.id)
-    logger.info("Categoria escolhida: %s para chat_id %s", category, chat_id)
     
     try:
         if category == "followup":
@@ -983,7 +994,7 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
             await query.edit_message_text(f"😕 Não achei nada em {prefix.lower()} pra editar.")
             return
         
-        context.user_data["edit_docs"] = docs
+        context.user_data["edit_docs"] = docs  # Já está correto, mas verificado
         msg = f"{prefix} disponíveis pra editar:\n"
         for i, doc in enumerate(docs, 1):
             data = doc.to_dict()
@@ -1004,7 +1015,6 @@ async def editar_category_callback(update: Update, context: ContextTypes.DEFAULT
             else:
                 msg += f"{i}. {data.get('cliente', 'Sem cliente')}, {data.get('resumo', 'Sem resumo')[:20]}...\n"
         await query.edit_message_text(f"{msg}\nDigite o número do que quer editar (ex.: 1):")
-        logger.info("Lista de registros enviada para chat_id %s", chat_id)
     except Exception as e:
         logger.error("Erro ao listar registros para editar: %s", e)
         await query.edit_message_text("😅 Deu um erro ao listar os registros. Tenta de novo?")
@@ -1099,9 +1109,9 @@ async def editar_new_value_received(update: Update, context: ContextTypes.DEFAUL
 async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_value: str) -> int:
     category = context.user_data["edit_category"]
     index = context.user_data["edit_index"]
-    field = context.user_data["edit_field"]
-    doc_id, _ = context.user_data["edit_docs"][index]
+    doc_id = context.user_data["edit_docs"][index].id  # Corrigir para pegar o ID corretamente
     chat_id = str(update.effective_chat.id)
+    field = context.user_data["edit_field"]
     try:
         if category == "followup":
             col = db.collection("users").document(chat_id).collection("followups")
@@ -1114,13 +1124,13 @@ async def editar_save(update: Update, context: ContextTypes.DEFAULT_TYPE, new_va
             new_value = datetime.strptime(new_value, "%d/%m/%Y").date().isoformat()
         
         col.document(doc_id).update({field: new_value})
-        await update.effective_message.reply_text("✅ Registro atualizado! Tô orgulhoso, parceiro!")
+        await update.effective_message.reply_text(f"✅ Registro '{field}' atualizado para '{new_value}'!")
     except ValueError:
         await update.effective_message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
         return EDIT_NEW_VALUE
     except Exception as e:
         logger.error("Erro ao salvar edição: %s", e)
-        await update.effective_message.reply_text("😅 Deu um erro ao salvar. Tenta de novo?")
+        await update.effective_message.reply_text("😅 Deu um erro ao salvar a edição. Tenta de novo?")
     return ConversationHandler.END
 
 async def editar_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
@@ -1195,12 +1205,40 @@ async def excluir_record_received(update: Update, context: ContextTypes.DEFAULT_
         await update.message.reply_text("😅 Número inválido! Escolhe um da lista, tipo '1'.")
         return DELETE_RECORD
     context.user_data["delete_index"] = index
-    reply_keyboard = [["Sim", "Não"]]
-    await update.message.reply_text(
-        "🗑️ Tem certeza que quer apagar esse registro? (Sim/Não)",
-        reply_markup=ReplyKeyboardMarkup(reply_keyboard, one_time_keyboard=True, resize_keyboard=True)
-    )
+    options = [
+        [InlineKeyboardButton("Sim", callback_data="delete_confirm:yes"),
+         InlineKeyboardButton("Não", callback_data="delete_confirm:no")]
+    ]
+    reply_markup = InlineKeyboardMarkup(options)
+    await update.message.reply_text("🗑️ Tem certeza que quer apagar esse registro?", reply_markup=reply_markup)
     return DELETE_CONFIRMATION
+
+async def excluir_confirmation_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    query = update.callback_query
+    await query.answer()
+    response = query.data.split(":", 1)[1]
+    if response == "no":
+        await query.edit_message_text("🗑️ Beleza, exclusão cancelada!")
+        return ConversationHandler.END
+    
+    category = context.user_data["delete_category"]
+    index = context.user_data["delete_index"]
+    doc_id = context.user_data["delete_docs"][index][0]
+    chat_id = str(query.message.chat.id)
+    try:
+        if category == "followup":
+            col = db.collection("users").document(chat_id).collection("followups")
+        elif category == "visita":
+            col = db.collection("users").document(chat_id).collection("visitas")
+        else:
+            col = db.collection("users").document(chat_id).collection("interacoes")
+        
+        col.document(doc_id).delete()
+        await query.edit_message_text("✅ Registro apagado com sucesso!")
+    except Exception as e:
+        logger.error("Erro ao excluir registro: %s", e)
+        await query.edit_message_text("😅 Deu um erro ao apagar. Tenta de novo?")
+    return ConversationHandler.END
 
 async def excluir_confirmation_received(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     response = update.message.text.strip().lower()
@@ -1364,7 +1402,6 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
     category = context.user_data["filter_category"]
     filter_type = context.user_data["filter_type"]
     chat_id = str(update.effective_chat.id)
-    logger.info("Executando filtro: category=%s, filter_type=%s, value=%s", category, filter_type, value)
     try:
         if category == "followup":
             col = db.collection("users").document(chat_id).collection("followups")
@@ -1379,29 +1416,18 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
         if filter_type in ["data_follow", "data_visita"]:
             if " a " in value:
                 start_str, end_str = value.split(" a ", 1)
-                try:
-                    start_date = datetime.strptime(start_str.strip(), "%d/%m/%Y").date()
-                    end_date = datetime.strptime(end_str.strip(), "%d/%m/%Y").date()
-                    docs = col.where(filter=FieldFilter(filter_type, ">=", start_date.isoformat()))\
-                              .where(filter=FieldFilter(filter_type, "<=", end_date.isoformat())).limit(50).stream()
-                except ValueError:
-                    logger.error("Erro no formato de intervalo de data: %s", value)
-                    await update.effective_message.reply_text("😅 Data errada! Usa assim: 01/04/2025 a 10/04/2025")
-                    return
+                start_date = datetime.strptime(start_str.strip(), "%d/%m/%Y").date().isoformat()
+                end_date = datetime.strptime(end_str.strip(), "%d/%m/%Y").date().isoformat()
+                docs = col.where(filter=FieldFilter(filter_type, ">=", start_date))\
+                          .where(filter=FieldFilter(filter_type, "<=", end_date)).limit(50).stream()
             else:
-                try:
-                    date = datetime.strptime(value, "%d/%m/%Y").date()
-                    docs = col.where(filter=FieldFilter(filter_type, "==", date.isoformat())).limit(50).stream()
-                except ValueError:
-                    logger.error("Erro no formato de data: %s", value)
-                    await update.effective_message.reply_text("😅 Data errada! Tenta assim: 10/04/2025")
-                    return
+                date = datetime.strptime(value, "%d/%m/%Y").date().isoformat()
+                docs = col.where(filter=FieldFilter(filter_type, "==", date)).limit(50).stream()
         else:
             docs = col.where(filter=FieldFilter(filter_type, "==", value)).limit(50).stream()
         
         docs_list = list(docs)
         if not docs_list:
-            logger.info("Nenhum resultado encontrado para o filtro")
             await update.effective_message.reply_text(f"😕 Não achei nada em {prefix.lower()} com esse filtro.")
             return
         
@@ -1424,8 +1450,9 @@ async def filtrar_execute(update: Update, context: ContextTypes.DEFAULT_TYPE, va
                 msg += f"{i}. {data.get('empresa', 'Sem empresa')}, {data_fmt}, {data.get('classificacao', 'Sem classificação')}\n"
             else:
                 msg += f"{i}. {data.get('cliente', 'Sem cliente')}, {data.get('resumo', 'Sem resumo')[:20]}...\n"
-        logger.info("Resultados encontrados: %d", len(docs_list))
         await update.effective_message.reply_text(msg, parse_mode="Markdown")
+    except ValueError:
+        await update.effective_message.reply_text("😅 Data errada! Usa assim: 10/04/2025 ou 01/04/2025 a 10/04/2025")
     except Exception as e:
         logger.error("Erro ao executar filtro: %s", e)
         await update.effective_message.reply_text("😅 Deu um erro ao buscar. Tenta de novo?")
@@ -1932,7 +1959,8 @@ def main() -> None:
                 VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
                 VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
                 VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
-                VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
+                VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)],
+                VISIT_FOLLOWUP_MOTIVO: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_motivo)]
             },
             fallbacks=[CommandHandler("cancelar", visita_cancel)],
             conversation_timeout=300
@@ -1948,7 +1976,8 @@ def main() -> None:
                 INTER_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_client)],
                 INTER_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_summary)],
                 INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
-                INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)]
+                INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)],
+                INTER_FOLLOWUP_MOTIVO: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_motivo)]
             },
             fallbacks=[CommandHandler("cancelar", interacao_cancel)]
         )
@@ -2013,15 +2042,13 @@ def main() -> None:
         excluir_conv = ConversationHandler(
             entry_points=[CommandHandler("excluir", excluir_start)],
             states={
-                DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
-                DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
+                DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)]
             },
             fallbacks=[CommandHandler("cancelar", excluir_cancel)]
         )
         app.add_handler(excluir_conv)
         app.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
-        logger.info("Handler de exclusão adicionado")
-
+        app.add_handler(CallbackQueryHandler(excluir_confirmation_callback, pattern="^delete_confirm:"))
         # Conversação para Filtragem
         filtrar_conv = ConversationHandler(
             entry_points=[CommandHandler("filtrar", filtrar_start)],
