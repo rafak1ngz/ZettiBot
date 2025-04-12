@@ -1863,196 +1863,236 @@ REAGENDAR_DATA = "REAGENDAR_DATA"
 
 # Função Principal
 def main() -> None:
+    logger.info("Iniciando função main()")
     TELEGRAM_TOKEN = os.environ.get("TELEGRAM_TOKEN")
     if not TELEGRAM_TOKEN:
         logger.error("TELEGRAM_TOKEN não definido!")
         return
     
-    app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+    logger.info("TELEGRAM_TOKEN encontrado, construindo aplicação")
+    try:
+        app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        logger.info("Aplicação Telegram construída com sucesso")
+    except Exception as e:
+        logger.error("Erro ao construir aplicação Telegram: %s", e)
+        return
 
-    # Handlers para atrasados
-    app.add_handler(CallbackQueryHandler(handle_atrasado_done, pattern="^atrasado_done:"))
-    app.add_handler(CallbackQueryHandler(handle_atrasado_excluir, pattern="^atrasado_excluir:"))
-    # Mover handle_atrasado_reagendar para o ConversationHandler
+    logger.info("Iniciando configuração de handlers")
+    try:
+        # Handlers para atrasados
+        app.add_handler(CallbackQueryHandler(handle_atrasado_done, pattern="^atrasado_done:"))
+        app.add_handler(CallbackQueryHandler(handle_atrasado_excluir, pattern="^atrasado_excluir:"))
+        logger.info("Handlers de atrasados adicionados")
 
-    # Handlers de comandos simples
-    app.add_handler(CommandHandler("inicio", inicio))
-    app.add_handler(CommandHandler("ajuda", ajuda))
-    app.add_handler(CommandHandler("quemvisitar", quem_visitar))
+        # Handlers de comandos simples
+        app.add_handler(CommandHandler("inicio", inicio))
+        app.add_handler(CommandHandler("ajuda", ajuda))
+        app.add_handler(CommandHandler("quemvisitar", quem_visitar))
+        logger.info("Handlers de comandos simples adicionados")
 
-    # Handler para callback de /quemvisitar
-    app.add_handler(CallbackQueryHandler(quem_visitar_callback, pattern="^quemvisitar_done:"))
+        # Handler para callback de /quemvisitar
+        app.add_handler(CallbackQueryHandler(quem_visitar_callback, pattern="^quemvisitar_done:"))
+        logger.info("Handler de quemvisitar callback adicionado")
 
-    # Handler para callback de lembretes diários
-    app.add_handler(CallbackQueryHandler(daily_done_callback, pattern="^daily_done:"))
+        # Handler para callback de lembretes diários
+        app.add_handler(CallbackQueryHandler(daily_done_callback, pattern="^daily_done:"))
+        logger.info("Handler de daily_done callback adicionado")
 
-    # Conversação para Follow-up
-    followup_conv = ConversationHandler(
-        entry_points=[CommandHandler("followup", followup_start)],
-        states={
-            FOLLOWUP_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_client)],
-            FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_date)],
-            FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)]
-        },
-        fallbacks=[CommandHandler("cancelar", followup_cancel)]
-    )
-    app.add_handler(followup_conv)
+        # Conversação para Follow-up
+        followup_conv = ConversationHandler(
+            entry_points=[CommandHandler("followup", followup_start)],
+            states={
+                FOLLOWUP_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_client)],
+                FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_date)],
+                FOLLOWUP_DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, followup_description)]
+            },
+            fallbacks=[CommandHandler("cancelar", followup_cancel)]
+        )
+        app.add_handler(followup_conv)
+        logger.info("Handler de follow-up adicionado")
 
-    # Conversação para Visita
-    visita_conv = ConversationHandler(
-        entry_points=[CommandHandler("visita", visita_start)],
-        states={
-            VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
-            VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
-            VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
-            VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
-            VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
-        },
-        fallbacks=[CommandHandler("cancelar", visita_cancel)],
-        conversation_timeout=300
-    )
-    app.add_handler(visita_conv)
-    app.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
+        # Conversação para Visita
+        visita_conv = ConversationHandler(
+            entry_points=[CommandHandler("visita", visita_start)],
+            states={
+                VISIT_COMPANY: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_company)],
+                VISIT_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_date)],
+                VISIT_MOTIVE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_motive)],
+                VISIT_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_choice)],
+                VISIT_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, visita_followup_date)]
+            },
+            fallbacks=[CommandHandler("cancelar", visita_cancel)],
+            conversation_timeout=300
+        )
+        app.add_handler(visita_conv)
+        app.add_handler(CallbackQueryHandler(visita_category_callback, pattern="^visit_category:"))
+        logger.info("Handler de visita adicionado")
 
-    # Conversação para Interação
-    interacao_conv = ConversationHandler(
-        entry_points=[CommandHandler("interacao", interacao_start)],
-        states={
-            INTER_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_client)],
-            INTER_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_summary)],
-            INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
-            INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)]
-        },
-        fallbacks=[CommandHandler("cancelar", interacao_cancel)]
-    )
-    app.add_handler(interacao_conv)
+        # Conversação para Interação
+        interacao_conv = ConversationHandler(
+            entry_points=[CommandHandler("interacao", interacao_start)],
+            states={
+                INTER_CLIENT: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_client)],
+                INTER_SUMMARY: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_summary)],
+                INTER_FOLLOWUP_CHOICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_choice)],
+                INTER_FOLLOWUP_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)]
+            },
+            fallbacks=[CommandHandler("cancelar", interacao_cancel)]
+        )
+        app.add_handler(interacao_conv)
+        logger.info("Handler de interação adicionado")
 
-    # Conversação para Lembrete
-    lembrete_conv = ConversationHandler(
-        entry_points=[CommandHandler("lembrete", lembrete_start)],
-        states={
-            REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
-            REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)]
-        },
-        fallbacks=[CommandHandler("cancelar", lembrete_cancel)]
-    )
-    app.add_handler(lembrete_conv)
+        # Conversação para Lembrete
+        lembrete_conv = ConversationHandler(
+            entry_points=[CommandHandler("lembrete", lembrete_start)],
+            states={
+                REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
+                REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)]
+            },
+            fallbacks=[CommandHandler("cancelar", lembrete_cancel)]
+        )
+        app.add_handler(lembrete_conv)
+        logger.info("Handler de lembrete adicionado")
 
-    # Conversação para Relatório
-    relatorio_conv = ConversationHandler(
-        entry_points=[CommandHandler("relatorio", relatorio_start)],
-        states={
-            REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
-            REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", relatorio_cancel)]
-    )
-    app.add_handler(relatorio_conv)
+        # Conversação para Relatório
+        relatorio_conv = ConversationHandler(
+            entry_points=[CommandHandler("relatorio", relatorio_start)],
+            states={
+                REPORT_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_start_received)],
+                REPORT_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, relatorio_end_received)]
+            },
+            fallbacks=[CommandHandler("cancelar", relatorio_cancel)]
+        )
+        app.add_handler(relatorio_conv)
+        logger.info("Handler de relatório adicionado")
 
-    # Conversação para Histórico
-    historico_conv = ConversationHandler(
-        entry_points=[CommandHandler("historico", historico_conv_start)],
-        states={
-            HIST_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_start_received)],
-            HIST_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_end_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", historico_conv_cancel)]
-    )
-    app.add_handler(historico_conv)
+        # Conversação para Histórico
+        historico_conv = ConversationHandler(
+            entry_points=[CommandHandler("historico", historico_conv_start)],
+            states={
+                HIST_START: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_start_received)],
+                HIST_END: [MessageHandler(filters.TEXT & ~filters.COMMAND, historico_conv_end_received)]
+            },
+            fallbacks=[CommandHandler("cancelar", historico_conv_cancel)]
+        )
+        app.add_handler(historico_conv)
+        logger.info("Handler de histórico adicionado")
 
-    # Conversação para Edição
-    editar_conv = ConversationHandler(
-        entry_points=[CommandHandler("editar", editar_start)],
-        states={
-            EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
-            EDIT_FIELD: [CallbackQueryHandler(editar_field_callback, pattern="^edit_field:")],
-            EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received),
-                            CallbackQueryHandler(editar_value_callback, pattern="^edit_value:")]
-        },
-        fallbacks=[CommandHandler("cancelar", editar_cancel)],
-        conversation_timeout=300
-    )
-    app.add_handler(editar_conv)
-    app.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
-    app.add_handler(CallbackQueryHandler(editar_field_callback, pattern="^edit_field:"))
-    app.add_handler(CallbackQueryHandler(editar_value_callback, pattern="^edit_value:"))
+        # Conversação para Edição
+        editar_conv = ConversationHandler(
+            entry_points=[CommandHandler("editar", editar_start)],
+            states={
+                EDIT_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_record_received)],
+                EDIT_FIELD: [CallbackQueryHandler(editar_field_callback, pattern="^edit_field:")],
+                EDIT_NEW_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, editar_new_value_received),
+                                CallbackQueryHandler(editar_value_callback, pattern="^edit_value:")]
+            },
+            fallbacks=[CommandHandler("cancelar", editar_cancel)],
+            conversation_timeout=300
+        )
+        app.add_handler(editar_conv)
+        app.add_handler(CallbackQueryHandler(editar_category_callback, pattern="^edit_category:"))
+        app.add_handler(CallbackQueryHandler(editar_field_callback, pattern="^edit_field:"))
+        app.add_handler(CallbackQueryHandler(editar_value_callback, pattern="^edit_value:"))
+        logger.info("Handler de edição adicionado")
 
-    # Conversação para Exclusão
-    excluir_conv = ConversationHandler(
-        entry_points=[CommandHandler("excluir", excluir_start)],
-        states={
-            DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
-            DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", excluir_cancel)]
-    )
-    app.add_handler(excluir_conv)
-    app.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
+        # Conversação para Exclusão
+        excluir_conv = ConversationHandler(
+            entry_points=[CommandHandler("excluir", excluir_start)],
+            states={
+                DELETE_RECORD: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_record_received)],
+                DELETE_CONFIRMATION: [MessageHandler(filters.TEXT & ~filters.COMMAND, excluir_confirmation_received)]
+            },
+            fallbacks=[CommandHandler("cancelar", excluir_cancel)]
+        )
+        app.add_handler(excluir_conv)
+        app.add_handler(CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:"))
+        logger.info("Handler de exclusão adicionado")
 
-    # Conversação para Filtragem
-    filtrar_conv = ConversationHandler(
-        entry_points=[CommandHandler("filtrar", filtrar_start)],
-        states={
-            FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
-        },
-        fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
-        conversation_timeout=300
-    )
-    app.add_handler(filtrar_conv)
-    app.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
-    app.add_handler(CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:"))
-    app.add_handler(CallbackQueryHandler(filtrar_value_callback, pattern="^filter_value:"))
+        # Conversação para Filtragem
+        filtrar_conv = ConversationHandler(
+            entry_points=[CommandHandler("filtrar", filtrar_start)],
+            states={
+                FILTER_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, filtrar_value_received)]
+            },
+            fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
+            conversation_timeout=300
+        )
+        app.add_handler(filtrar_conv)
+        app.add_handler(CallbackQueryHandler(filtrar_category_callback, pattern="^filter_category:"))
+        app.add_handler(CallbackQueryHandler(filtrar_type_callback, pattern="^filter_type:"))
+        app.add_handler(CallbackQueryHandler(filtrar_value_callback, pattern="^filter_value:"))
+        logger.info("Handler de filtragem adicionado")
 
-    # Conversação para Busca de Potenciais Clientes
-    buscapotenciais_conv = ConversationHandler(
-        entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
-        states={
-            BUSCA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_tipo)],
-            BUSCA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_localizacao)],
-            BUSCA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_raio)],
-            BUSCA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_quantidade)]
-        },
-        fallbacks=[CommandHandler("cancelar", buscapotenciais_cancel)]
-    )
-    app.add_handler(buscapotenciais_conv)
+        # Conversação para Busca de Potenciais Clientes
+        buscapotenciais_conv = ConversationHandler(
+            entry_points=[CommandHandler("buscapotenciais", buscapotenciais_start)],
+            states={
+                BUSCA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_tipo)],
+                BUSCA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_localizacao)],
+                BUSCA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_raio)],
+                BUSCA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, buscapotenciais_quantidade)]
+            },
+            fallbacks=[CommandHandler("cancelar", buscapotenciais_cancel)]
+        )
+        app.add_handler(buscapotenciais_conv)
+        logger.info("Handler de busca de potenciais adicionado")
 
-    # Conversação para Criar Rota
-    criarrota_conv = ConversationHandler(
-        entry_points=[CommandHandler("criarrota", criarrota_start)],
-        states={
-            ROTA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_tipo)],
-            ROTA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_localizacao)],
-            ROTA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_raio)],
-            ROTA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_quantidade)]
-        },
-        fallbacks=[CommandHandler("cancelar", criarrota_cancel)]
-    )
-    app.add_handler(criarrota_conv)
+        # Conversação para Criar Rota
+        criarrota_conv = ConversationHandler(
+            entry_points=[CommandHandler("criarrota", criarrota_start)],
+            states={
+                ROTA_TIPO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_tipo)],
+                ROTA_LOCALIZACAO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_localizacao)],
+                ROTA_RAIO: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_raio)],
+                ROTA_QUANTIDADE: [MessageHandler(filters.TEXT & ~filters.COMMAND, criarrota_quantidade)]
+            },
+            fallbacks=[CommandHandler("cancelar", criarrota_cancel)]
+        )
+        app.add_handler(criarrota_conv)
+        logger.info("Handler de criar rota adicionado")
 
-    # Conversação para Reagendamento
-    reagendar_conv = ConversationHandler(
-        entry_points=[CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:")],
-        states={
-            REAGENDAR_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, reagendar_data_received)],
-        },
-        fallbacks=[CommandHandler("cancelar", lambda u, c: ConversationHandler.END)],
-        conversation_timeout=300
-    )
-    app.add_handler(reagendar_conv)
+        # Conversação para Reagendamento
+        reagendar_conv = ConversationHandler(
+            entry_points=[CallbackQueryHandler(handle_atrasado_reagendar, pattern="^atrasado_reagendar:")],
+            states={
+                REAGENDAR_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, reagendar_data_received)],
+            },
+            fallbacks=[CommandHandler("cancelar", lambda u, c: ConversationHandler.END)],
+            conversation_timeout=300
+        )
+        app.add_handler(reagendar_conv)
+        logger.info("Handler de reagendamento adicionado")
 
-    # Comando /atrasados
-    app.add_handler(CommandHandler("atrasados", atrasados))
+        # Comando /atrasados
+        app.add_handler(CommandHandler("atrasados", atrasados))
+        logger.info("Handler de atrasados (comando) adicionado")
 
-    # Adicionar comando de teste
-    app.add_handler(CommandHandler("testar_relatorios", testar_relatorios))
+        # Adicionar comando de teste
+        app.add_handler(CommandHandler("testar_relatorios", testar_relatorios))
+        logger.info("Handler de testar_relatorios adicionado")
 
-    # Agendamento de Jobs Otimizados
-    app.job_queue.run_daily(lembrete_diario, time(hour=7, minute=30, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=30, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(marcar_atrasados, time(hour=23, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))
-    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))
+    except Exception as e:
+        logger.error("Erro ao configurar handlers: %s", e)
+        return
 
-    logger.info("Bot iniciado com sucesso!")
-    app.run_polling()
+    logger.info("Configuração de handlers concluída, configurando jobs")
+    try:
+        # Agendamento de Jobs Otimizados
+        app.job_queue.run_daily(lembrete_diario, time(hour=7, minute=30, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=30, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(marcar_atrasados, time(hour=23, minute=0, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))
+        app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))
+        logger.info("Jobs agendados com sucesso")
+    except Exception as e:
+        logger.error("Erro ao configurar jobs: %s", e)
+        return
+
+    logger.info("Bot iniciado, iniciando polling")
+    try:
+        app.run_polling()
+        logger.info("Polling iniciado com sucesso")
+    except Exception as e:
+        logger.error("Erro no polling: %s", e)
