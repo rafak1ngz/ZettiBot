@@ -1727,11 +1727,15 @@ async def atrasados(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             return
         
         msg = "⏰ *Follow-ups atrasados*:\n"
-        options = []
         for i, f in enumerate(followups_atrasados[:5], 1):
             data = f.to_dict()
             data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
+        
+        msg += "\nLegenda: [✅ Concluída] [📅 Reagendar] [🗑️ Apagar]\n"
+        
+        options = []
+        for i, f in enumerate(followups_atrasados[:5], 1):
             options.append([
                 InlineKeyboardButton(f"✅ #{i}", callback_data=f"atrasado_done:{f.id}"),
                 InlineKeyboardButton(f"📅 #{i}", callback_data=f"atrasado_reagendar:{f.id}"),
