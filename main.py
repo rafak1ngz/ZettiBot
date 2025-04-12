@@ -1522,13 +1522,12 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                 followups_atrasados = list(db.collection("users").document(chat_id).collection("followups")
                                           .where(filter=FieldFilter("data_follow", "<", hoje))
                                           .where(filter=FieldFilter("status", "in", ["pendente", "atrasado"])).limit(10).stream())
-                
-                pendentes_hoje = [f for f in followups_hoje]
-                pendentes_atrasados = [f for f in followups_atrasados]
                 realizados = list(db.collection("users").document(chat_id).collection("followups")
                                  .where(filter=FieldFilter("data_follow", "==", hoje))
                                  .where(filter=FieldFilter("status", "==", "realizado")).limit(10).stream())
 
+                pendentes_hoje = [f for f in followups_hoje]
+                pendentes_atrasados = [f for f in followups_atrasados]
                 logger.info("Encontrados %d pendentes hoje, %d atrasados, %d realizados para %s", 
                             len(pendentes_hoje), len(pendentes_atrasados), len(realizados), chat_id)
 
@@ -1537,61 +1536,39 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                 check_hour = force_hour if force_hour is not None else now.hour
                 check_minute = force_minute if force_minute is not None else now.minute
 
-                if check_hour == 8:
+                if check_hour == 7 and check_minute == 30:
                     msg = "☀️ *Bom dia, parceiro!* Aqui vai o resumo de follow-ups:\n"
                     if pendentes_hoje:
-                        msg += "\n📅 *Pendentes para hoje*:\n"
+                        msg += "\n📅 *Follow Ups pendentes para hoje*:\n"
                         for i, f in enumerate(pendentes_hoje[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if pendentes_atrasados:
-                        msg += "\n⏰ *Atrasados*:\n"
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            data = f.to_dict()
-                            data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
-                            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if not pendentes_hoje and not pendentes_atrasados:
-                        msg = "☀️ *Bom dia!* Hoje tá livre de follow-ups. Bora prospectar com /buscapotenciais?"
                     else:
-                        options = []
-                        for i, f in enumerate(pendentes_hoje[:5], 1):
-                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            options.append([
-                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
-                            ])
-                        reply_markup = InlineKeyboardMarkup(options)
-                
-                elif check_hour == 15 and check_minute == 10:
-                    msg = "🍲 *Tarde na área!* Aqui vai o resumo de follow-ups:\n"
+                        msg += "\n📅 *Nenhum follow-up pendente para hoje!*"
+                    if pendentes_atrasados:
+                        msg += f"\n⚠️ Você tem {len(pendentes_atrasados)} follow-ups atrasados! Use /atrasados para resolver."
                     if pendentes_hoje:
-                        msg += "\n📅 *Pendentes para hoje*:\n"
+                        options = [[InlineKeyboardButton(f"Marcar Follow Up #{i} concluído", callback_data=f"daily_done:{f.id}")]
+                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
+                        reply_markup = InlineKeyboardMarkup(options)
+                
+                elif check_hour == 12 and check_minute == 30:
+                    msg = "🍲 *Tarde na área!* Aqui vai o resumo de follow-ups do dia:\n"
+                    if pendentes_hoje:
+                        msg += "\n📅 *Follow Ups pendentes para hoje*:\n"
                         for i, f in enumerate(pendentes_hoje[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if pendentes_atrasados:
-                        msg += "\n⏰ *Atrasados*:\n"
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            data = f.to_dict()
-                            data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
-                            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if not pendentes_hoje and not pendentes_atrasados:
-                        msg = "🍲 *Tarde na área!* Sem follow-ups pendentes, tá de boa!"
                     else:
-                        options = []
-                        for i, f in enumerate(pendentes_hoje[:5], 1):
-                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            options.append([
-                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
-                            ])
+                        msg += "\n📅 *Nenhum follow-up pendente para hoje!*"
+                    if pendentes_atrasados:
+                        msg += f"\n⚠️ Você ainda possui {len(pendentes_atrasados)} follow-ups atrasados! Use /atrasados para resolver."
+                    if pendentes_hoje:
+                        options = [[InlineKeyboardButton(f"Marcar Follow Up #{i} concluído", callback_data=f"daily_done:{f.id}")]
+                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                 
-                elif check_hour == 17:
+                elif check_hour == 17 and check_minute == 30:
                     visitas = list(db.collection("users").document(chat_id).collection("visitas")
                                   .where(filter=FieldFilter("data_visita", "==", hoje)).limit(10).stream())
                     interacoes = list(db.collection("users").document(chat_id).collection("interacoes")
@@ -1601,26 +1578,17 @@ async def lembrete_diario(context: ContextTypes.DEFAULT_TYPE, force_hour: int = 
                     msg += f"🏢 Visitas: {len(visitas)}\n"
                     msg += f"💬 Interações: {len(interacoes)}\n"
                     if pendentes_hoje:
-                        msg += "\n📅 *Pendentes para hoje*:\n"
+                        msg += "\n📅 *Follow Ups pendentes para hoje*:\n"
                         for i, f in enumerate(pendentes_hoje[:5], 1):
                             data = f.to_dict()
                             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* - {data.get('descricao', 'Sem descrição')[:50]}...\n"
+                    else:
+                        msg += "\n📅 *Nenhum follow-up pendente para hoje!*"
                     if pendentes_atrasados:
-                        msg += "\n⏰ *Atrasados*:\n"
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            data = f.to_dict()
-                            data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
-                            msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
-                    if pendentes_hoje or pendentes_atrasados:
-                        options = []
-                        for i, f in enumerate(pendentes_hoje[:5], 1):
-                            options.append([InlineKeyboardButton(f"Marcar {i} como feito", callback_data=f"daily_done:{f.id}")])
-                        for i, f in enumerate(pendentes_atrasados[:5], 1):
-                            options.append([
-                                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
-                                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
-                            ])
+                        msg += f"\n⚠️ Você ainda possui {len(pendentes_atrasados)} follow-ups atrasados! Use /atrasados para resolver."
+                    if pendentes_hoje:
+                        options = [[InlineKeyboardButton(f"Marcar Follow Up #{i} concluído", callback_data=f"daily_done:{f.id}")]
+                                  for i, f in enumerate(pendentes_hoje[:5], 1)]
                         reply_markup = InlineKeyboardMarkup(options)
                 
                 else:
@@ -1765,9 +1733,9 @@ async def atrasados(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
             data_follow = datetime.fromisoformat(data.get('data_follow')).strftime("%d/%m/%Y")
             msg += f"{i}. *{data.get('cliente', 'Sem cliente')}* ({data_follow}) - {data.get('descricao', 'Sem descrição')[:50]}...\n"
             options.append([
-                InlineKeyboardButton(f"Atrasado {i}: Feito", callback_data=f"atrasado_done:{f.id}"),
-                InlineKeyboardButton(f"Atrasado {i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
-                InlineKeyboardButton(f"Atrasado {i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
+                InlineKeyboardButton(f"Atrasado #{i}: Feito", callback_data=f"atrasado_done:{f.id}"),
+                InlineKeyboardButton(f"Atrasado #{i}: Reagendar", callback_data=f"atrasado_reagendar:{f.id}"),
+                InlineKeyboardButton(f"Atrasado #{i}: Excluir", callback_data=f"atrasado_excluir:{f.id}")
             ])
         
         reply_markup = InlineKeyboardMarkup(options)
@@ -1780,8 +1748,7 @@ async def testar_relatorios(update: Update, context: ContextTypes.DEFAULT_TYPE) 
     chat_id = str(update.effective_chat.id)
     logger.info("Comando /testar_relatorios recebido de chat_id %s", chat_id)
     
-    # Simula cada horário
-    horarios = [(8, 0), (15, 10), (17, 30)]
+    horarios = [(7, 30), (12, 30), (17, 30)]
     for hour, minute in horarios:
         logger.info("Simulando lembrete_diario para %d:%d", hour, minute)
         await lembrete_diario(context, force_hour=hour, force_minute=minute)
@@ -1856,6 +1823,22 @@ async def daily_done_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
         logger.error("Erro ao marcar follow-up como feito: %s", e)
         await query.edit_message_text("😅 Deu um erro ao atualizar. Tenta de novo?")
 
+# Função para marcar follow-up como realizado
+async def handle_daily_done(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    query = update.callback_query
+    await query.answer()
+    followup_id = query.data.split(":")[1]
+    chat_id = str(query.message.chat.id)
+    
+    try:
+        followup_ref = db.collection("users").document(chat_id).collection("followups").document(followup_id)
+        followup_ref.update({"status": "realizado"})
+        logger.info("Follow-up %s marcado como realizado para chat_id %s", followup_id, chat_id)
+        await query.edit_message_text("✅ Follow-up marcado como concluído!")
+    except Exception as e:
+        logger.error("Erro ao marcar follow-up como concluído para %s: %s", chat_id, e)
+        await query.edit_message_text("😅 Deu um erro ao marcar como concluído. Tenta de novo?")
+
 # Estados para o ConversationHandler
 REAGENDAR_DATA = "REAGENDAR_DATA"
 
@@ -1882,7 +1865,7 @@ def main() -> None:
     app.add_handler(CallbackQueryHandler(quem_visitar_callback, pattern="^quemvisitar_done:"))
 
     # Handler para callback de lembretes diários
-    app.add_handler(CallbackQueryHandler(daily_done_callback, pattern="^daily_done:"))
+    app.add_handler(CallbackQueryHandler(handle_daily_done, pattern="^daily_done:"))
 
     # Conversação para Follow-up
     followup_conv = ConversationHandler(
@@ -2046,12 +2029,12 @@ def main() -> None:
 
 
     # Agendamento de Jobs Otimizados
-    app.job_queue.run_daily(lembrete_diario, time(hour=8, minute=0, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=00, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=7, minute=30, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_diario, time(hour=12, minute=30, tzinfo=TIMEZONE))
     app.job_queue.run_daily(lembrete_diario, time(hour=17, minute=30, tzinfo=TIMEZONE))
-    app.job_queue.run_daily(marcar_atrasados, time(hour=23, minute=0, tzinfo=TIMEZONE))  # Novo job para marcar atrasados
-    app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))  # Sexta
-    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))  # Segunda corrigido
+    app.job_queue.run_daily(marcar_atrasados, time(hour=23, minute=0, tzinfo=TIMEZONE))
+    app.job_queue.run_daily(lembrete_semanal, time(hour=19, minute=30, tzinfo=TIMEZONE), days=(4,))
+    app.job_queue.run_daily(lembrete_semanal, time(hour=7, minute=30, tzinfo=TIMEZONE), days=(1,))
 
     logger.info("Bot iniciado com sucesso!")
     app.run_polling()
