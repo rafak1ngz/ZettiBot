@@ -1,4 +1,4 @@
-python-telegram-bot[job-queue]==20.7
+python-telegram-bot[job-queue, httpx]==21.4
 firebase-admin
 nest_asyncio
 matplotlib

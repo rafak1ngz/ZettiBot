@@ -1,0 +1,51 @@
+ZettiBot/
+│
+├── venv/                           # Ambiente virtual Python
+│
+├── config.py                       # Configurações (tokens, constantes)
+├── database.py                     # Inicialização do Firebase Firestore
+├── main.py                         # Script principal que inicia o bot
+├── check_data.py                   # Script auxiliar para verificar dados no Firebase
+│
+├── handlers/                       # Pasta com handlers modulares
+│   ├── __init__.py                 # Arquivo vazio para tornar a pasta um módulo Python
+│   ├── filtrar.py                  # Handler para o comando /filtrar
+│
+└── requirements.txt                # Dependências do projeto (opcional, se você criou)
+
+## Descrição dos arquivos ##
+
+>> config.py:
+Contém configurações como o token do Telegram e credenciais do Firebase.
+
+Define constantes usadas pelo bot, como estados do ConversationHandler (ex.: FILTER_CATEGORY, FILTER_TYPE, FILTER_VALUE).
+
+>> database.py:
+Inicializa a conexão com o Firebase Firestore e exporta o cliente db.
+
+>> main.py:
+Script principal que configura e inicia o bot Telegram.
+
+Importa handlers de handlers.filtrar e define o ConversationHandler para /filtrar.
+
+>> check_data.py:
+Script auxiliar para listar documentos no Firebase, usado para depuração.
+
+>> handlers/filtrar.py:
+Contém o handler para o comando /filtrar, com a lógica do ConversationHandler.
+
+Última versão fornecida, que resolveu o problema. Inclui funções como filtrar_start, filtrar_category_callback, filtrar_type_callback, filtrar_value, e filtrar_cancel.
+
+Localizado na pasta handlers/.
+
+>> handlers/__init__.py:
+Arquivo vazio que torna a pasta handlers um módulo Python.
+
+>> requirements.txt (opcional):
+Lista as dependências do projeto, caso você tenha criado um.
+
+>> venv/:
+Pasta do ambiente virtual, criada com python -m venv venv.
+
+Contém os pacotes instalados, como python-telegram-bot e firebase-admin.
+
