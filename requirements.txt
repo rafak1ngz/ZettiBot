@@ -1,5 +1,7 @@
 python-telegram-bot[job-queue, httpx]==21.4
 firebase-admin
 nest_asyncio
-matplotlib
 googlemaps
+matplotlib==3.8.0
+pandas==2.1.0
+openpyxl==3.1.2

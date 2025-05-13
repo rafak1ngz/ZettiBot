@@ -89,8 +89,10 @@ from handlers.lembrete import (
     lembrete_datetime,
     lembrete_cancel,
     REMINDER_TEXT,
-    REMINDER_DATETIME
+    REMINDER_DATETIME,
 )
+from handlers.relatorio import setup_handlers as setup_relatorio_handlers
+from handlers.contrato import setup_handlers as setup_contrato_handlers
 from handlers.buscapotenciais import setup_handlers as buscapotenciais_setup
 from handlers.criarrota import setup_handlers as criarrota_setup
 from jobs import *
@@ -145,6 +147,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", followup_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(followup_conv)
 
@@ -167,6 +170,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", visita_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(visita_conv)
 
@@ -192,6 +196,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", interacao_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(interacao_conv)
 
@@ -204,6 +209,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", lembrete_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(lembrete_conv)
 
@@ -220,6 +226,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(editar_conv)
 
@@ -235,6 +242,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(filtrar_conv)
 
@@ -251,6 +259,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", historico_conv_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(historico_conv)
 
@@ -262,13 +271,15 @@ async def main():
                 CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:")
             ],
             DELETE_RECORD: [
-                CallbackQueryHandler(excluir_record_callback, pattern="^delete_record:")],
+                CallbackQueryHandler(excluir_record_callback, pattern="^delete_record:")
+            ],
             DELETE_CONFIRM: [
                 CallbackQueryHandler(excluir_confirm_callback, pattern="^delete_confirm:")
             ],
         },
         fallbacks=[CommandHandler("cancelar", excluir_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(excluir_conv)
 
@@ -277,6 +288,12 @@ async def main():
 
     # Configurar Criar Rota
     criarrota_setup(app)
+
+    # Configurar Relatório
+    setup_relatorio_handlers(app)
+
+    # Configurar Contrato
+    setup_contrato_handlers(app)
 
     logger.info("Handlers configurados, iniciando polling")
 
@@ -288,5 +305,4 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-
     asyncio.run(main())
