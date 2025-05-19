@@ -40,11 +40,17 @@ from handlers.interacao import (
     interacao_cliente,
     interacao_data,
     interacao_detalhes,
+    interacao_followup_callback,
+    interacao_followup_date,
+    interacao_followup_motivo,
     interacao_cancel,
     INTERACAO_TIPO,
     INTERACAO_CLIENTE,
     INTERACAO_DATA,
     INTERACAO_DETALHES,
+    INTERACAO_FOLLOWUP_CHOICE,
+    INTERACAO_FOLLOWUP_DATE,
+    INTERACAO_FOLLOWUP_MOTIVO,
 )
 from handlers.editar import (
     editar_start,
@@ -77,6 +83,16 @@ from handlers.excluir import (
     DELETE_RECORD,
     DELETE_CONFIRM,
 )
+from handlers.lembrete import (
+    lembrete_start,
+    lembrete_text,
+    lembrete_datetime,
+    lembrete_cancel,
+    REMINDER_TEXT,
+    REMINDER_DATETIME,
+)
+from handlers.relatorio import setup_handlers as setup_relatorio_handlers
+from handlers.contrato import setup_handlers as setup_contrato_handlers
 from handlers.buscapotenciais import setup_handlers as buscapotenciais_setup
 from handlers.criarrota import setup_handlers as criarrota_setup
 from jobs import *
@@ -98,6 +114,12 @@ async def main():
     logger.info("TELEGRAM_TOKEN encontrado, construindo aplicação")
     try:
         app = ApplicationBuilder().token(TELEGRAM_TOKEN).build()
+        # Agendar lembretes diários às 7h30, 12h30 e 17h30
+        app.job_queue.run_daily(lembrete_diario, time=time(hour=7, minute=30, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(lembrete_diario, time=time(hour=12, minute=30, tzinfo=TIMEZONE))
+        app.job_queue.run_daily(lembrete_diario, time=time(hour=17, minute=30, tzinfo=TIMEZONE))
+        # Agendar lembretes semanais às segundas e sextas às 8h
+        app.job_queue.run_daily(lembrete_semanal, time=time(hour=8, minute=0, tzinfo=TIMEZONE), days=(0, 4))
         logger.info("Aplicação Telegram construída com sucesso")
     except Exception as e:
         logger.error("Erro ao construir aplicação Telegram: %s", e)
@@ -125,6 +147,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", followup_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(followup_conv)
 
@@ -147,6 +170,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", visita_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(visita_conv)
 
@@ -160,11 +184,34 @@ async def main():
             INTERACAO_CLIENTE: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_cliente)],
             INTERACAO_DATA: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_data)],
             INTERACAO_DETALHES: [MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_detalhes)],
+            INTERACAO_FOLLOWUP_CHOICE: [
+                CallbackQueryHandler(interacao_followup_callback, pattern="^followup_(yes|no)$")
+            ],
+            INTERACAO_FOLLOWUP_DATE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_date)
+            ],
+            INTERACAO_FOLLOWUP_MOTIVO: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, interacao_followup_motivo)
+            ],
         },
         fallbacks=[CommandHandler("cancelar", interacao_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(interacao_conv)
+
+    # Conversação para Lembrete
+    lembrete_conv = ConversationHandler(
+        entry_points=[CommandHandler("lembrete", lembrete_start)],
+        states={
+            REMINDER_TEXT: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_text)],
+            REMINDER_DATETIME: [MessageHandler(filters.TEXT & ~filters.COMMAND, lembrete_datetime)],
+        },
+        fallbacks=[CommandHandler("cancelar", lembrete_cancel)],
+        conversation_timeout=300,
+        
+    )
+    app.add_handler(lembrete_conv)
 
     # Conversação para Editar
     editar_conv = ConversationHandler(
@@ -179,6 +226,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", editar_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(editar_conv)
 
@@ -194,6 +242,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", filtrar_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(filtrar_conv)
 
@@ -210,6 +259,7 @@ async def main():
         },
         fallbacks=[CommandHandler("cancelar", historico_conv_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(historico_conv)
 
@@ -221,13 +271,15 @@ async def main():
                 CallbackQueryHandler(excluir_category_callback, pattern="^delete_category:")
             ],
             DELETE_RECORD: [
-                CallbackQueryHandler(excluir_record_callback, pattern="^delete_record:")],
+                CallbackQueryHandler(excluir_record_callback, pattern="^delete_record:")
+            ],
             DELETE_CONFIRM: [
                 CallbackQueryHandler(excluir_confirm_callback, pattern="^delete_confirm:")
             ],
         },
         fallbacks=[CommandHandler("cancelar", excluir_cancel)],
         conversation_timeout=300,
+        
     )
     app.add_handler(excluir_conv)
 
@@ -236,6 +288,12 @@ async def main():
 
     # Configurar Criar Rota
     criarrota_setup(app)
+
+    # Configurar Relatório
+    setup_relatorio_handlers(app)
+
+    # Configurar Contrato
+    setup_contrato_handlers(app)
 
     logger.info("Handlers configurados, iniciando polling")
 
@@ -247,5 +305,4 @@ async def main():
 
 if __name__ == "__main__":
     import asyncio
-
     asyncio.run(main())
