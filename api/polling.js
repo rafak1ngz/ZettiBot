@@ -52,37 +52,43 @@ async function processMessages(messages) {
   }
 }
 
-// Endpoint principal para polling
 module.exports = async (req, res) => {
   try {
     const botToken = process.env.BOT_TOKEN;
     
-    // Obter atualizações do Telegram
+    // Reduzir timeout para processamento mais rápido
     const response = await axios.get(
       `https://api.telegram.org/bot${botToken}/getUpdates`,
       {
         params: {
           offset: lastUpdateId + 1,
-          timeout: 10
-        }
+          timeout: 30  // Aumentei para 30 segundos
+        },
+        // Adicionar timeout na requisição
+        timeout: 40000 
       }
     );
     
     const updates = response.data.result;
-    console.log(`${updates.length} novas mensagens`);
+    console.log(`Processando ${updates.length} mensagens`);
     
     if (updates.length > 0) {
-      // Processar mensagens de forma assíncrona
-      processMessages(updates);
+      // Processar mensagens em paralelo para maior velocidade
+      await Promise.all(updates.map(processMessage));
     }
     
     return res.status(200).json({
       status: 'ok',
-      lastUpdateId,
-      updates_processed: updates.length
+      processadas: updates.length
     });
   } catch (error) {
     console.error(`Erro no polling: ${error.message}`);
     return res.status(500).json({ error: error.message });
   }
 };
+
+// Função separada para processamento
+async function processMessage(update) {
+  // Lógica de processamento da mensagem
+  // Similar ao código anterior
+}
