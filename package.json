@@ -4,6 +4,7 @@
   "description": "Assistente para vendedores externos",
   "main": "api/webhook.js",
   "dependencies": {
-    "node-telegram-bot-api": "^0.64.0"
+    "node-telegram-bot-api": "^0.64.0",
+    "@supabase/supabase-js": "^2.29.0"
   }
 }
