@@ -1,118 +1,69 @@
 const axios = require('axios');
 
 module.exports = async (req, res) => {
-  // Log detalhado de entrada
-  console.log('Webhook recebido:', JSON.stringify({
-    method: req.method,
-    body: req.body,
-    headers: req.headers
-  }));
+  // Log da requisição
+  console.log(`Método: ${req.method}, Origem: ${req.headers['x-forwarded-for'] || 'desconhecido'}`);
 
-  // Para requisições GET simples
+  // Para GET
   if (req.method === 'GET') {
     return res.status(200).send('ZettiBot está funcionando!');
   }
 
-  // Para webhooks do Telegram (POST)
+  // Para POST (webhook do Telegram)
   if (req.method === 'POST') {
     try {
-      // Log do corpo da requisição
-      console.log('Corpo da requisição:', JSON.stringify(req.body));
-
-      const update = req.body;
-      
-      // Resposta imediata ao Telegram
+      // Resposta imediata para o Telegram
       res.status(200).json({ status: 'ok' });
-
-      // Processamento do update
-      if (update && update.message) {
-        console.log('Mensagem recebida:', JSON.stringify(update.message));
-        
+      
+      // Processar update manualmente
+      const update = req.body;
+      console.log('Update recebido:', JSON.stringify(update).substring(0, 200));
+      
+      // Verificar se é uma mensagem com comando
+      if (update && update.message && update.message.text) {
         const chatId = update.message.chat.id;
-        const messageText = update.message.text || '';
+        const text = update.message.text;
         
-        console.log(`Chat ID: ${chatId}, Mensagem: ${messageText}`);
-
-        // Processamento síncrono para garantir logs
-        if (messageText === '/start') {
-          console.log('Processando /start');
-          await sendMessageWithLogging(chatId, `
-Olá! Eu sou o ZettiBot 🤖
-
-Estou aqui para auxiliar vendedores externos a terem mais produtividade.
-
-Principais comandos:
-/agenda - Ver compromissos do dia
-/followup - Gerenciar follow-ups
-/clientes - Listar clientes
-/help - Ver todos os comandos
-`);
-        } 
-        else if (messageText === '/help' || messageText === '/ajuda') {
-          console.log('Processando /help');
-          await sendMessageWithLogging(chatId, `
-Comandos disponíveis:
-
-📅 Agenda
-/agenda_hoje - Ver compromissos do dia
-/agendar - Adicionar novo compromisso
-
-👥 Clientes
-/cliente_add - Cadastrar novo cliente
-/clientes - Listar clientes
-/cliente_busca - Buscar cliente
-
-🔄 Follow-up
-/followup_add - Criar novo follow-up
-/followups - Listar follow-ups pendentes
-
-💰 Comissões
-/comissao - Consultar comissões
-/comissao_add - Registrar nova comissão
-
-ℹ️ Outros
-/start - Iniciar bot
-/help - Mostrar esta lista de comandos
-`);
-        }
-        else {
-          console.log('Comando não reconhecido');
-          await sendMessageWithLogging(chatId, "Desculpe, não entendi esse comando. Use /help para ver os comandos disponíveis.");
-        }
+        // Enviar mensagem diretamente para o chat
+        testSendMessage(chatId, `Recebi seu comando: ${text}`);
       }
       
       return;
-    } 
-    catch (error) {
-      console.error('Erro no webhook:', error);
-      return res.status(500).json({ error: error.toString() });
+    } catch (error) {
+      console.error('Erro:', error);
+      return res.status(500).json({ error: 'Erro interno' });
     }
   }
-  
-  // Outros métodos não são permitidos
-  return res.status(405).send('Method not allowed');
+
+  // Outros métodos
+  return res.status(405).send('Método não permitido');
 };
 
-// Função para enviar mensagem com log detalhado
-async function sendMessageWithLogging(chatId, text) {
-  const botToken = process.env.BOT_TOKEN;
-  const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
-  
-  console.log(`Enviando mensagem para chat ${chatId}`);
-  console.log(`Texto da mensagem: ${text}`);
-  
+// Função simplificada para enviar mensagem
+async function testSendMessage(chatId, text) {
   try {
-    const response = await axios.post(url, {
-      chat_id: chatId,
-      text: text
+    const botToken = process.env.BOT_TOKEN;
+    const url = `https://api.telegram.org/bot${botToken}/sendMessage`;
+    
+    console.log(`Tentando enviar mensagem para ${chatId}: ${text}`);
+    
+    const response = await axios({
+      method: 'post',
+      url: url,
+      data: {
+        chat_id: chatId,
+        text: text
+      },
+      timeout: 10000 // 10 segundos de timeout
     });
     
-    console.log('Resposta da API do Telegram:', JSON.stringify(response.data));
-    return response.data;
+    console.log('Resposta:', response.status, JSON.stringify(response.data));
   } catch (error) {
-    console.error('Erro detalhado ao enviar mensagem:', 
-      error.response ? JSON.stringify(error.response.data) : error.message
+    console.error('Erro ao enviar mensagem:', 
+      error.response ? JSON.stringify({
+        status: error.response.status,
+        data: error.response.data
+      }) : error.message
     );
-    throw error;
   }
 }
