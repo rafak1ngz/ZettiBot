@@ -49,8 +49,8 @@ async function sendMessage(chatId, text) {
   try {
     await axios.post(url, {
       chat_id: chatId,
-      text: text,
-      parse_mode: 'Markdown'
+      text: text
+      // Removido o parse_mode: 'Markdown'
     });
   } catch (error) {
     console.error('Erro ao enviar mensagem:', error);
