@@ -11,7 +11,18 @@ if (!BOT_TOKEN) {
 // Função para inicializar o bot
 function setupBot() {
   const bot = new TelegramBot(BOT_TOKEN);
-  console.log('Bot inicializado');
+  console.log('Bot inicializado com token:', BOT_TOKEN.substring(0, 10) + '...');
+
+  // Adicionar listener de erro
+  bot.on('polling_error', (error) => {
+    console.error('Erro de polling:', error);
+  });
+
+  // Adicionar listener de webhook
+  bot.on('webhook_error', (error) => {
+    console.error('Erro de webhook:', error);
+  });
+
   return bot;
 }
 
