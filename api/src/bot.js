@@ -1,7 +1,12 @@
 const TelegramBot = require('node-telegram-bot-api');
 
-// Configuração
-const BOT_TOKEN = process.env.BOT_TOKEN || '7914192908:AAGXiOU_E4TfR-Kuynf6V_sTgRRyUdN0umM';
+// Configuração via variável de ambiente
+const BOT_TOKEN = process.env.BOT_TOKEN;
+
+// Verificar se o token está definido
+if (!BOT_TOKEN) {
+  console.error('ERRO: BOT_TOKEN não definido nas variáveis de ambiente');
+}
 
 // Função para inicializar o bot
 function setupBot() {
