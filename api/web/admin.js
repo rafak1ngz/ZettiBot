@@ -1,21 +1,12 @@
+const { getCommonHeadContent } = require('./utils');
+
 module.exports = (req, res) => {
   // Verificar autenticação
   if (!req.cookies || req.cookies.adminToken !== process.env.SETUP_KEY) {
     return res.redirect('/login');
   }
   
-  // CSS e bibliotecas
-  const googleFonts = '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">';
-  const fontAwesome = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">';
-  
-  // CSS incorporado - mesmo conteúdo que index.js
-  // Para brevidade, estou omitindo aqui, mas você deve incluir o mesmo CSS
-  const styles = `<style>
-    /* Aqui colamos todo o CSS do arquivo main.css */
-    /* ... */
-  </style>`;
-
-  // Script para carregar usuários
+  // Script para gerenciamento de usuários
   const scripts = `
   <script>
     // Carregar usuários do Telegram
@@ -145,50 +136,7 @@ module.exports = (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Dashboard Admin - ZettiBot</title>
-      ${googleFonts}
-      ${fontAwesome}
-      ${styles}
-      <style>
-        /* Estilos adicionais para o modal */
-        .modal {
-          display: none;
-          position: fixed;
-          top: 0;
-          left: 0;
-          width: 100%;
-          height: 100%;
-          background-color: rgba(0, 0, 0, 0.5);
-          justify-content: center;
-          align-items: center;
-          z-index: 1000;
-        }
-        
-        .modal-content {
-          background-color: white;
-          padding: 30px;
-          border-radius: 10px;
-          width: 100%;
-          max-width: 500px;
-        }
-        
-        .modal-header {
-          display: flex;
-          justify-content: space-between;
-          align-items: center;
-          margin-bottom: 20px;
-        }
-        
-        .modal-close {
-          font-size: 1.5rem;
-          cursor: pointer;
-          background: none;
-          border: none;
-        }
-        
-        .form-row {
-          margin-bottom: 20px;
-        }
-      </style>
+      ${getCommonHeadContent()}
     </head>
     <body>
       <header>

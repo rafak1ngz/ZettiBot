@@ -1,23 +1,14 @@
+const { getCommonHeadContent } = require('./utils');
+
 module.exports = (req, res) => {
   // Verificação se já está logado
   if (req.cookies && req.cookies.adminToken) {
     return res.redirect('/admin');
   }
   
-  // CSS e bibliotecas
-  const googleFonts = '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">';
-  const fontAwesome = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">';
-  
   // Verifica se tem erro
   const hasError = req.query && req.query.error;
   
-  // CSS incorporado - mesmo conteúdo que index.js
-  // Para brevidade, estou omitindo aqui, mas você deve incluir o mesmo CSS
-  const styles = `<style>
-    /* Aqui colamos todo o CSS do arquivo main.css */
-    /* ... */
-  </style>`;
-
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -25,9 +16,7 @@ module.exports = (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Login Admin - ZettiBot</title>
-      ${googleFonts}
-      ${fontAwesome}
-      ${styles}
+      ${getCommonHeadContent()}
     </head>
     <body>
       <header>

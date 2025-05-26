@@ -1,15 +1,6 @@
-module.exports = (req, res) => {
-  // CSS e bibliotecas idênticos ao index.js
-  const googleFonts = '<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;600;700&family=Open+Sans:wght@400;600&display=swap" rel="stylesheet">';
-  const fontAwesome = '<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">';
-  
-  // CSS incorporado - mesmo conteúdo que index.js
-  // Para brevidade, estou omitindo aqui, mas você deve incluir o mesmo CSS
-  const styles = `<style>
-    /* Aqui colamos todo o CSS do arquivo main.css */
-    /* ... */
-  </style>`;
+const { getCommonHeadContent } = require('./utils');
 
+module.exports = (req, res) => {
   res.send(`
     <!DOCTYPE html>
     <html lang="pt-BR">
@@ -17,9 +8,7 @@ module.exports = (req, res) => {
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Sobre o ZettiBot</title>
-      ${googleFonts}
-      ${fontAwesome}
-      ${styles}
+      ${getCommonHeadContent()}
     </head>
     <body>
       <header>
