@@ -3,9 +3,12 @@ const { getCommonHeadContent } = require('./utils');
 module.exports = (req, res) => {
   // Verificação se já está logado
   if (req.cookies && req.cookies.adminToken) {
-    return res.redirect('/admin');
+    res.statusCode = 302;
+    res.setHeader('Location', '/admin');
+    return res.end();
   }
-  
+
+
   // Verifica se tem erro
   const hasError = req.query && req.query.error;
   let errorMessage = '';

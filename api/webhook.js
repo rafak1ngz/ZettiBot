@@ -139,7 +139,19 @@ module.exports = async (req, res) => {
       
       case '/logout':
         res.setHeader('Set-Cookie', 'adminToken=; Path=/; HttpOnly; Max-Age=0');
-        return res.redirect('/login');
+        return res.send(`
+          <!DOCTYPE html>
+          <html>
+            <head>
+              <meta http-equiv="refresh" content="0;url=/login">
+              <title>Redirecionando...</title>
+            </head>
+            <body>
+              <p>Saindo da área administrativa...</p>
+              <p>Se não for redirecionado, <a href="/login">clique aqui</a>.</p>
+            </body>
+          </html>
+        `);
       
       case '/set-webhook':
         try {
@@ -183,7 +195,7 @@ module.exports = async (req, res) => {
       // Verificar se o req.body existe
       if (!req.body) {
         console.error('Corpo da requisição vazio');
-        return res.redirect('/login?error=1');
+        return res.status(302).setHeader('Location', '/login?error=1').end();
       }
       
       const password = req.body.password;
@@ -197,25 +209,33 @@ module.exports = async (req, res) => {
           `adminToken=${process.env.SETUP_KEY}; Path=/; HttpOnly; Max-Age=3600`
         );
         
-        // Redirecionar para admin
-        return res.redirect('/admin');
+        // Redirecionar para admin usando 302 (redirecionamento temporário)
+        res.statusCode = 302;
+        res.setHeader('Location', '/admin');
+        return res.end();
       } else {
         console.log('Senha inválida');
-        return res.redirect('/login?error=1');
+        res.statusCode = 302;
+        res.setHeader('Location', '/login?error=1');
+        return res.end();
       }
     } catch (error) {
       console.error('Erro ao processar login:', error);
-      return res.redirect('/login?error=2');
+      res.statusCode = 302;
+      res.setHeader('Location', '/login?error=2');
+      return res.end();
     }
   }
 
   // API de Usuários Telegram
   if (req.method === 'GET' && path === '/api/admin/telegram-users') {
-    // Verificar autenticação
+// Verificar autenticação para admin
     if (!req.cookies || req.cookies.adminToken !== process.env.SETUP_KEY) {
-      return res.status(401).json({ error: 'Não autorizado' });
+      res.statusCode = 302;
+      res.setHeader('Location', '/login');
+      return res.end();
     }
-    
+
     try {
       if (!supabase) {
         throw new Error('Supabase não configurado');
