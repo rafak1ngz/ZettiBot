@@ -1,14 +1,18 @@
-# api/webhook.py
-from flask import Flask, request
+from http.server import BaseHTTPRequestHandler
 
-app = Flask(__name__)
-
-@app.route('/', methods=['GET', 'POST'])
-def webhook():
-    if request.method == 'POST':
-        return "OK"
-    return "ZettiBot está funcionando!"
-
-# Handler para Vercel
-def handler(request):
-    return app(request)
+class handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.send_header('Content-type', 'text/plain')
+        self.end_headers()
+        self.wfile.write(str.encode('ZettiBot está funcionando!'))
+        
+    def do_POST(self):
+        content_length = int(self.headers['Content-Length'])
+        post_data = self.rfile.read(content_length)
+        
+        self.send_response(200)
+        self.send_header('Content-type', 'application/json')
+        self.end_headers()
+        
+        self.wfile.write('{"status": "ok"}'.encode())
