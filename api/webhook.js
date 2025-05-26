@@ -1,5 +1,5 @@
-const { setupBot } = require('../src/bot');
-const { setupHandlers } = require('../src/handlers');
+const { setupBot } = require('./src/bot');
+const { setupHandlers } = require('./src/handlers');
 
 // Bot já configurado
 const bot = setupBot();
