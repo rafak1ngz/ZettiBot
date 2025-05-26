@@ -58,7 +58,7 @@ module.exports = (req, res) => {
                 </div>
                 <h3>ZettiBot</h3>
                 <p>Seu parceiro de vendas no bolso</p>
-                <a href="https://t.me/ZettiBot" class="btn" style="margin-top: 20px;">
+                <a href="https://t.me/AgenteZettiBot" class="btn" style="margin-top: 20px;">
                   <i class="fab fa-telegram"></i> Abrir no Telegram
                 </a>
               </div>

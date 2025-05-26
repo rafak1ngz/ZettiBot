@@ -9,10 +9,9 @@ const loginPage = require('./web/login');
 const adminPage = require('./web/admin');
 
 // Configuração de Supabase
-const supabase = createClient(
-  process.env.SUPABASE_URL, 
-  process.env.SUPABASE_KEY
-);
+const supabase = process.env.SUPABASE_URL && process.env.SUPABASE_KEY 
+  ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_KEY)
+  : null;
 
 // Função para validar configuração
 function validateConfig() {
@@ -31,12 +30,80 @@ function validateConfig() {
   return true;
 }
 
+// Função para processar o corpo da requisição
+function parseBody(req) {
+  return new Promise((resolve, reject) => {
+    if (req.method !== 'POST') {
+      return resolve({});
+    }
+    
+    // Se o conteúdo já foi analisado
+    if (req.body) {
+      return resolve(req.body);
+    }
+    
+    let body = '';
+    req.on('data', (chunk) => {
+      body += chunk.toString();
+    });
+    
+    req.on('end', () => {
+      try {
+        // Verificar o content-type
+        const contentType = req.headers['content-type'] || '';
+        
+        if (contentType.includes('application/json')) {
+          req.body = JSON.parse(body);
+        } else if (contentType.includes('application/x-www-form-urlencoded')) {
+          req.body = Object.fromEntries(new URLSearchParams(body));
+        } else {
+          req.body = body;
+        }
+        
+        resolve(req.body);
+      } catch (err) {
+        reject(err);
+      }
+    });
+  });
+}
+
+// Função para extrair cookies da requisição
+function parseCookies(req) {
+  const cookies = {};
+  const cookieHeader = req.headers.cookie || '';
+  
+  cookieHeader.split(';').forEach(cookie => {
+    const parts = cookie.split('=');
+    if (parts.length >= 2) {
+      const key = parts[0].trim();
+      const value = parts[1].trim();
+      cookies[key] = value;
+    }
+  });
+  
+  req.cookies = cookies;
+  return cookies;
+}
+
 // Inicialização do bot
 const bot = setupBot();
 setupHandlers(bot);
 
 // Handler principal para Vercel
 module.exports = async (req, res) => {
+  // Processar corpo da requisição se for POST
+  if (req.method === 'POST') {
+    try {
+      await parseBody(req);
+    } catch (err) {
+      console.error('Erro ao parsear corpo da requisição:', err);
+    }
+  }
+  
+  // Processar cookies
+  parseCookies(req);
+  
   // Validar configuração
   const configValid = validateConfig();
   if (!configValid) {
@@ -92,20 +159,53 @@ module.exports = async (req, res) => {
             error: error.message
           });
         }
+        
+      case '/debug':
+        // Endpoint para debug
+        return res.status(200).json({
+          config: {
+            bot_token: process.env.BOT_TOKEN ? 'Configurado' : 'Não configurado',
+            supabase_url: process.env.SUPABASE_URL ? 'Configurado' : 'Não configurado',
+            supabase_key: process.env.SUPABASE_KEY ? 'Configurado' : 'Não configurado',
+            setup_key: process.env.SETUP_KEY ? 'Configurado' : 'Não configurado'
+          },
+          cookies: req.cookies || {},
+          time: new Date().toISOString()
+        });
     }
   }
 
   // Processamento de login (POST)
   if (req.method === 'POST' && path === '/api/login') {
-    const { password } = req.body;
-    
-    if (password === process.env.SETUP_KEY) {
-      res.setHeader('Set-Cookie', 
-        `adminToken=${process.env.SETUP_KEY}; Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=3600`
-      );
-      return res.redirect('/admin');
-    } else {
-      return res.redirect('/login?error=1');
+    try {
+      console.log('Tentativa de login recebida');
+      
+      // Verificar se o req.body existe
+      if (!req.body) {
+        console.error('Corpo da requisição vazio');
+        return res.redirect('/login?error=1');
+      }
+      
+      const password = req.body.password;
+      console.log('Senha recebida:', password ? 'Sim' : 'Não');
+      
+      if (password === process.env.SETUP_KEY) {
+        console.log('Senha válida, configurando cookie');
+        
+        // Configurar cookie de autenticação
+        res.setHeader('Set-Cookie', 
+          `adminToken=${process.env.SETUP_KEY}; Path=/; HttpOnly; Max-Age=3600`
+        );
+        
+        // Redirecionar para admin
+        return res.redirect('/admin');
+      } else {
+        console.log('Senha inválida');
+        return res.redirect('/login?error=1');
+      }
+    } catch (error) {
+      console.error('Erro ao processar login:', error);
+      return res.redirect('/login?error=2');
     }
   }
 
@@ -117,6 +217,10 @@ module.exports = async (req, res) => {
     }
     
     try {
+      if (!supabase) {
+        throw new Error('Supabase não configurado');
+      }
+      
       const { data, error } = await supabase.from('users').select('*');
       
       if (error) throw error;
@@ -136,6 +240,10 @@ module.exports = async (req, res) => {
     }
     
     try {
+      if (!supabase) {
+        throw new Error('Supabase não configurado');
+      }
+      
       const { telegram_id, name } = req.body;
       
       if (!telegram_id || !name) {
@@ -145,7 +253,7 @@ module.exports = async (req, res) => {
       const { data, error } = await supabase.from('users').upsert({
         telegram_id,
         name,
-        created_at: new Date()
+        created_at: new Date().toISOString()
       });
       
       if (error) throw error;
@@ -165,6 +273,10 @@ module.exports = async (req, res) => {
     }
     
     try {
+      if (!supabase) {
+        throw new Error('Supabase não configurado');
+      }
+      
       const { telegram_id } = req.body;
       
       if (!telegram_id) {
@@ -189,20 +301,25 @@ module.exports = async (req, res) => {
       console.log('Update recebido:', JSON.stringify(update).substring(0, 100));
       
       // Verificar se o usuário está autorizado
-      if (update.message) {
-        const { data, error } = await supabase
-          .from('users')
-          .select('*')
-          .eq('telegram_id', update.message.from.id)
-          .single();
-        
-        if (error || !data) {
-          // Usuário não autorizado
-          await bot.sendMessage(
-            update.message.chat.id, 
-            "❌ Você não está autorizado a usar este bot. Entre em contato com o administrador."
-          );
-          return res.status(403).json({ error: 'Usuário não autorizado' });
+      if (update && update.message && supabase) {
+        try {
+          const { data, error } = await supabase
+            .from('users')
+            .select('*')
+            .eq('telegram_id', update.message.from.id)
+            .single();
+          
+          if (error || !data) {
+            // Usuário não autorizado
+            await bot.sendMessage(
+              update.message.chat.id, 
+              "❌ Você não está autorizado a usar este bot. Entre em contato com o administrador."
+            );
+            return res.status(403).json({ error: 'Usuário não autorizado' });
+          }
+        } catch (err) {
+          console.error('Erro ao verificar autorização:', err);
+          // Em caso de erro, permitir acesso para não bloquear o bot
         }
       }
       

@@ -8,6 +8,13 @@ module.exports = (req, res) => {
   
   // Verifica se tem erro
   const hasError = req.query && req.query.error;
+  let errorMessage = '';
+  
+  if (hasError === '1') {
+    errorMessage = 'Senha incorreta. Tente novamente.';
+  } else if (hasError === '2') {
+    errorMessage = 'Erro ao processar login. Tente novamente.';
+  }
   
   res.send(`
     <!DOCTYPE html>
@@ -38,9 +45,9 @@ module.exports = (req, res) => {
         <div class="login-container">
           <h2><i class="fas fa-lock"></i> Acesso Administrativo</h2>
           
-          ${hasError ? '<p class="error-message">Senha incorreta. Tente novamente.</p>' : ''}
+          ${hasError ? `<p class="error-message">${errorMessage}</p>` : ''}
           
-          <form id="loginForm" action="/api/login" method="POST">
+          <form id="loginForm" action="/api/login" method="POST" enctype="application/x-www-form-urlencoded">
             <div class="form-group">
               <label for="password">Senha de Administrador</label>
               <input 
@@ -70,6 +77,13 @@ module.exports = (req, res) => {
           </div>
         </div>
       </footer>
+      
+      <script>
+        // Script para garantir envio correto do formulário
+        document.getElementById('loginForm').addEventListener('submit', function(event) {
+          console.log('Formulário enviado');
+        });
+      </script>
     </body>
     </html>
   `);

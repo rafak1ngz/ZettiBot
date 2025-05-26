@@ -1,10 +1,14 @@
 {
   "name": "zettibot",
   "version": "1.0.0",
-  "description": "Assistente para vendedores externos",
+  "description": "Assistente de Vendas para vendedores externos",
   "main": "api/webhook.js",
   "dependencies": {
     "node-telegram-bot-api": "^0.64.0",
     "@supabase/supabase-js": "^2.29.0"
+  },
+  "scripts": {
+    "start": "vercel dev",
+    "deploy": "vercel deploy --prod"
   }
 }
