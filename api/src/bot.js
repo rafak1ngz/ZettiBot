@@ -1,29 +1,33 @@
-const TelegramBot = require('node-telegram-bot-api');
+const { Telegraf } = require('telegraf');
+const winston = require('winston');
 
 // Configuração via variável de ambiente
 const BOT_TOKEN = process.env.BOT_TOKEN;
 
 // Verificar se o token está definido
 if (!BOT_TOKEN) {
-  console.error('ERRO: BOT_TOKEN não definido nas variáveis de ambiente');
+  winston.error('ERRO: BOT_TOKEN não definido nas variáveis de ambiente');
+  process.exit(1);
 }
 
 // Função para inicializar o bot
 function setupBot() {
-  const bot = new TelegramBot(BOT_TOKEN);
-  console.log('Bot inicializado com token:', BOT_TOKEN.substring(0, 10) + '...');
+  try {
+    const bot = new Telegraf(BOT_TOKEN);
 
-  // Adicionar listener de erro
-  bot.on('polling_error', (error) => {
-    console.error('Erro de polling:', error);
-  });
+    winston.info('Bot inicializado com token:', BOT_TOKEN.substring(0, 10) + '...');
 
-  // Adicionar listener de webhook
-  bot.on('webhook_error', (error) => {
-    console.error('Erro de webhook:', error);
-  });
+    // Adicionar middleware de erro
+    bot.catch((err, ctx) => {
+      winston.error(`Erro no bot: ${err}`);
+      ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    });
 
-  return bot;
+    return bot;
+  } catch (error) {
+    winston.error('Erro ao configurar o bot:', error);
+    process.exit(1);
+  }
 }
 
 module.exports = { setupBot };

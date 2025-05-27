@@ -1,5 +1,9 @@
-const { setupBot } = require('./src/bot');
-const { setupHandlers } = require('./src/handlers');
+const { Telegraf } = require('telegraf');
+const commandsHandler = require('./src/handlers/commands');
+const clientsHandler = require('./src/handlers/clients');
+const appointmentsHandler = require('./src/handlers/appointments');
+const followupsHandler = require('./src/handlers/followups');
+const stateHandler = require('./src/handlers/stateHandler');
 const { createClient } = require('@supabase/supabase-js');
 
 // Importações de páginas web
@@ -66,8 +70,13 @@ function parseCookies(req) {
   return cookies;
 }
 
-const bot = setupBot();
-setupHandlers(bot);
+const bot = new Telegraf(process.env.BOT_TOKEN);
+
+commandsHandler.register(bot);
+clientsHandler.register(bot);
+appointmentsHandler.register(bot);
+followupsHandler.register(bot);
+stateHandler.register(bot);
 
 module.exports = async (req, res) => {
   const configValid = validateConfig();
