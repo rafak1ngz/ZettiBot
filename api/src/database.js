@@ -34,12 +34,22 @@ async function registerUser(userId, name, username) {
 }
 
 // Funções para clientes
-async function getClientesForUser(userId) {
+async function getClientesForUser(userId, filters = {}) {
   try {
-    const { data, error } = await supabase
+    let query = supabase
       .from('clients')
       .select('*')
       .eq('user_id', userId);
+    
+    // Filtros opcionais
+    if (filters.name) {
+      query = query.ilike('name', `%${filters.name}%`);
+    }
+    if (filters.company) {
+      query = query.ilike('company', `%${filters.company}%`);
+    }
+    
+    const { data, error } = await query;
       
     if (error) throw error;
     return data || [];
@@ -58,7 +68,8 @@ async function addClient(userId, clientData) {
         name: clientData.name,
         company: clientData.company,
         phone: clientData.phone,
-        email: clientData.email,
+        email: clientData.email || null,
+        last_contact: new Date(),
         created_at: new Date()
       });
     
@@ -66,6 +77,41 @@ async function addClient(userId, clientData) {
     return true;
   } catch (err) {
     console.error('Erro ao adicionar cliente:', err);
+    return false;
+  }
+}
+
+async function updateClient(userId, clientId, updateData) {
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .update({
+        ...updateData,
+        last_contact: new Date()
+      })
+      .eq('id', clientId)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Erro ao atualizar cliente:', err);
+    return false;
+  }
+}
+
+async function deleteClient(userId, clientId) {
+  try {
+    const { data, error } = await supabase
+      .from('clients')
+      .delete()
+      .eq('id', clientId)
+      .eq('user_id', userId);
+    
+    if (error) throw error;
+    return true;
+  } catch (err) {
+    console.error('Erro ao excluir cliente:', err);
     return false;
   }
 }
@@ -153,6 +199,8 @@ module.exports = {
   registerUser,
   getClientesForUser,
   addClient,
+  updateClient,
+  deleteClient,
   getFollowupsForUser,
   addFollowup,
   getAgendaForUser,
