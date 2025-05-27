@@ -34,9 +34,26 @@ function validateConfig() {
 const bot = setupBot();
 setupHandlers(bot);
 
+function parseCookies(req) {
+    const cookies = {};
+    const cookieHeader = req.headers.cookie;
+    if (cookieHeader) {
+        cookieHeader.split(';').forEach(cookie => {
+            const parts = cookie.split('=');
+            const name = parts[0].trim();
+            const value = parts[1] ? parts[1].trim() : '';
+            cookies[name] = value;
+        });
+    }
+    return cookies;
+}
+
 // Handler principal para Vercel
-// webhook.js
 module.exports = async (req, res) => {
+  
+  // Adicionar cookies ao objeto de requisição
+  req.cookies = parseCookies(req);
+
   // Validar configuração
   const configValid = validateConfig();
   if (!configValid) {
@@ -93,43 +110,53 @@ module.exports = async (req, res) => {
 
   // Roteamento de páginas web (GET)
   if (req.method === 'GET') {
-    switch(path) {
-      case '/':
-      case '/index':
-        return landingPage(req, res);
-      
-      case '/about':
-        return aboutPage(req, res);
-      
-      case '/login':
-        return loginPage(req, res);
-      
-      case '/admin':
-        if (!req.cookies || req.cookies.adminToken !== process.env.SETUP_KEY) {
-          return res.status(302).setHeader('Location', '/login').end();
-        }
-        return adminPage(req, res);
-      
-      case '/logout':
-        res.setHeader('Set-Cookie', 'adminToken=; Path=/; HttpOnly; Max-Age=0');
-        return res.status(302).setHeader('Location', '/login').end();
-      
-      case '/set-webhook':
-        try {
-          const WEBHOOK_URL = `https://${req.headers.host}/api/webhook`;
-          await bot.setWebHook(`${WEBHOOK_URL}`);
-          return res.status(200).json({
-            success: true,
-            message: 'Webhook configurado com sucesso',
-            webhook_url: WEBHOOK_URL
-          });
-        } catch (error) {
-          return res.status(500).json({
-            success: false,
-            error: error.message
-          });
-        }
-    }
+      const path = url.pathname;
+      console.log('Rota acessada:', path); // Log para debug
+
+      switch(path) {
+          case '/':
+          case '/index':
+              return landingPage(req, res);
+          
+          case '/about':
+              return aboutPage(req, res);
+          
+          case '/login':
+              return loginPage(req, res);
+          
+          case '/admin':
+              // Verificar autenticação para admin
+              if (!req.cookies || req.cookies.adminToken !== process.env.SETUP_KEY) {
+                  // Usar sendRedirect em vez de redirect
+                  res.writeHead(302, { Location: '/login' });
+                  return res.end();
+              }
+              return adminPage(req, res);
+          
+          case '/logout':
+              res.setHeader('Set-Cookie', 'adminToken=; Path=/; HttpOnly; Max-Age=0');
+              res.writeHead(302, { Location: '/login' });
+              return res.end();
+          
+          case '/set-webhook':
+              try {
+                  const WEBHOOK_URL = `https://${req.headers.host}/api/telegram-webhook`;
+                  await bot.setWebHook(`${WEBHOOK_URL}`);
+                  return res.status(200).json({
+                      success: true,
+                      message: 'Webhook configurado com sucesso',
+                      webhook_url: WEBHOOK_URL
+                  });
+              } catch (error) {
+                  return res.status(500).json({
+                      success: false,
+                      error: error.message
+                  });
+              }
+          
+          default:
+              return res.status(404).send(`Página não encontrada: ${path}`);
+      }
   }
 
   // Se chegou aqui, rota não encontrada

@@ -60,30 +60,51 @@ async function getClientesForUser(userId, filters = {}) {
 }
 
 async function addClient(userId, clientData) {
-    console.log('Iniciando addClient:', { userId, clientData });
-    try {
-        const { data, error } = await supabase
-            .from('clients')
-            .insert({
-                user_id: userId,
-                name: clientData.name,
-                company: clientData.company,
-                phone: clientData.phone,
-                email: clientData.email || null,
-                last_contact: new Date(),
-                created_at: new Date()
-            });
-        
-        if (error) {
-            console.error('Erro Supabase:', error);
-            throw error;
-        }
-        console.log('Cliente adicionado com sucesso');
-        return true;
-    } catch (err) {
-        console.error('Erro ao adicionar cliente:', err);
-        return false;
+  console.log('Iniciando addClient:', { userId, clientData });
+  try {
+    // Primeiro, buscar o ID do usuário no Supabase
+    const { data: userData, error: userError } = await supabase
+      .from('users')
+      .select('id')
+      .eq('telegram_id', userId)
+      .single();
+
+    if (userError) {
+      console.error('Erro ao buscar usuário:', userError);
+      return false;
     }
+
+    if (!userData) {
+      console.error('Usuário não encontrado:', userId);
+      return false;
+    }
+
+    console.log('Usuário encontrado:', userData);
+
+    // Agora inserir o cliente
+    const { data, error } = await supabase
+      .from('clients')
+      .insert({
+        user_id: userData.id, // Usando o UUID do usuário
+        name: clientData.name,
+        company: clientData.company,
+        phone: clientData.phone,
+        email: clientData.email || null,
+        last_contact: new Date().toISOString(),
+        created_at: new Date().toISOString()
+      });
+    
+    if (error) {
+      console.error('Erro Supabase ao inserir cliente:', error);
+      throw error;
+    }
+
+    console.log('Cliente adicionado com sucesso:', data);
+    return true;
+  } catch (err) {
+    console.error('Erro ao adicionar cliente:', err);
+    return false;
+  }
 }
 
 async function updateClient(userId, clientId, updateData) {
