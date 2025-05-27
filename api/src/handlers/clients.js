@@ -4,7 +4,7 @@ const {
   searchClients
 } = require('../utils/database');
 const { setUserState, getUserState, clearUserState } = require('../utils/states');
-const winston = require('winston');dações
+const winston = require('winston');
 const validateName = (name) => name && name.length >= 2;
 const validatePhone = (phone) => /^\(\d{2}\)\s?\d{4,5}-?\d{4}$/.test(phone);
 const validateEmail = (email) => email === 'pular' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
