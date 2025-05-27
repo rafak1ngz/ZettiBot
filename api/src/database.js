@@ -1,91 +1,62 @@
 const { createClient } = require('@supabase/supabase-js');
 
-// Configuração Supabase via variáveis de ambiente
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_KEY = process.env.SUPABASE_KEY;
 
-// Verificar se as configurações estão definidas
 if (!SUPABASE_URL || !SUPABASE_KEY) {
-  console.error('ERRO: Variáveis de ambiente SUPABASE_URL e/ou SUPABASE_KEY não definidas');
+  console.error('ERRO: Variáveis de ambiente SUPABASE_URL e SUPABASE_KEY não definidas.');
 }
 
-// Inicializa Supabase
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// Funções para usuários
 async function registerUser(userId, name, username) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('users')
-      .upsert({ 
-        telegram_id: userId, 
-        name, 
-        username, 
-        created_at: new Date()
+      .upsert({
+        telegram_id: userId,
+        name: name,
+        username: username,
+        created_at: new Date().toISOString()
       });
-    
     if (error) throw error;
     console.log(`Usuário ${userId} registrado/atualizado`);
     return true;
-  } catch (err) {
-    console.error(`Erro ao registrar usuário ${userId}:`, err);
+  } catch (error) {
+    console.error('Erro ao registrar usuário:', error);
     return false;
   }
 }
 
-// Funções para clientes
-async function getClientesForUser(userId, filters = {}) {
+async function getClientesForUser(userId) {
   try {
-    let query = supabase
+    const { data, error } = await supabase
       .from('clients')
       .select('*')
       .eq('user_id', userId);
-    
-    // Filtros opcionais
-    if (filters.name) {
-      query = query.ilike('name', `%${filters.name}%`);
-    }
-    if (filters.company) {
-      query = query.ilike('company', `%${filters.company}%`);
-    }
-    
-    const { data, error } = await query;
-      
     if (error) throw error;
     return data || [];
-  } catch (err) {
-    console.error(`Erro ao buscar clientes para ${userId}:`, err);
+  } catch (error) {
+    console.error('Erro ao buscar clientes:', error);
     return [];
   }
 }
 
 async function addClient(userId, clientData) {
-  console.log('Iniciando addClient:', { userId, clientData });
   try {
-    // Primeiro, buscar o ID do usuário no Supabase
     const { data: userData, error: userError } = await supabase
       .from('users')
       .select('id')
       .eq('telegram_id', userId)
       .single();
-
     if (userError) {
-      console.error('Erro ao buscar usuário:', userError);
+      console.error('Usuário não encontrado ao adicionar cliente:', userError);
       return false;
     }
-
-    if (!userData) {
-      console.error('Usuário não encontrado:', userId);
-      return false;
-    }
-
-    console.log('Usuário encontrado:', userData);
-
-    // Agora inserir o cliente
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('clients')
       .insert({
-        user_id: userData.id, // Usando o UUID do usuário
+        user_id: userData.id,
         name: clientData.name,
         company: clientData.company,
         phone: clientData.phone,
@@ -93,56 +64,47 @@ async function addClient(userId, clientData) {
         last_contact: new Date().toISOString(),
         created_at: new Date().toISOString()
       });
-    
-    if (error) {
-      console.error('Erro Supabase ao inserir cliente:', error);
-      throw error;
-    }
-
-    console.log('Cliente adicionado com sucesso:', data);
+    if (error) throw error;
     return true;
-  } catch (err) {
-    console.error('Erro ao adicionar cliente:', err);
+  } catch (error) {
+    console.error('Erro ao adicionar cliente:', error);
     return false;
   }
 }
 
 async function updateClient(userId, clientId, updateData) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('clients')
       .update({
         ...updateData,
-        last_contact: new Date()
+        last_contact: new Date().toISOString()
       })
       .eq('id', clientId)
       .eq('user_id', userId);
-    
     if (error) throw error;
     return true;
-  } catch (err) {
-    console.error('Erro ao atualizar cliente:', err);
+  } catch (error) {
+    console.error('Erro ao atualizar cliente:', error);
     return false;
   }
 }
 
 async function deleteClient(userId, clientId) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('clients')
       .delete()
       .eq('id', clientId)
       .eq('user_id', userId);
-    
     if (error) throw error;
     return true;
-  } catch (err) {
-    console.error('Erro ao excluir cliente:', err);
+  } catch (error) {
+    console.error('Erro ao excluir cliente:', error);
     return false;
   }
 }
 
-// Funções para follow-ups
 async function getFollowupsForUser(userId, status = 'pendente') {
   try {
     const { data, error } = await supabase
@@ -150,18 +112,17 @@ async function getFollowupsForUser(userId, status = 'pendente') {
       .select('*')
       .eq('user_id', userId)
       .eq('status', status);
-      
     if (error) throw error;
     return data || [];
-  } catch (err) {
-    console.error(`Erro ao buscar follow-ups para ${userId}:`, err);
+  } catch (error) {
+    console.error('Erro ao buscar follow-ups:', error);
     return [];
   }
 }
 
 async function addFollowup(userId, followupData) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('followups')
       .insert({
         user_id: userId,
@@ -170,18 +131,16 @@ async function addFollowup(userId, followupData) {
         type: followupData.type,
         notes: followupData.notes,
         status: 'pendente',
-        created_at: new Date()
+        created_at: new Date().toISOString()
       });
-    
     if (error) throw error;
     return true;
-  } catch (err) {
-    console.error('Erro ao adicionar follow-up:', err);
+  } catch (error) {
+    console.error('Erro ao adicionar follow-up:', error);
     return false;
   }
 }
 
-// Funções para compromissos
 async function getAgendaForUser(userId, date) {
   try {
     const { data, error } = await supabase
@@ -189,18 +148,17 @@ async function getAgendaForUser(userId, date) {
       .select('*, clients(*)')
       .eq('user_id', userId)
       .eq('date', date);
-      
     if (error) throw error;
     return data || [];
-  } catch (err) {
-    console.error(`Erro ao buscar agenda para ${userId}:`, err);
+  } catch (error) {
+    console.error('Erro ao buscar agenda:', error);
     return [];
   }
 }
 
 async function addAppointment(userId, appointmentData) {
   try {
-    const { data, error } = await supabase
+    const { error } = await supabase
       .from('appointments')
       .insert({
         user_id: userId,
@@ -210,13 +168,12 @@ async function addAppointment(userId, appointmentData) {
         type: appointmentData.type,
         notes: appointmentData.notes,
         status: 'agendado',
-        created_at: new Date()
+        created_at: new Date().toISOString()
       });
-    
     if (error) throw error;
     return true;
-  } catch (err) {
-    console.error('Erro ao adicionar compromisso:', err);
+  } catch (error) {
+    console.error('Erro ao adicionar compromisso:', error);
     return false;
   }
 }
