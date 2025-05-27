@@ -9,7 +9,7 @@ const validateName = (name) => name && name.length >= 2;
 const validatePhone = (phone) => /^\(\d{2}\)\s?\d{4,5}-?\d{4}$/.test(phone);
 const validateEmail = (email) => email === 'pular' || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 
-function createClientKeyboard(bot, chatId) {
+function createClientKeyboard() {
   return {
     reply_markup: {
       keyboard: [
@@ -23,14 +23,14 @@ function createClientKeyboard(bot, chatId) {
 
 function register(bot) {
   // Listar clientes com botões de ação
-  bot.onText(/\/clientes/, async (msg) => {
-    const chatId = msg.chat.id;
+  bot.command('clientes', async (ctx) => {
+    const chatId = ctx.chat.id;
     
     try {
       const clientes = await getClientesForUser(chatId);
       
       if (clientes.length === 0) {
-        await bot.sendMessage(chatId, 
+        await ctx.reply(
           "👥 Você não tem clientes cadastrados. Use /cliente_add para adicionar.", 
           {
             reply_markup: {
@@ -56,19 +56,19 @@ function register(bot) {
         }
       };
       
-      await bot.sendMessage(chatId, mensagem, keyboard);
+      await ctx.reply(mensagem, keyboard);
     } catch (error) {
       winston.error(`Erro ao listar clientes: ${error.message}`);
-      await bot.sendMessage(chatId, "❌ Erro ao buscar clientes. Tente novamente.");
+      await ctx.reply("❌ Erro ao buscar clientes. Tente novamente.");
     }
   });
 
   // Busca de clientes
-  bot.onText(/\/buscar_cliente/, async (msg) => {
-    const chatId = msg.chat.id;
+  bot.command('buscar_cliente', async (ctx) => {
+    const chatId = ctx.chat.id;
     
     setUserState(chatId, 'searching_client');
-    await bot.sendMessage(chatId, 
+    await ctx.reply(
       "🔍 Digite o nome ou empresa para buscar:", 
       {
         reply_markup: {
@@ -80,26 +80,26 @@ function register(bot) {
   });
 
   // Iniciar fluxo de adicionar cliente
-  bot.onText(/\/cliente_add/, async (msg) => {
-    const chatId = msg.chat.id;
+  bot.command('cliente_add', async (ctx) => {
+    const chatId = ctx.chat.id;
     
     setUserState(chatId, 'adding_client_name');
     
-    await bot.sendMessage(chatId, 
+    await ctx.reply(
       "🆕 Vamos adicionar um novo cliente. \n\nQual o nome do contato?", 
-      createClientKeyboard(bot, chatId)
+      createClientKeyboard()
     );
   });
 
   // Handler para callbacks de detalhes do cliente
-  bot.on('callback_query', async (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
+  bot.on('callback_query', async (ctx) => {
+    const chatId = ctx.callbackQuery.message.chat.id;
+    const data = ctx.callbackQuery.data;
 
     if (data.startsWith('cliente_detalhes:')) {
       const clientId = data.split(':')[1];
       // Implementar lógica de mostrar detalhes do cliente
-      await bot.answerCallbackQuery(callbackQuery.id);
+      await ctx.answerCbQuery();
     }
   });
 
@@ -114,13 +114,15 @@ async function handleClientStates(msg, bot) {
   // Tratamento de cancelamento
   if (text === '🚫 Cancelar Cadastro' || text === '🚫 Cancelar Busca') {
     clearUserState(chatId);
-    await bot.sendMessage(chatId, "❌ Operação cancelada.", {
+    // Como estamos no contexto fora de um handler Telegraf, 
+    // ainda usamos bot.telegram.sendMessage
+    await bot.telegram.sendMessage(chatId, "❌ Operação cancelada.", {
       reply_markup: { remove_keyboard: true }
     });
     return true;
   }
 
-  if (!userState.state || !userState.state.startsWith('adding_client_') && !userState.state.startsWith('searching_')) {
+  if (!userState.state || (!userState.state.startsWith('adding_client_') && !userState.state.startsWith('searching_'))) {
     return false;
   }
 
@@ -133,22 +135,22 @@ async function handleClientStates(msg, bot) {
           resultados.forEach((cliente, index) => {
             mensagem += `${index + 1}. ${cliente.name} - ${cliente.company || 'Sem empresa'}\n`;
           });
-          await bot.sendMessage(chatId, mensagem);
+          await bot.telegram.sendMessage(chatId, mensagem);
         } else {
-          await bot.sendMessage(chatId, "❌ Nenhum cliente encontrado.");
+          await bot.telegram.sendMessage(chatId, "❌ Nenhum cliente encontrado.");
         }
         clearUserState(chatId);
         break;
 
       case 'adding_client_name':
         if (!validateName(text)) {
-          await bot.sendMessage(chatId, "❌ Nome inválido. Digite um nome válido.");
+          await bot.telegram.sendMessage(chatId, "❌ Nome inválido. Digite um nome válido.");
           return true;
         }
         setUserState(chatId, 'adding_client_company', { name: text });
-        await bot.sendMessage(chatId, 
+        await bot.telegram.sendMessage(chatId, 
           `Cliente: ${text}\n\nQual a empresa?`, 
-          createClientKeyboard(bot, chatId)
+          createClientKeyboard()
         );
         break;
       
@@ -157,30 +159,30 @@ async function handleClientStates(msg, bot) {
           ...userState.data, 
           company: text || 'Não informada'
         });
-        await bot.sendMessage(chatId, 
+        await bot.telegram.sendMessage(chatId, 
           `Empresa: ${text || 'Não informada'}\n\nQual o telefone? (formato: (99) 99999-9999)`, 
-          createClientKeyboard(bot, chatId)
+          createClientKeyboard()
         );
         break;
       
       case 'adding_client_phone':
         if (!validatePhone(text)) {
-          await bot.sendMessage(chatId, "❌ Telefone inválido. Use o formato (99) 99999-9999");
+          await bot.telegram.sendMessage(chatId, "❌ Telefone inválido. Use o formato (99) 99999-9999");
           return true;
         }
         setUserState(chatId, 'adding_client_email', { 
           ...userState.data, 
           phone: text 
         });
-        await bot.sendMessage(chatId, 
+        await bot.telegram.sendMessage(chatId, 
           `Telefone: ${text}\n\nQual o email? (ou digite 'pular' para ignorar)`, 
-          createClientKeyboard(bot, chatId)
+          createClientKeyboard()
         );
         break;
       
       case 'adding_client_email':
         if (text !== 'pular' && !validateEmail(text)) {
-          await bot.sendMessage(chatId, "❌ Email inválido. Digite um email válido ou 'pular'.");
+          await bot.telegram.sendMessage(chatId, "❌ Email inválido. Digite um email válido ou 'pular'.");
           return true;
         }
         
@@ -192,12 +194,12 @@ async function handleClientStates(msg, bot) {
         const clientAdded = await addClient(chatId, clientData);
         
         if (clientAdded) {
-          await bot.sendMessage(chatId, 
+          await bot.telegram.sendMessage(chatId, 
             `✅ Cliente ${clientData.name} cadastrado com sucesso!`,
             { reply_markup: { remove_keyboard: true } }
           );
         } else {
-          await bot.sendMessage(chatId, 
+          await bot.telegram.sendMessage(chatId, 
             `❌ Erro ao cadastrar cliente. Tente novamente.`,
             { reply_markup: { remove_keyboard: true } }
           );
@@ -209,7 +211,7 @@ async function handleClientStates(msg, bot) {
     return true;
   } catch (error) {
     winston.error(`Erro ao processar estado de cliente: ${error.message}`);
-    await bot.sendMessage(chatId, "❌ Erro ao processar sua mensagem. Tente novamente.");
+    await bot.telegram.sendMessage(chatId, "❌ Erro ao processar sua mensagem. Tente novamente.");
     clearUserState(chatId);
     return false;
   }
