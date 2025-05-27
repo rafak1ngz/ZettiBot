@@ -7,18 +7,6 @@ const moment = require('moment');
 const validateDate = (dateString) => moment(dateString, 'DD/MM/YYYY', true).isValid();
 const validateTime = (timeString) => /^([01]\d|2[0-3]):([0-5]\d)$/.test(timeString);
 
-function createAppointmentKeyboard(bot, chatId) {
-  return {
-    reply_markup: {
-      keyboard: [
-        ['🚫 Cancelar Agendamento']
-      ],
-      resize_keyboard: true,
-      one_time_keyboard: true
-    }
-  };
-}
-
 function register(bot) {
   // Ver agenda de hoje
   bot.onText(/\/agenda/, async (msg) => {
@@ -33,25 +21,11 @@ function register(bot) {
         
 Você não tem compromissos agendados para hoje.
 
-Use /agendar para adicionar um novo compromisso.`, {
-          reply_markup: {
-            keyboard: [['/agendar']],
-            resize_keyboard: true
-          }
-        });
+Use /agendar para adicionar um novo compromisso.`);
         return;
       }
       
       let mensagem = `📅 Agenda para hoje:\n\n`;
-      
-      const inlineKeyboard = {
-        reply_markup: {
-          inline_keyboard: compromissos.map(comp => [{
-            text: `${comp.time} - ${comp.clients.name}`,
-            callback_data: `ver_compromisso:${comp.id}`
-          }])
-        }
-      };
       
       compromissos.forEach((comp, index) => {
         const horario = comp.time || "Horário não definido";
@@ -63,16 +37,14 @@ Use /agendar para adicionar um novo compromisso.`, {
         mensagem += `   Tipo: ${tipo} | Status: ${status}\n\n`;
       });
       
-      mensagem += `\nClique no compromisso para mais detalhes.`;
-      
-      await bot.sendMessage(chatId, mensagem, inlineKeyboard);
+      await bot.sendMessage(chatId, mensagem);
     } catch (error) {
       winston.error(`Erro ao buscar agenda: ${error.message}`);
       await bot.sendMessage(chatId, "❌ Erro ao buscar agenda. Tente novamente.");
     }
   });
 
-  // Agendar compromisso - início do fluxo
+  // Agendar compromisso
   bot.onText(/\/agendar/, async (msg) => {
     const chatId = msg.chat.id;
     
@@ -80,59 +52,21 @@ Use /agendar para adicionar um novo compromisso.`, {
       const clientes = await getClientesForUser(chatId);
       
       if (clientes.length === 0) {
-        await bot.sendMessage(chatId, "❌ Você precisa cadastrar clientes primeiro. Use /cliente_add para adicionar um cliente.", {
-          reply_markup: {
-            keyboard: [['/cliente_add']],
-            resize_keyboard: true
-          }
-        });
+        await bot.sendMessage(chatId, "❌ Você precisa cadastrar clientes primeiro. Use /cliente_add para adicionar um cliente.");
         return;
       }
       
-      const clientMenu = {
-        reply_markup: {
-          inline_keyboard: clientes.map(cliente => [{
-            text: cliente.name,
-            callback_data: `select_client_for_appointment:${cliente.id}`
-          }])
-        }
-      };
+      const clientMenu = clientes.map(cliente => `${cliente.id} - ${cliente.name}`).join('\n');
       
       await bot.sendMessage(
         chatId, 
-        "📅 Selecione o cliente para o compromisso:",
-        clientMenu
+        "📅 Selecione o cliente para o compromisso:\n\n" + clientMenu
       );
+      
+      setUserState(chatId, 'selecting_client_for_appointment');
     } catch (error) {
       winston.error(`Erro ao iniciar agendamento: ${error.message}`);
       await bot.sendMessage(chatId, "❌ Erro ao iniciar agendamento. Tente novamente.");
-    }
-  });
-
-  // Handler para callbacks de seleção de cliente e detalhes de compromisso
-  bot.on('callback_query', async (callbackQuery) => {
-    const chatId = callbackQuery.message.chat.id;
-    const data = callbackQuery.data;
-
-    try {
-      if (data.startsWith('select_client_for_appointment:')) {
-        const clientId = data.split(':')[1];
-        setUserState(chatId, 'adding_appointment_date', { clientId });
-        
-        await bot.sendMessage(chatId, 
-          "📅 Data do compromisso (DD/MM/AAAA):", 
-          createAppointmentKeyboard(bot, chatId)
-        );
-        
-        await bot.answerCallbackQuery(callbackQuery.id);
-      } else if (data.startsWith('ver_compromisso:')) {
-        const compromissoId = data.split(':')[1];
-        // Lógica para mostrar detalhes do compromisso
-        await bot.answerCallbackQuery(callbackQuery.id);
-      }
-    } catch (error) {
-      winston.error(`Erro em callback de compromisso: ${error.message}`);
-      await bot.sendMessage(chatId, "❌ Erro ao processar seleção. Tente novamente.");
     }
   });
 }
@@ -142,20 +76,18 @@ async function handleAppointmentStates(msg, bot) {
   const text = msg.text;
   const userState = getUserState(chatId);
 
-  if (text === '🚫 Cancelar Agendamento') {
-    clearUserState(chatId);
-    await bot.sendMessage(chatId, "❌ Agendamento cancelado.", {
-      reply_markup: { remove_keyboard: true }
-    });
-    return true;
-  }
-
-  if (!userState.state || !userState.state.startsWith('adding_appointment_')) {
+  if (!userState.state || !userState.state.startsWith('adding_appointment_') && userState.state !== 'selecting_client_for_appointment') {
     return false;
   }
 
   try {
     switch(userState.state) {
+      case 'selecting_client_for_appointment':
+        const [clientId, clientName] = text.split(' - ');
+        setUserState(chatId, 'adding_appointment_date', { clientId, clientName });
+        await bot.sendMessage(chatId, `Cliente selecionado: ${clientName}\n\nQual a data do compromisso? (DD/MM/AAAA)`);
+        break;
+
       case 'adding_appointment_date':
         if (!validateDate(text)) {
           await bot.sendMessage(chatId, "❌ Data inválida. Use o formato DD/MM/AAAA");
@@ -168,8 +100,7 @@ async function handleAppointmentStates(msg, bot) {
         });
         
         await bot.sendMessage(chatId, 
-          `Data: ${text}\n\nHorário do compromisso (HH:MM)`, 
-          createAppointmentKeyboard(bot, chatId)
+          `Data: ${text}\n\nHorário do compromisso (HH:MM)`
         );
         break;
       
@@ -185,8 +116,7 @@ async function handleAppointmentStates(msg, bot) {
         });
         
         await bot.sendMessage(chatId, 
-          `Horário: ${text}\n\nTipo de compromisso (ex: Reunião, Visita)`, 
-          createAppointmentKeyboard(bot, chatId)
+          `Horário: ${text}\n\nTipo de compromisso (ex: Reunião, Visita)`
         );
         break;
       
@@ -201,13 +131,15 @@ async function handleAppointmentStates(msg, bot) {
         
         if (appointmentAdded) {
           await bot.sendMessage(chatId, 
-            `✅ Compromisso agendado com sucesso!`, 
-            { reply_markup: { remove_keyboard: true } }
+            `✅ Compromisso agendado com sucesso!\n\n` +
+            `Cliente: ${appointmentData.clientName}\n` +
+            `Data: ${appointmentData.date}\n` +
+            `Horário: ${appointmentData.time}\n` +
+            `Tipo: ${appointmentData.type}`
           );
         } else {
           await bot.sendMessage(chatId, 
-            `❌ Erro ao agendar compromisso. Tente novamente.`, 
-            { reply_markup: { remove_keyboard: true } }
+            `❌ Erro ao agendar compromisso. Tente novamente.`
           );
         }
         
