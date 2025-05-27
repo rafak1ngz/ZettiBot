@@ -12,20 +12,18 @@ const validateEmail = (email) => email === 'pular' || /^[^\s@]+@[^\s@]+\.[^\s@]+
 
 function register(bot) {
   // Listar clientes
-  bot.onText(/\/clientes/, async (msg, match) => {
-    const chatId = msg.chat.id;
+  bot.command('clientes', async (ctx) => {
+    const chatId = ctx.chat.id;
     
     try {
       const clientes = await getClientesForUser(chatId);
       
       if (clientes.length === 0) {
-        await bot.sendMessage(chatId, 
-          "👥 Você não tem clientes cadastrados. Use /cliente_add para adicionar.", 
+        await ctx.reply(
+          "👥 Você não tem clientes cadastrados. Use /cliente_add para adicionar.",
           {
             reply_markup: {
-              keyboard: [
-                ['/cliente_add']
-              ],
+              keyboard: [['/cliente_add']],
               resize_keyboard: true
             }
           }
@@ -39,34 +37,38 @@ function register(bot) {
         mensagem += `   Telefone: ${cliente.phone || 'Não informado'}\n\n`;
       });
       
-      await bot.sendMessage(chatId, mensagem);
+      await ctx.reply(mensagem);
     } catch (error) {
       winston.error(`Erro ao listar clientes: ${error.message}`);
-      await bot.sendMessage(chatId, "Erro ao buscar clientes. Tente novamente.");
+      await ctx.reply("Erro ao buscar clientes. Tente novamente.");
     }
   });
 
-  // Adicionar cliente
-  bot.onText(/\/cliente_add/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    
-    setUserState(chatId, 'adding_client_name');
-    
-    await bot.sendMessage(chatId, 
-      "🆕 Vamos adicionar um novo cliente. \n\nQual o nome do contato?"
-    );
+  // Buscar cliente
+  bot.command('buscar_cliente', async (ctx) => {
+    const chatId = ctx.chat.id;
+    setUserState(chatId, 'searching_client');
+    await ctx.reply("🔍 Digite o nome ou empresa para buscar:");
   });
 
-  // Busca de clientes
-  bot.onText(/\/buscar_cliente/, async (msg, match) => {
-    const chatId = msg.chat.id;
-    
-    setUserState(chatId, 'searching_client');
-    await bot.sendMessage(chatId, "🔍 Digite o nome ou empresa para buscar:");
+  // Adicionar cliente
+  bot.command('cliente_add', async (ctx) => {
+    const chatId = ctx.chat.id;
+    setUserState(chatId, 'adding_client_name');
+    await ctx.reply("🆕 Vamos adicionar um novo cliente. \n\nQual o nome do contato?");
+  });
+
+  // Handler para mensagens normais
+  bot.on('text', async (ctx) => {
+    const result = await handleClientStates(ctx.message, ctx);
+    if (!result) {
+      // Se não for um estado de cliente, passar para o próximo handler
+      return;
+    }
   });
 }
 
-async function handleClientStates(msg, bot) {
+async function handleClientStates(msg, ctx) {
   const chatId = msg.chat.id;
   const text = msg.text;
   const userState = getUserState(chatId);
@@ -84,20 +86,20 @@ async function handleClientStates(msg, bot) {
           resultados.forEach((cliente, index) => {
             mensagem += `${index + 1}. ${cliente.name} - ${cliente.company || 'Sem empresa'}\n`;
           });
-          await bot.sendMessage(chatId, mensagem);
+          await ctx.reply(mensagem);
         } else {
-          await bot.sendMessage(chatId, "❌ Nenhum cliente encontrado.");
+          await ctx.reply("❌ Nenhum cliente encontrado.");
         }
         clearUserState(chatId);
         break;
 
       case 'adding_client_name':
         if (!validateName(text)) {
-          await bot.sendMessage(chatId, "❌ Nome inválido. Digite um nome válido.");
+          await ctx.reply("❌ Nome inválido. Digite um nome válido.");
           return true;
         }
         setUserState(chatId, 'adding_client_company', { name: text });
-        await bot.sendMessage(chatId, `Cliente: ${text}\n\nQual a empresa?`);
+        await ctx.reply(`Cliente: ${text}\n\nQual a empresa?`);
         break;
       
       case 'adding_client_company':
@@ -105,28 +107,28 @@ async function handleClientStates(msg, bot) {
           ...userState.data, 
           company: text || 'Não informada'
         });
-        await bot.sendMessage(chatId, 
+        await ctx.reply(
           `Empresa: ${text || 'Não informada'}\n\nQual o telefone? (formato: (99) 99999-9999)`
         );
         break;
       
       case 'adding_client_phone':
         if (!validatePhone(text)) {
-          await bot.sendMessage(chatId, "❌ Telefone inválido. Use o formato (99) 99999-9999");
+          await ctx.reply("❌ Telefone inválido. Use o formato (99) 99999-9999");
           return true;
         }
         setUserState(chatId, 'adding_client_email', { 
           ...userState.data, 
           phone: text 
         });
-        await bot.sendMessage(chatId, 
+        await ctx.reply(
           `Telefone: ${text}\n\nQual o email? (ou digite 'pular' para ignorar)`
         );
         break;
       
       case 'adding_client_email':
         if (text !== 'pular' && !validateEmail(text)) {
-          await bot.sendMessage(chatId, "❌ Email inválido. Digite um email válido ou 'pular'.");
+          await ctx.reply("❌ Email inválido. Digite um email válido ou 'pular'.");
           return true;
         }
         
@@ -138,13 +140,9 @@ async function handleClientStates(msg, bot) {
         const clientAdded = await addClient(chatId, clientData);
         
         if (clientAdded) {
-          await bot.sendMessage(chatId, 
-            `✅ Cliente ${clientData.name} cadastrado com sucesso!`
-          );
+          await ctx.reply(`✅ Cliente ${clientData.name} cadastrado com sucesso!`);
         } else {
-          await bot.sendMessage(chatId, 
-            `❌ Erro ao cadastrar cliente. Tente novamente.`
-          );
+          await ctx.reply(`❌ Erro ao cadastrar cliente. Tente novamente.`);
         }
         
         clearUserState(chatId);
@@ -153,7 +151,7 @@ async function handleClientStates(msg, bot) {
     return true;
   } catch (error) {
     winston.error(`Erro ao processar estado de cliente: ${error.message}`);
-    await bot.sendMessage(chatId, "❌ Erro ao processar sua mensagem. Tente novamente.");
+    await ctx.reply("❌ Erro ao processar sua mensagem. Tente novamente.");
     clearUserState(chatId);
     return false;
   }
