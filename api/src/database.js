@@ -60,25 +60,30 @@ async function getClientesForUser(userId, filters = {}) {
 }
 
 async function addClient(userId, clientData) {
-  try {
-    const { data, error } = await supabase
-      .from('clients')
-      .insert({
-        user_id: userId,
-        name: clientData.name,
-        company: clientData.company,
-        phone: clientData.phone,
-        email: clientData.email || null,
-        last_contact: new Date(),
-        created_at: new Date()
-      });
-    
-    if (error) throw error;
-    return true;
-  } catch (err) {
-    console.error('Erro ao adicionar cliente:', err);
-    return false;
-  }
+    console.log('Iniciando addClient:', { userId, clientData });
+    try {
+        const { data, error } = await supabase
+            .from('clients')
+            .insert({
+                user_id: userId,
+                name: clientData.name,
+                company: clientData.company,
+                phone: clientData.phone,
+                email: clientData.email || null,
+                last_contact: new Date(),
+                created_at: new Date()
+            });
+        
+        if (error) {
+            console.error('Erro Supabase:', error);
+            throw error;
+        }
+        console.log('Cliente adicionado com sucesso');
+        return true;
+    } catch (err) {
+        console.error('Erro ao adicionar cliente:', err);
+        return false;
+    }
 }
 
 async function updateClient(userId, clientId, updateData) {
