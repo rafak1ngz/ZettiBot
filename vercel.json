@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/next"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/api/webhook",
+      "methods": ["POST", "GET"],
+      "dest": "/api/webhook"
+    }
+  ],
+  "env": {
+    "NEXT_PUBLIC_SUPABASE_URL": "@supabase_url",
+    "NEXT_PUBLIC_SUPABASE_ANON_KEY": "@supabase_anon_key",
+    "TELEGRAM_BOT_TOKEN": "@telegram_bot_token",
+    "GOOGLE_PLACES_API_KEY": "@google_places_api_key",
+    "GOOGLE_MAPS_API_KEY": "@google_maps_api_key"
+  }
+}

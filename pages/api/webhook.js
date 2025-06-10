@@ -5,32 +5,49 @@ export const config = {
     bodyParser: {
       sizeLimit: '1mb',
     },
+    // Importante: desabilitar o bodyParser padrão
+    externalResolver: true, 
   },
 };
 
 export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
+      // Verifica se o corpo da requisição existe
+      if (!req.body) {
+        return res.status(400).json({ error: 'Request body is empty' });
+      }
+
       // Processa a atualização do Telegram
       await bot.handleUpdate(req.body);
       res.status(200).json({ ok: true });
     } else if (req.method === 'GET') {
-      // Endpoint para configurar webhook (você pode acessar esta URL para configurar)
-      const webhookUrl = `${process.env.VERCEL_URL || req.headers.host}/api/webhook`;
+      // Para configuração inicial do webhook
+      // Obter URL segura
+      const baseUrl = process.env.VERCEL_URL 
+        ? `https://${process.env.VERCEL_URL}`
+        : `https://${req.headers.host}`;
+      
+      const webhookUrl = `${baseUrl}/api/webhook`;
       
       try {
-        await bot.telegram.setWebhook(
-          `https://${webhookUrl}`
-        );
+        // Configurar o webhook do bot
+        await bot.telegram.setWebhook(webhookUrl);
+        
+        // Verificar a configuração
+        const webhookInfo = await bot.telegram.getWebhookInfo();
+        
         res.status(200).json({ 
           success: true, 
-          message: `Webhook set to https://${webhookUrl}`
+          webhook: webhookUrl,
+          info: webhookInfo
         });
       } catch (error) {
         console.error('Webhook setup error:', error);
         res.status(500).json({ 
           success: false, 
-          error: error.message 
+          error: error.message,
+          stack: error.stack 
         });
       }
     } else {
@@ -38,6 +55,9 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Webhook handler error:', error);
-    res.status(500).json({ error: error.toString() });
+    res.status(500).json({ 
+      error: error.toString(),
+      stack: error.stack 
+    });
   }
 }
