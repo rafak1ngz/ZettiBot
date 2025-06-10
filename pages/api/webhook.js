@@ -13,28 +13,20 @@ export const config = {
 export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
-      // Verifica se o corpo da requisição existe
-      if (!req.body) {
-        return res.status(400).json({ error: 'Request body is empty' });
-      }
-
-      // Processa a atualização do Telegram
+      // Processamento do webhook
       await bot.handleUpdate(req.body);
       res.status(200).json({ ok: true });
     } else if (req.method === 'GET') {
-      // Para configuração inicial do webhook
-      // Obter URL segura
-      const baseUrl = process.env.VERCEL_URL 
-        ? `https://${process.env.VERCEL_URL}`
-        : `https://${req.headers.host}`;
-      
-      const webhookUrl = `${baseUrl}/api/webhook`;
+      // Usar a variável de ambiente para URL do webhook
+      const webhookUrl = process.env.WEBHOOK_URL 
+        ? `${process.env.WEBHOOK_URL}/api/webhook`
+        : `https://${req.headers.host}/api/webhook`;
       
       try {
-        // Configurar o webhook do bot
+        // Configurar webhook do Telegram
         await bot.telegram.setWebhook(webhookUrl);
         
-        // Verificar a configuração
+        // Verificar configuração
         const webhookInfo = await bot.telegram.getWebhookInfo();
         
         res.status(200).json({ 
@@ -46,8 +38,7 @@ export default async function handler(req, res) {
         console.error('Webhook setup error:', error);
         res.status(500).json({ 
           success: false, 
-          error: error.message,
-          stack: error.stack 
+          error: error.message 
         });
       }
     } else {
@@ -55,9 +46,6 @@ export default async function handler(req, res) {
     }
   } catch (error) {
     console.error('Webhook handler error:', error);
-    res.status(500).json({ 
-      error: error.toString(),
-      stack: error.stack 
-    });
+    res.status(500).json({ error: error.toString() });
   }
 }
