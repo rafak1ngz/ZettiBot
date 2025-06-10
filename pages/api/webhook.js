@@ -5,7 +5,6 @@ export const config = {
     bodyParser: {
       sizeLimit: '1mb',
     },
-    // Importante: desabilitar o bodyParser padrão
     externalResolver: true, 
   },
 };
@@ -13,10 +12,16 @@ export const config = {
 export default async function handler(req, res) {
   try {
     if (req.method === 'POST') {
-      // Processamento do webhook
+      // Verifica se o corpo da requisição existe
+      if (!req.body) {
+        return res.status(400).json({ error: 'Request body is empty' });
+      }
+
+      // Processa a atualização do Telegram
       await bot.handleUpdate(req.body);
-      res.status(200).json({ ok: true });
-    } else if (req.method === 'GET') {
+      return res.status(200).json({ ok: true });
+    } 
+    else if (req.method === 'GET') {
       // Usar a variável de ambiente para URL do webhook
       const webhookUrl = process.env.WEBHOOK_URL 
         ? `${process.env.WEBHOOK_URL}/api/webhook`
@@ -29,23 +34,23 @@ export default async function handler(req, res) {
         // Verificar configuração
         const webhookInfo = await bot.telegram.getWebhookInfo();
         
-        res.status(200).json({ 
+        return res.status(200).json({ 
           success: true, 
           webhook: webhookUrl,
           info: webhookInfo
         });
       } catch (error) {
         console.error('Webhook setup error:', error);
-        res.status(500).json({ 
+        return res.status(500).json({ 
           success: false, 
           error: error.message 
         });
       }
     } else {
-      res.status(405).json({ error: 'Method not allowed' });
+      return res.status(405).json({ error: 'Method not allowed' });
     }
   } catch (error) {
     console.error('Webhook handler error:', error);
-    res.status(500).json({ error: error.toString() });
+    return res.status(500).json({ error: error.toString() });
   }
 }
