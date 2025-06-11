@@ -4,6 +4,8 @@ import { Telegraf } from 'telegraf';
 // Função para enviar lembretes
 const enviarLembrete = async (lembrete) => {
   try {
+    console.log(`🚀 Iniciando envio de lembrete ID=${lembrete.id} para ${lembrete.telegram_id}`);
+    
     const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
     
     // Formatar mensagem de lembrete
@@ -14,6 +16,8 @@ const enviarLembrete = async (lembrete) => {
       mensagem += `\n\n🏢 *Cliente:* ${lembrete.clientes.nome_empresa}`;
     }
     
+    console.log(`📤 Enviando mensagem para ${lembrete.telegram_id}:`, mensagem.substring(0, 50) + '...');
+    
     // Enviar notificação
     await bot.telegram.sendMessage(
       lembrete.telegram_id, 
@@ -21,12 +25,15 @@ const enviarLembrete = async (lembrete) => {
       { parse_mode: 'Markdown' }
     );
     
+    console.log(`✅ Mensagem enviada com sucesso para ${lembrete.telegram_id}`);
+    
     // Marcar lembrete como enviado
     await dbService.atualizarStatusLembrete(lembrete.id, 'enviado');
+    console.log(`📝 Lembrete ${lembrete.id} marcado como enviado`);
     
     return true;
   } catch (error) {
-    console.error('Erro ao enviar lembrete:', error);
+    console.error(`❌ ERRO ao enviar lembrete ${lembrete.id}:`, error);
     return false;
   }
 };
