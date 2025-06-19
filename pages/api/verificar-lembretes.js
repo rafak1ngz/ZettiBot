@@ -38,37 +38,89 @@ const enviarLembrete = async (lembrete) => {
   }
 };
 
-export default async function handler(req, res) {
-  // Verificar chave de segurança para evitar chamadas não autorizadas
-  const securityKey = req.query.key;
-  if (securityKey !== process.env.WEBHOOK_SECURITY_KEY) {
-    return res.status(403).json({ error: 'Acesso não autorizado' });
-  }
-
+const atualizarFollowupsVencidos = async () => {
   try {
-    // Buscar lembretes pendentes para a hora atual
-    const lembretes = await dbService.buscarLembretesParaNotificar();
+    const dataAtual = new Date().toISOString().split('T')[0];
     
-    // Log para depuração
-    console.log(`Verificando lembretes: ${lembretes.length} encontrados`);
+    // Buscar follow-ups vencidos
+    const { data: followups, error } = await dbService.supabase
+      .from('followups')
+      .select('*')
+      .lt('data', dataAtual)
+      .eq('status', 'A Realizar');
     
-    // Enviar cada lembrete
-    const resultados = await Promise.all(
-      lembretes.map(lembrete => enviarLembrete(lembrete))
-    );
+    if (error) throw error;
     
-    // Contar quantos foram enviados com sucesso
-    const sucessos = resultados.filter(r => r === true).length;
+    let atualizados = 0;
     
-    // Retornar resultados
-    return res.status(200).json({
-      verificados: lembretes.length,
-      enviados: sucessos,
+    // Atualizar status para "Pendente"
+    for (const followup of followups) {
+      try {
+        await dbService.atualizarStatusFollowUp(followup.id, 'Pendente');
+        atualizados++;
+        console.log(`✅ Follow-up ${followup.id} atualizado para Pendente`);
+      } catch (error) {
+        console.error(`❌ Erro ao atualizar follow-up ${followup.id}:`, error);
+      }
+    }
+    
+    return atualizados;
+  } catch (error) {
+    console.error('❌ Erro ao processar follow-ups vencidos:', error);
+    return 0;
+  }
+};
+
+export default async function handler(req, res) {
+  try {
+    const agora = new Date();
+    const dataAtual = agora.toISOString().split('T')[0];
+    
+    // Ajuste horário para Brasil
+    const horaAtual = new Date(
+      agora.getTime() - (3 * 60 * 60 * 1000) // Ajuste GMT-3
+    ).toLocaleTimeString('pt-BR', {
+      hour: '2-digit', 
+      minute: '2-digit', 
+      hour12: false
+    });
+
+    const lembretes = await dbService.buscarLembretesParaNotificar(dataAtual, horaAtual);
+    
+    const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
+    
+    for (const lembrete of lembretes) {
+      try {
+        await bot.telegram.sendMessage(
+          lembrete.telegram_id, 
+          `⏰ *LEMBRETE* ⏰\n\n${lembrete.texto}`,
+          { 
+            parse_mode: 'Markdown',
+            reply_markup: {
+              inline_keyboard: [
+                [
+                  { text: '✅ Concluído', callback_data: `lembrete_concluir_${lembrete.id}` },
+                  { text: '⏰ Adiar', callback_data: `lembrete_adiar_${lembrete.id}` }
+                ]
+              ]
+            }
+          }
+        );
+        
+        await dbService.marcarLembreteNotificado(lembrete.id);
+      } catch (error) {
+        console.error(`Erro ao notificar lembrete ${lembrete.id}:`, error);
+      }
+    }
+
+    res.status(200).json({ 
+      message: `Notificados ${lembretes.length} lembretes`,
       timestamp: new Date().toISOString()
     });
+
   } catch (error) {
-    console.error('Erro ao verificar lembretes:', error);
-    return res.status(500).json({ error: 'Erro interno ao verificar lembretes' });
+    console.error('Erro na verificação de lembretes:', error);
+    res.status(500).json({ error: 'Erro interno' });
   }
 }
 
