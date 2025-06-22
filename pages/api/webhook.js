@@ -1,50 +1,52 @@
-import axios from 'axios';
+import TelegramBot from 'node-telegram-bot-api';
+
+// Configuração do bot
+const token = process.env.TELEGRAM_BOT_TOKEN;
+const bot = new TelegramBot(token);
+
+// Objeto para armazenar a instância TelegramBot entre requisições
+let botInstance = null;
 
 export default async function handler(req, res) {
-  // Log inicial
-  console.log("Webhook chamado às", new Date().toISOString());
-  console.log("Método:", req.method);
+  console.log('Webhook recebido:', req.method);
   
-  // Apenas aceita POST
   if (req.method !== 'POST') {
-    return res.status(200).json({ ok: false, message: 'Método inválido' });
+    return res.status(200).json({ ok: false, message: 'Método não permitido' });
   }
   
   try {
+    // Processar atualização
     const update = req.body;
-    console.log("Update recebido:", JSON.stringify(update));
+    console.log('Update recebido:', JSON.stringify(update));
     
-    // Verifica se é uma mensagem válida
+    // Verificar se é uma mensagem
     if (update && update.message && update.message.text) {
       const chatId = update.message.chat.id;
       const text = update.message.text;
       
-      // Prepara resposta baseada no comando
-      let responseText;
+      console.log(`Mensagem recebida: ${chatId} : ${text}`);
+      
+      // Responder conforme comando
+      let responseText = '';
+      
       if (text === '/inicio' || text === '/start') {
         responseText = 'Olá! Sou o ZettiBot 🚀, seu assistente digital de vendas!';
-      } else if (text === '/ajuda' || text === '/help') {
+      } 
+      else if (text === '/ajuda' || text === '/help') {
         responseText = 'Comandos disponíveis: /inicio, /ajuda';
-      } else {
+      }
+      else {
         responseText = `Você disse: ${text}`;
       }
       
-      // Envia resposta diretamente via API
-      const token = process.env.TELEGRAM_BOT_TOKEN;
-      await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
-        chat_id: chatId,
-        text: responseText
-      });
-      
-      console.log("Resposta enviada para", chatId);
+      // Enviar resposta diretamente via API
+      await bot.sendMessage(chatId, responseText);
+      console.log('Resposta enviada com sucesso');
     }
     
-    // Responde OK para o Telegram
     return res.status(200).json({ ok: true });
-    
   } catch (error) {
-    console.error("Erro no webhook:", error);
-    // Ainda responde 200 para o Telegram
+    console.error('Erro no webhook:', error);
     return res.status(200).json({ ok: false, error: String(error) });
   }
 }
