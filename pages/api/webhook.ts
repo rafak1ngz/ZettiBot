@@ -1,48 +1,55 @@
 // pages/api/webhook.ts
-import type { NextApiRequest, NextApiResponse } from 'next';
-import { Telegraf } from 'telegraf';
+import type { NextApiRequest, NextApiResponse } from 'next'
+import { Telegraf } from 'telegraf'
 
-// Inicializa o bot com o token
-const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN || '');
+// Crie uma instância do bot
+const token = process.env.TELEGRAM_BOT_TOKEN || ''
+const bot = new Telegraf(token)
 
-// Comandos básicos
-bot.start((ctx) => ctx.reply('Olá! Sou o ZettiBot 🚀, seu assistente digital de vendas!'));
-bot.help((ctx) => ctx.reply('Comandos disponíveis: /inicio, /ajuda, /clientes'));
-bot.command('ajuda', (ctx) => ctx.reply('Lista de comandos disponíveis...'));
+// Configure comandos básicos
+bot.command('inicio', (ctx) => {
+  return ctx.reply('Olá! Sou o ZettiBot 🚀, seu assistente digital de vendas!')
+})
 
-// Comando de fallback para mensagens não reconhecidas
-bot.on('text', (ctx) => {
-  ctx.reply(`Recebi sua mensagem: ${ctx.message.text}. Digite /ajuda para ver os comandos.`);
-});
+bot.command('ajuda', (ctx) => {
+  return ctx.reply('Comandos disponíveis: /inicio, /ajuda, /clientes')
+})
 
-// Função para processar updates do Telegram
-async function processUpdate(update: any) {
+// Capture todas as mensagens
+bot.on('text', async (ctx) => {
+  console.log('Mensagem recebida:', ctx.message.text)
+  return ctx.reply(`Você disse: ${ctx.message.text}`)
+})
+
+// Handler principal do webhook
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
-    await bot.handleUpdate(update);
-    return true;
-  } catch (error) {
-    console.error('Erro ao processar update:', error);
-    return false;
-  }
-}
+    console.log('Webhook recebido:', req.method, JSON.stringify(req.body).slice(0, 200))
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse
-) {
-  console.log('Webhook recebido', req.method);
-  
-  // Apenas aceitar requisições POST
-  if (req.method !== 'POST') {
-    return res.status(200).json({ ok: false, message: 'Método não permitido' });
-  }
+    // Se não for um POST, responder com erro
+    if (req.method !== 'POST') {
+      console.log('Método não permitido:', req.method)
+      return res.status(200).json({ ok: false, status: 'method-not-allowed' })
+    }
 
-  try {
-    // Processar o update do Telegram
-    const success = await processUpdate(req.body);
-    return res.status(200).json({ ok: success });
+    // Verificar se o corpo da requisição é válido
+    if (!req.body || !req.body.update_id) {
+      console.log('Corpo inválido:', JSON.stringify(req.body))
+      return res.status(200).json({ ok: false, status: 'invalid-body' })
+    }
+
+    // Processar manualmente o update do Telegram
+    try {
+      await bot.handleUpdate(req.body)
+      console.log('Update processado com sucesso')
+    } catch (botError) {
+      console.error('Erro ao processar update:', botError)
+    }
+
+    // Sempre retornar 200 OK para o Telegram
+    return res.status(200).json({ ok: true })
   } catch (error) {
-    console.error('Erro no webhook:', error);
-    return res.status(200).json({ ok: false, error: String(error) });
+    console.error('Erro geral no webhook:', error)
+    return res.status(200).json({ ok: false, error: String(error) })
   }
 }
