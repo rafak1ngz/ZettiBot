@@ -3,7 +3,7 @@ import type { NextApiRequest, NextApiResponse } from 'next';
 import axios from 'axios';
 
 // Endpoint para os webhooks do Telegram
-export default async function res: NextApiResponse) {
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   try {
     console.log('Webhook recebido:', req.method);
     
@@ -25,7 +25,7 @@ export default async function res: NextApiResponse) {
       console.log(`Mensagem de ${userId}: ${text}`);
       
       // Enviar resposta diretamente via API do Telegram
-      const token = process.env.TELEGRAM_BOT_TOKEN;
+      const token = process.env.TELEGRAM_BOT_TOKEN || '';
       const telegramUrl = `https://api.telegram.org/bot${token}/sendMessage`;
       
       let responseText = `Recebi sua mensagem: ${text}`;
