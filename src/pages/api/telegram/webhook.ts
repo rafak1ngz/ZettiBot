@@ -2,10 +2,11 @@ import { NextApiRequest, NextApiResponse } from 'next';
 import bot from '@/lib/telegram';
 
 export default async function handler(
-  req: NextApiRequest,
+  req: NextApiRequest, 
   res: NextApiResponse
 ) {
   try {
+    console.log('Webhook received:', JSON.stringify(req.body, null, 2));
     // Verify security key
     const securityKey = req.headers['x-telegram-bot-api-secret-token'];
     if (securityKey !== process.env.WEBHOOK_SECURITY_KEY) {
@@ -20,8 +21,8 @@ export default async function handler(
     
     return res.status(405).json({ error: 'Method not allowed' });
   } catch (error) {
-    console.error('Webhook error:', error);
-    return res.status(500).json({ error: 'Internal server error' });
+    console.error('Webhook full error:', error);
+    return res.status(500).json({ error: 'Internal server error', details: error });
   }
 }
 
