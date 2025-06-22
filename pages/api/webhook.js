@@ -1,11 +1,5 @@
-import TelegramBot from 'node-telegram-bot-api';
-
-// Configuração do bot
-const token = process.env.TELEGRAM_BOT_TOKEN;
-const bot = new TelegramBot(token);
-
-// Objeto para armazenar a instância TelegramBot entre requisições
-let botInstance = null;
+// pages/api/webhook.js
+import axios from 'axios';
 
 export default async function handler(req, res) {
   console.log('Webhook recebido:', req.method);
@@ -39,8 +33,13 @@ export default async function handler(req, res) {
         responseText = `Você disse: ${text}`;
       }
       
-      // Enviar resposta diretamente via API
-      await bot.sendMessage(chatId, responseText);
+      // Enviar resposta diretamente via API do Telegram
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      await axios.post(`https://api.telegram.org/bot${token}/sendMessage`, {
+        chat_id: chatId,
+        text: responseText
+      });
+      
       console.log('Resposta enviada com sucesso');
     }
     
