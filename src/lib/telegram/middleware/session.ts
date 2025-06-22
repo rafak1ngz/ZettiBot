@@ -9,4 +9,7 @@ export interface SessionData {
 // Extend Context type to include session data
 export interface BotContext extends Context {
   session?: SessionData;
+  state: {
+    user?: any;
+  }
 }

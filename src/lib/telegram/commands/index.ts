@@ -1,6 +1,6 @@
-import { Telegraf } from 'telegraf';
+import { Telegraf, Context } from 'telegraf';
 import { handleStart } from './start';
-import { handleAjuda } from './ajuda';
+import { handleAjuda, getSpecificHelp } from './ajuda';
 import { handleClientes } from './clientes';
 import { handleAgenda } from './agenda';
 
@@ -12,8 +12,8 @@ export const registerCommands = (bot: Telegraf) => {
   bot.command('agenda', handleAgenda);
 
   // Registrar comandos de ajuda específicos
-  bot.command('ajuda_clientes', (ctx) => handleAjuda(ctx, 'clientes'));
-  bot.command('ajuda_agenda', (ctx) => handleAjuda(ctx, 'agenda'));
+  bot.command('ajuda_clientes', (ctx) => ctx.reply(getSpecificHelp('clientes')));
+  bot.command('ajuda_agenda', (ctx) => ctx.reply(getSpecificHelp('agenda')));
   
   // Registrar middlewares para estado de conversa
   bot.on('text', async (ctx, next) => {

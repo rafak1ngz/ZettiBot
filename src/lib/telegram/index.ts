@@ -1,4 +1,5 @@
 import { Telegraf, session } from 'telegraf';
+import { BotContext } from './middleware/session';
 import { userMiddleware } from './middleware/user';
 import { registerCommands } from './commands';
 
@@ -8,8 +9,8 @@ if (!token) {
   throw new Error('TELEGRAM_BOT_TOKEN must be provided');
 }
 
-// Create bot instance
-const bot = new Telegraf(token);
+// Create bot instance with proper typing
+const bot = new Telegraf<BotContext>(token);
 
 // Define session
 bot.use(session());

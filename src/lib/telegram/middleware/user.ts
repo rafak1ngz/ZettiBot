@@ -1,9 +1,10 @@
-import { Context, MiddlewareFn } from 'telegraf';
+import { MiddlewareFn } from 'telegraf';
 import { supabase } from '../../supabase';
 import { User } from '@/types/database';
+import { BotContext } from './session';
 
 // Middleware to check if user exists and attach to context
-export const userMiddleware: MiddlewareFn<Context> = async (ctx, next) => {
+export const userMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   const telegramId = ctx.from?.id;
   
   if (!telegramId) {

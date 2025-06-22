@@ -1,11 +1,10 @@
 import { Context } from 'telegraf';
 
-export async function handleAjuda(ctx: Context, command?: string) {
-  if (command) {
-    // Ajuda específica para cada comando
-    switch (command) {
-      case 'clientes':
-        return ctx.reply(`
+// Função para ajuda específica
+export function getSpecificHelp(command: string): string {
+  switch (command) {
+    case 'clientes':
+      return `
 📊 Ajuda: Gerenciamento de Clientes
 
 O comando /clientes permite gerenciar sua base de contatos comerciais.
@@ -19,10 +18,10 @@ Opções disponíveis:
 Exemplo de uso:
 Digite /clientes para ver o menu principal
 ou use diretamente /clientes_adicionar para novo cadastro.
-        `);
-        
-      case 'agenda':
-        return ctx.reply(`
+      `;
+      
+    case 'agenda':
+      return `
 📅 Ajuda: Gestão de Agenda
 
 O comando /agenda permite organizar seus compromissos comerciais.
@@ -36,11 +35,23 @@ Opções disponíveis:
 Exemplo de uso:
 Digite /agenda para acessar o menu principal
 ou use /agenda_visualizar para ver compromissos do dia.
-        `);
-        
-      default:
-        return ctx.reply(`Desculpe, não tenho ajuda específica para o comando ${command}.`);
-    }
+      `;
+      
+    default:
+      return `Desculpe, não tenho ajuda específica para o comando ${command}.`;
+  }
+}
+
+// Manipulador principal sem parâmetro opcional
+export async function handleAjuda(ctx: Context) {
+  // Verificar se há texto após o comando /ajuda
+  const message = ctx.message && 'text' in ctx.message ? ctx.message.text : '';
+  const parts = message.split(' ');
+  
+  // Se houver um comando específico após /ajuda (exemplo: /ajuda clientes)
+  if (parts.length > 1) {
+    const specificCommand = parts[1].toLowerCase();
+    return ctx.reply(getSpecificHelp(specificCommand));
   }
   
   // Ajuda geral
