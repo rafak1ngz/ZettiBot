@@ -1,6 +1,6 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '../../services/supabase';
-import { handleCommand } from '../../utils/commandHandler';
+import { supabase } from '../../src/services/supabase';
+import { handleCommand } from '../../src/utils/commandHandler';
 
 export default async function handler(
   req: NextApiRequest,
