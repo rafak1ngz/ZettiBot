@@ -3,88 +3,402 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ZettiBot - Status</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;600&display=swap" rel="stylesheet">
+    <title>ZettiBot - Assistente Digital de Vendas</title>
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* Estilos anteriores mantidos */
-        .features {
+        :root {
+            --primary: #1E4E8C;         /* Azul principal */
+            --secondary: #FF6B35;       /* Laranja secundário */
+            --dark-blue: #0D2744;       /* Azul escuro */
+            --light-blue: #7DB0D7;      /* Azul claro */
+            --light-gray: #F5F5F5;      /* Cinza claro */
+            --dark: #252525;            /* Cor escura/texto */
+            --white: #FFFFFF;           /* Branco */
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Montserrat', sans-serif;
+            background: var(--light-gray);
+            color: var(--dark);
+            line-height: 1.6;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
             display: flex;
-            justify-content: space-around;
-            margin-top: 30px;
+            justify-content: space-between;
+            align-items: center;
+            padding: 20px 0;
+        }
+        
+        .logo-container img {
+            height: 60px;
+            display: block;
+        }
+        
+        .cta-button {
+            background: var(--secondary);
+            color: var(--white);
+            border: none;
+            padding: 12px 24px;
+            border-radius: 30px;
+            font-weight: 600;
+            font-size: 16px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-decoration: none;
+            display: inline-block;
+        }
+        
+        .cta-button:hover {
+            background: #e55a25;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 107, 53, 0.3);
+        }
+        
+        .hero {
+            background: linear-gradient(135deg, var(--primary) 0%, var(--dark-blue) 100%);
+            color: var(--white);
+            padding: 80px 0;
+            margin-bottom: 60px;
+            border-radius: 20px;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .hero::after {
+            content: "";
+            position: absolute;
+            bottom: -60px;
+            right: -60px;
+            width: 250px;
+            height: 250px;
+            background: var(--secondary);
+            opacity: 0.2;
+            border-radius: 50%;
+            z-index: 0;
+        }
+        
+        .hero h1 {
+            font-size: 3rem;
+            font-weight: 700;
+            margin-bottom: 20px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .hero p {
+            font-size: 1.2rem;
+            max-width: 600px;
+            margin: 0 auto 30px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .status-indicator {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            padding: 15px 30px;
+            border-radius: 50px;
+            display: inline-flex;
+            align-items: center;
+            margin-bottom: 30px;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .status-indicator .dot {
+            width: 14px;
+            height: 14px;
+            background: #4CAF50;
+            border-radius: 50%;
+            margin-right: 10px;
+            position: relative;
+        }
+        
+        .status-indicator .dot::after {
+            content: "";
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background: #4CAF50;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0% {
+                transform: scale(1);
+                opacity: 1;
+            }
+            100% {
+                transform: scale(2.5);
+                opacity: 0;
+            }
+        }
+        
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+        
+        .feature-card {
+            background: var(--white);
+            border-radius: 16px;
+            overflow: hidden;
+            transition: all 0.3s ease;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+        }
+        
+        .feature-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+        }
+        
+        .feature-icon {
+            background: var(--light-gray);
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .feature-icon span {
+            font-size: 3rem;
+        }
+        
+        .feature-text {
+            padding: 30px;
+        }
+        
+        .feature-text h3 {
+            font-size: 1.5rem;
+            color: var(--primary);
+            margin-bottom: 15px;
+        }
+        
+        .section-title {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        
+        .section-title h2 {
+            font-size: 2.2rem;
+            color: var(--primary);
+            position: relative;
+            display: inline-block;
+        }
+        
+        .section-title h2::after {
+            content: "";
+            position: absolute;
+            bottom: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80px;
+            height: 4px;
+            background: var(--secondary);
+            border-radius: 2px;
+        }
+        
+        .updates {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+        
+        .updates h3 {
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+        
+        .footer {
+            margin-top: 80px;
+            background: var(--dark-blue);
+            color: var(--white);
+            padding: 40px 0;
+            text-align: center;
+        }
+        
+        .contact-section {
+            background: var(--white);
+            border-radius: 16px;
+            padding: 40px;
+            margin: 40px 0;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.05);
+            text-align: center;
+        }
+        
+        .contact-section h3 {
+            color: var(--primary);
+            margin-bottom: 20px;
+        }
+        
+        .contact-details {
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+            margin-top: 20px;
             flex-wrap: wrap;
         }
-        .feature {
-            background-color: #f4f4f4;
-            padding: 15px;
-            border-radius: 8px;
-            margin: 10px;
-            width: 200px;
-            text-align: center;
-            transition: transform 0.3s ease;
+        
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
-        .feature:hover {
-            transform: scale(1.05);
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        
+        .contact-item span {
+            color: var(--secondary);
         }
-        .feature-icon {
-            font-size: 2em;
-            margin-bottom: 10px;
+        
+        @media (max-width: 768px) {
+            .header {
+                flex-direction: column;
+                gap: 20px;
+            }
+            
+            .hero h1 {
+                font-size: 2.2rem;
+            }
+            
+            .hero p {
+                font-size: 1rem;
+            }
+            
+            .features {
+                grid-template-columns: 1fr;
+            }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <img src="/img/logo-zetti.jpg" alt="ZettiBot Logo" class="logo">
+        <header class="header">
+            <div class="logo-container">
+                <img src="/img/logo-zetti.jpg" alt="ZettiBot Logo">
+            </div>
+            <a href="https://t.me/AgenteZettiBot" class="cta-button">Acessar no Telegram</a>
+        </header>
         
-        <h1>ZettiBot - Assistente de Vendas</h1>
-        <p>Solução inteligente para vendedores externos</p>
+        <section class="hero">
+            <div class="status-indicator">
+                <div class="dot"></div>
+                <span>Sistema operacional</span>
+            </div>
+            <h1>ZettiBot</h1>
+            <p>Assistente digital que transforma o caos das vendas externas em estratégia clara e resultados concretos.</p>
+            <a href="https://t.me/AgenteZettiBot" class="cta-button">Começar agora</a>
+        </section>
         
-        <div class="status status-online">
-            🟢 Sistema Operacional
+        <div class="section-title">
+            <h2>Recursos Inteligentes</h2>
         </div>
-
+        
         <div class="features">
-            <div class="feature">
-                <div class="feature-icon">📅</div>
-                <h3>Agenda Inteligente</h3>
-                <p>Gerencie seus compromissos com facilidade</p>
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>📋</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Gestão de Clientes</h3>
+                    <p>Mantenha toda sua carteira de clientes organizada e acessível a qualquer momento.</p>
+                </div>
             </div>
-            <div class="feature">
-                <div class="feature-icon">🤝</div>
-                <h3>Follow-up</h3>
-                <p>Acompanhamento estratégico de leads</p>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>📅</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Agendamento</h3>
+                    <p>Organize compromissos, reuniões e visitas em um único lugar.</p>
+                </div>
             </div>
-            <div class="feature">
-                <div class="feature-icon">🗺️</div>
-                <h3>Rotas Otimizadas</h3>
-                <p>Planeje seus deslocamentos com precisão</p>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>🔄</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Follow-up</h3>
+                    <p>Acompanhamento inteligente de leads com lembretes no momento certo.</p>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>🔍</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Busca Potencial</h3>
+                    <p>Encontre novos clientes e oportunidades de negócio de forma estratégica.</p>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>🗺️</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Rotas Inteligentes</h3>
+                    <p>Otimize seu tempo com rotas eficientes para visitas comerciais.</p>
+                </div>
+            </div>
+            
+            <div class="feature-card">
+                <div class="feature-icon">
+                    <span>📝</span>
+                </div>
+                <div class="feature-text">
+                    <h3>Registros de Visita</h3>
+                    <p>Documente cada interação e mantenha o histórico completo de atendimento.</p>
+                </div>
             </div>
         </div>
-
-        <div style="margin-top: 30px;">
-            <h3>Últimas Atualizações</h3>
-            <p>Versão: 1.0.0</p>
-            <p>Última atualização: <script>document.write(new Date().toLocaleDateString())</script></p>
+        
+        <div class="updates">
+            <h3>Atualizações</h3>
+            <p>Versão 1.0.0</p>
+            <p>Última atualização: <script>document.write(new Date().toLocaleDateString('pt-BR'))</script></p>
         </div>
-
-        <div style="margin-top: 30px; font-size: 14px; color: #666;">
-            <p>Desenvolvido para otimizar a jornada de vendedores externos</p>
-            <a href="https://t.me/AgenteZettiBot" target="_blank" style="
-                display: inline-block;
-                background-color: #1E4E8C;
-                color: white;
-                padding: 10px 20px;
-                text-decoration: none;
-                border-radius: 5px;
-                margin-top: 15px;
-            ">Acessar ZettiBot</a>
-        </div>
-
-        <div style="margin-top: 30px; background-color: #f4f4f4; padding: 15px; border-radius: 8px;">
+        
+        <div class="contact-section">
             <h3>Contato & Suporte</h3>
             <p>Dúvidas ou sugestões? Entre em contato:</p>
-            <p>📧 contato@zettibot.com</p>
+            <div class="contact-details">
+                <div class="contact-item">
+                    <span>📧</span>
+                    <p>contato@zettibot.com</p>
+                </div>
+                <div class="contact-item">
+                    <span>📱</span>
+                    <p>@AgenteZettiBot</p>
+                </div>
+            </div>
         </div>
     </div>
+    
+    <footer class="footer">
+        <div class="container">
+            <p>© <script>document.write(new Date().getFullYear())</script> ZettiBot - Todos os direitos reservados</p>
+            <p>Digital Sales Assistant</p>
+        </div>
+    </footer>
 </body>
 </html>
