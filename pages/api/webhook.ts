@@ -1,62 +1,52 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { supabase } from '../../src/services/supabase';
-import { handleCommand } from '../../src/utils/commandHandler';
+import axios from 'axios';
+
+const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_API = `https://api.telegram.org/bot${TELEGRAM_TOKEN}`;
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
   console.log("Webhook recebido", new Date().toISOString());
-  console.log("Método:", req.method);
-  
+
   if (req.method !== 'POST') {
-    console.log("Método não permitido:", req.method);
-    return res.status(405).json({ message: 'Method not allowed' });
+    return res.status(405).json({ message: 'Método não permitido' });
   }
 
   try {
     const { body } = req;
-    console.log("Body recebido:", JSON.stringify(body));
-    
-    // Verificar se corpo é válido
-    if (!body || !body.message) {
-      console.log("Corpo inválido ou mensagem não encontrada");
-      return res.status(200).json({ success: false, message: 'Invalid body' });
-    }
-    
-    // Processar mensagem do Telegram
-    const chatId = body.message.chat.id;
-    const text = body.message.text || '';
-    const userId = body.message.from.id;
-    
-    console.log(`Mensagem recebida - ChatID: ${chatId}, Texto: ${text}`);
-    
-    try {
-      // Registrar ou atualizar usuário
-      const { data, error } = await supabase
-        .from('users')
-        .upsert({
-          telegram_id: userId.toString(),
-          nome: body.message.from.first_name || 'Usuário',
-          ultima_atividade: new Date().toISOString()
-        });
+    console.log("Dados recebidos:", JSON.stringify(body));
+
+    // Verificar se é uma mensagem válida
+    if (body && body.message && body.message.text) {
+      const chatId = body.message.chat.id;
+      const text = body.message.text;
       
-      if (error) throw error;
-      console.log("Usuário registrado/atualizado:", data);
-    } catch (dbError) {
-      console.error("Erro ao acessar banco de dados:", dbError);
+      console.log(`Mensagem recebida: ${text} de ${chatId}`);
+      
+      // Resposta básica para qualquer comando
+      let responseText = 'Olá! Recebi sua mensagem.';
+      
+      // Verificar comandos específicos
+      if (text === '/inicio') {
+        responseText = 'Bem-vindo ao ZettiBot! Este é o comando de início.';
+      } else if (text === '/ajuda') {
+        responseText = 'Aqui está a lista de comandos disponíveis...';
+      }
+      
+      // Enviar resposta
+      await axios.post(`${TELEGRAM_API}/sendMessage`, {
+        chat_id: chatId,
+        text: responseText
+      });
+      
+      console.log("Resposta enviada com sucesso");
     }
-    
-    // Processar comando
-    try {
-      await handleCommand(text, body.message);
-    } catch (cmdError) {
-      console.error("Erro ao processar comando:", cmdError);
-    }
-    
+
     return res.status(200).json({ success: true });
   } catch (error) {
-    console.error('Erro ao processar webhook:', error);
-    return res.status(500).json({ success: false, error: 'Erro ao processar mensagem' });
+    console.error('Erro no webhook:', error);
+    return res.status(200).json({ success: false, error: String(error) });
   }
 }
