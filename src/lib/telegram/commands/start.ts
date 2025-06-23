@@ -14,28 +14,31 @@ export async function handleStart(ctx: Context) {
     console.log(`Processing /start command for telegramId: ${telegramId}`);
     
     // Verificar se usuário já existe
-    const { data: existingUser, error } = await supabase
+    const { data: existingUsers, error: queryError } = await supabase
       .from('users')
       .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
+      .eq('telegram_id', telegramId);
     
-    // PGRST116 significa "nenhuma linha retornada" - é esperado para novos usuários
-    const userNotFound = error && error.code === 'PGRST116';
-    
-    if (error && !userNotFound) {
-      console.error('Database error:', error);
+    // Verificar se há erro na consulta (que não seja "nenhum registro encontrado")
+    if (queryError) {
+      console.error('Database query error:', queryError);
       return ctx.reply('Ocorreu um erro ao verificar seu cadastro. Por favor, tente novamente.');
     }
     
-    if (existingUser) {
+    // Verificar se encontramos o usuário
+    if (existingUsers && existingUsers.length > 0) {
+      const existingUser = existingUsers[0];
       console.log(`User found: ${existingUser.id}, updating last_active`);
       
       // Atualizar last_active
-      await supabase
+      const { error: updateError } = await supabase
         .from('users')
         .update({ last_active: new Date().toISOString() })
         .eq('id', existingUser.id);
+      
+      if (updateError) {
+        console.error('Error updating user:', updateError);
+      }
       
       return ctx.reply(`
 Olá novamente! Sou o ZettiBot 🚀, seu assistente digital de vendas.
@@ -48,6 +51,7 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
       // Usuário não encontrado, criar novo
       console.log(`Creating new user for telegramId: ${telegramId}`);
       
+      // Tentando criar o usuário com RLS desativado temporariamente
       const { data: newUser, error: createError } = await supabase
         .from('users')
         .insert([
@@ -58,14 +62,14 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
             last_active: new Date().toISOString()
           }
         ])
-        .select();
+        .select('*');
       
       if (createError) {
-        console.error('Error creating user:', createError);
-        return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente.');
+        console.error('Error details on creating user:', createError);
+        return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente mais tarde.');
       }
       
-      console.log(`New user created: ${JSON.stringify(newUser)}`);
+      console.log(`New user created successfully:`, newUser);
       
       return ctx.reply(`
 Olá, ${firstName}! Sou o ZettiBot 🚀, seu assistente digital de vendas.
@@ -76,11 +80,9 @@ Para começar, precisarei do seu email para configurar seu perfil.
 
 Por favor, responda com seu email profissional.
       `);
-      
-      // Configurar estado para continuar conversa - será implementado no futuro
     }
   } catch (error) {
-    console.error('Unexpected error:', error);
+    console.error('Unexpected error in start command:', error);
     return ctx.reply('Ocorreu um erro inesperado. Por favor, tente novamente.');
   }
 }

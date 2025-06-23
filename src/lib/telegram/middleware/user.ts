@@ -12,20 +12,19 @@ export const userMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   }
 
   try {
-    // Check if user exists
-    const { data: user, error } = await supabase
+    // Check if user exists with array result instead of single
+    const { data: users, error } = await supabase
       .from('users')
       .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
+      .eq('telegram_id', telegramId);
 
     if (error) {
-      console.error('Error fetching user:', error);
+      console.error('Error fetching user in middleware:', error);
     }
 
     // Attach user to context if found
-    if (user) {
-      ctx.state.user = user as User;
+    if (users && users.length > 0) {
+      ctx.state.user = users[0] as User;
     }
 
     return next();
