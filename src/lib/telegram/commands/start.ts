@@ -1,8 +1,7 @@
 import { Context } from 'telegraf';
-import { supabase, adminSupabase } from '@/lib/supabase';
-import { BotContext } from '../middleware/session';
+import { adminSupabase } from '@/lib/supabase';
 
-export async function handleStart(ctx: BotContext) {
+export async function handleStart(ctx: Context) {
   const telegramId = ctx.from?.id;
   const username = ctx.from?.username || '';
   const firstName = ctx.from?.first_name || '';
@@ -20,37 +19,47 @@ export async function handleStart(ctx: BotContext) {
       .select('*')
       .eq('telegram_id', telegramId);
     
-    // Verificar se há erro na consulta (que não seja "nenhum registro encontrado")
+    // Verificar se há erro na consulta
     if (queryError) {
       console.error('Database query error:', queryError);
       return ctx.reply('Ocorreu um erro ao verificar seu cadastro. Por favor, tente novamente.');
     }
     
+    let userId;
+    
     // Verificar se encontramos o usuário
     if (existingUsers && existingUsers.length > 0) {
       const existingUser = existingUsers[0];
-      console.log(`User found: ${existingUser.id}, updating last_active`);
+      userId = existingUser.id;
+      console.log(`User found: ${userId}, updating last_active`);
       
       // Atualizar last_active
-      const { error: updateError } = await adminSupabase
+      await adminSupabase
         .from('users')
         .update({ last_active: new Date().toISOString() })
-        .eq('id', existingUser.id);
+        .eq('id', userId);
       
-      if (updateError) {
-        console.error('Error updating user:', updateError);
-      }
-
       // Verificar se o email já está registrado
       if (!existingUser.email) {
-        // Iniciar conversa para obter email
-        if (!ctx.session) ctx.session = {};
-        ctx.session.conversationState = {
-          active: true,
-          command: 'start',
-          step: 'email',
-          data: {}
-        };
+        // Limpar sessões existentes
+        await adminSupabase
+          .from('sessions')
+          .delete()
+          .eq('telegram_id', telegramId);
+          
+        // Criar nova sessão para capturar email
+        await adminSupabase
+          .from('sessions')
+          .insert([
+            {
+              telegram_id: telegramId,
+              user_id: userId,
+              command: 'start',
+              step: 'email',
+              data: {},
+              updated_at: new Date().toISOString()
+            }
+          ]);
 
         return ctx.reply(`
 Olá, ${firstName}! Percebo que ainda não temos seu email registrado.
@@ -71,7 +80,7 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
       console.log(`Creating new user for telegramId: ${telegramId}`);
       
       // Usar client com service role para bypass de RLS
-      const { data: newUser, error: createError } = await adminSupabase
+      const { data: newUsers, error: createError } = await adminSupabase
         .from('users')
         .insert([
           { 
@@ -83,21 +92,38 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
         ])
         .select('*');
       
-      console.log('Insert attempt result:', newUser || createError);
-      
       if (createError) {
         console.error('Error details on creating user:', createError);
         return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente mais tarde.');
       }
-
-      // Iniciar conversa para obter email
-      if (!ctx.session) ctx.session = {};
-      ctx.session.conversationState = {
-        active: true,
-        command: 'start',
-        step: 'email',
-        data: {}
-      };
+      
+      console.log('Insert attempt result:', newUsers);
+      
+      if (!newUsers || newUsers.length === 0) {
+        return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente mais tarde.');
+      }
+      
+      userId = newUsers[0].id;
+      
+      // Limpar sessões existentes
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('telegram_id', telegramId);
+        
+      // Criar nova sessão para capturar email
+      await adminSupabase
+        .from('sessions')
+        .insert([
+          {
+            telegram_id: telegramId,
+            user_id: userId,
+            command: 'start',
+            step: 'email',
+            data: {},
+            updated_at: new Date().toISOString()
+          }
+        ]);
       
       return ctx.reply(`
 Olá, ${firstName}! Sou o ZettiBot 🚀, seu assistente digital de vendas.

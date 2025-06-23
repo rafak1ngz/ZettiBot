@@ -8,22 +8,35 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
     return next();
   }
 
-  // Verificar se há uma conversa ativa
-  const activeConversation = ctx.session?.conversationState?.active;
-  
-  if (!activeConversation) {
-    return next();
-  }
-
-  // Processar baseado no comando atual e etapa
-  const command = ctx.session?.conversationState?.command;
-  const step = ctx.session?.conversationState?.step;
-  const userId = ctx.state.user?.id;
-
-  console.log(`Processing conversation: command=${command}, step=${step}, userId=${userId}`);
+  const telegramId = ctx.from?.id;
+  if (!telegramId) return next();
 
   try {
-    if (command === 'start' && step === 'email') {
+    console.log(`Checking for active conversations for telegramId: ${telegramId}`);
+
+    // Verificar se há uma sessão ativa para este usuário
+    const { data: sessions, error } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+
+    if (error) {
+      console.error('Error fetching session:', error);
+      return next();
+    }
+
+    if (!sessions || sessions.length === 0) {
+      console.log('No active session found');
+      return next();
+    }
+
+    const session = sessions[0];
+    console.log(`Found active session: command=${session.command}, step=${session.step}`);
+
+    // Processar baseado no comando e etapa
+    if (session.command === 'start' && session.step === 'email') {
       const email = ctx.message.text;
       
       // Validar formato de email
@@ -32,28 +45,25 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
         return;
       }
       
-      if (!userId) {
-        await ctx.reply('Erro ao encontrar seu registro. Por favor, tente novamente com /inicio');
-        // Resetar estado da conversa
-        if (ctx.session?.conversationState) {
-          ctx.session.conversationState.active = false;
-        }
-        return;
-      }
-      
-      console.log(`Updating email for user ${userId} to ${email}`);
+      console.log(`Updating email for user ${session.user_id} to ${email}`);
       
       // Atualizar email do usuário
-      const { error } = await adminSupabase
+      const { error: updateError } = await adminSupabase
         .from('users')
         .update({ email })
-        .eq('id', userId);
+        .eq('id', session.user_id);
         
-      if (error) {
-        console.error('Error updating email:', error);
+      if (updateError) {
+        console.error('Error updating email:', updateError);
         await ctx.reply('Ocorreu um erro ao salvar seu email. Por favor, tente novamente.');
         return;
       }
+      
+      // Excluir a sessão após processamento
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('id', session.id);
       
       // Dar feedback e encerrar conversa
       await ctx.reply(`
@@ -64,11 +74,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
 👉 Digite /ajuda para conhecer os comandos disponíveis.
       `);
       
-      // Resetar estado da conversa
-      if (ctx.session?.conversationState) {
-        ctx.session.conversationState.active = false;
-      }
-      
       return;
     }
     
@@ -78,7 +83,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
     console.error('Error in conversation middleware:', error);
     await ctx.reply('Ocorreu um erro ao processar sua resposta. Por favor, tente novamente.');
   }
-  
-  // Se chegou aqui, passar para o próximo middleware
+
   return next();
 };
