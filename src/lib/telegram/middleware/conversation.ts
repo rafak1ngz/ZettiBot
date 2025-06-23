@@ -1,6 +1,7 @@
 import { MiddlewareFn } from 'telegraf';
 import { BotContext } from './session';
 import { adminSupabase } from '@/lib/supabase';
+import { Markup } from 'telegraf';
 
 export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   // Se não for mensagem de texto ou for um comando, não processar como conversa
@@ -151,11 +152,11 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             const telefone = ctx.message.text.trim();
             const telefoneValue = (telefone.toLowerCase() === 'pular') ? null : telefone;
 
-            // Atualizar sessão com valor final
+            // Atualizar sessão para confirmar antes de finalizar
             await adminSupabase
               .from('sessions')
               .update({
-                step: 'finalizar',
+                step: 'confirmar',
                 data: { 
                   ...session.data, 
                   contato_telefone: telefoneValue
@@ -164,55 +165,33 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               })
               .eq('id', session.id);
 
-            console.log('Inserting client with data:', {
-              user_id: session.user_id,
-              nome_empresa: session.data.nome_empresa,
-              cnpj: session.data.cnpj,
-              contato_nome: session.data.contato_nome,
-              contato_telefone: telefoneValue
-            });
+            // Mostrar resumo e solicitar confirmação
+            await ctx.reply(
+              `📋 Verifique os dados do cliente a ser cadastrado:\n\n` +
+              `Empresa: ${session.data.nome_empresa}\n` +
+              `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+              `Contato: ${session.data.contato_nome}\n` +
+              `Telefone: ${telefoneValue || 'Não informado'}\n\n` +
+              `Os dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+                [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+                [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+              ])
+            );
+            return;
 
-            // Inserir cliente
-            const { error: insertError } = await adminSupabase
-              .from('clientes')
-              .insert({
-                user_id: session.user_id,
-                nome_empresa: session.data.nome_empresa,
-                cnpj: session.data.cnpj,
-                contato_nome: session.data.contato_nome,
-                contato_telefone: telefoneValue,
-                updated_at: new Date().toISOString()
-              });
-
-            if (insertError) {
-              console.error('Error inserting client:', insertError);
-              await ctx.reply('Ocorreu um erro ao cadastrar o cliente. Por favor, tente novamente.');
-              return;
-            }
-
-            // Limpar sessão
-            await adminSupabase
-              .from('sessions')
-              .delete()
-              .eq('id', session.id);
-
-            await ctx.reply(`
-✅ Cliente cadastrado com sucesso!
-
-Empresa: ${session.data.nome_empresa}
-Contato: ${session.data.contato_nome}
-
-O que deseja fazer agora? 
-Digite /clientes para ver as opções.
-            `);
+          case 'confirmar':
+            // Este caso não será usado por texto, apenas por botões
+            await ctx.reply('Por favor, use os botões abaixo para confirmar, editar ou cancelar.');
             return;
         }
       } catch (error) {
         console.error('Erro no processamento de cliente:', error);
         await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
       }
-    }
-    
+    }   
+
     //=============================================================================
     // COMANDO: AGENDA - GERENCIAMENTO DE COMPROMISSOS
     //=============================================================================
