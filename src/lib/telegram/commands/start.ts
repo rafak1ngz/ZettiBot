@@ -11,6 +11,8 @@ export async function handleStart(ctx: Context) {
   }
   
   try {
+    console.log(`Processing /start command for telegramId: ${telegramId}`);
+    
     // Verificar se usuário já existe
     const { data: existingUser, error } = await supabase
       .from('users')
@@ -18,12 +20,17 @@ export async function handleStart(ctx: Context) {
       .eq('telegram_id', telegramId)
       .single();
     
-    if (error && error.code !== 'PGRST116') { // PGRST116 = not found
+    // PGRST116 significa "nenhuma linha retornada" - é esperado para novos usuários
+    const userNotFound = error && error.code === 'PGRST116';
+    
+    if (error && !userNotFound) {
       console.error('Database error:', error);
       return ctx.reply('Ocorreu um erro ao verificar seu cadastro. Por favor, tente novamente.');
     }
     
     if (existingUser) {
+      console.log(`User found: ${existingUser.id}, updating last_active`);
+      
       // Atualizar last_active
       await supabase
         .from('users')
@@ -38,7 +45,9 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
 👉 Digite /ajuda para ver todos os comandos disponíveis
       `);
     } else {
-      // Criar novo usuário
+      // Usuário não encontrado, criar novo
+      console.log(`Creating new user for telegramId: ${telegramId}`);
+      
       const { data: newUser, error: createError } = await supabase
         .from('users')
         .insert([
@@ -49,13 +58,14 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
             last_active: new Date().toISOString()
           }
         ])
-        .select()
-        .single();
+        .select();
       
       if (createError) {
         console.error('Error creating user:', createError);
         return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente.');
       }
+      
+      console.log(`New user created: ${JSON.stringify(newUser)}`);
       
       return ctx.reply(`
 Olá, ${firstName}! Sou o ZettiBot 🚀, seu assistente digital de vendas.
