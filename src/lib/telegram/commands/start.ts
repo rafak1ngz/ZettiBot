@@ -1,5 +1,5 @@
 import { Context } from 'telegraf';
-import { supabase } from '@/lib/supabase';
+import { supabase, adminSupabase } from '@/lib/supabase';
 
 export async function handleStart(ctx: Context) {
   const telegramId = ctx.from?.id;
@@ -31,7 +31,7 @@ export async function handleStart(ctx: Context) {
       console.log(`User found: ${existingUser.id}, updating last_active`);
       
       // Atualizar last_active
-      const { error: updateError } = await supabase
+      const { error: updateError } = await adminSupabase
         .from('users')
         .update({ last_active: new Date().toISOString() })
         .eq('id', existingUser.id);
@@ -51,8 +51,8 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
       // Usuário não encontrado, criar novo
       console.log(`Creating new user for telegramId: ${telegramId}`);
       
-      // Tentando criar o usuário com RLS desativado temporariamente
-      const { data: newUser, error: createError } = await supabase
+      // Usar client com service role para bypass de RLS
+      const { data: newUser, error: createError } = await adminSupabase
         .from('users')
         .insert([
           { 
@@ -64,12 +64,12 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
         ])
         .select('*');
       
+      console.log('Insert attempt result:', newUser || createError);
+      
       if (createError) {
         console.error('Error details on creating user:', createError);
         return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente mais tarde.');
       }
-      
-      console.log(`New user created successfully:`, newUser);
       
       return ctx.reply(`
 Olá, ${firstName}! Sou o ZettiBot 🚀, seu assistente digital de vendas.

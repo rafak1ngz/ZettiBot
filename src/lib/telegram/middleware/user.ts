@@ -1,5 +1,5 @@
 import { MiddlewareFn } from 'telegraf';
-import { supabase } from '../../supabase';
+import { supabase, adminSupabase } from '@/lib/supabase';
 import { User } from '@/types/database';
 import { BotContext } from './session';
 
@@ -13,7 +13,7 @@ export const userMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
 
   try {
     // Check if user exists with array result instead of single
-    const { data: users, error } = await supabase
+    const { data: users, error } = await adminSupabase
       .from('users')
       .select('*')
       .eq('telegram_id', telegramId);
