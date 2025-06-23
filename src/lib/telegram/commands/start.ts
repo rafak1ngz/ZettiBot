@@ -1,7 +1,8 @@
 import { Context } from 'telegraf';
 import { supabase, adminSupabase } from '@/lib/supabase';
+import { BotContext } from '../middleware/session';
 
-export async function handleStart(ctx: Context) {
+export async function handleStart(ctx: BotContext) {
   const telegramId = ctx.from?.id;
   const username = ctx.from?.username || '';
   const firstName = ctx.from?.first_name || '';
@@ -14,7 +15,7 @@ export async function handleStart(ctx: Context) {
     console.log(`Processing /start command for telegramId: ${telegramId}`);
     
     // Verificar se usuário já existe
-    const { data: existingUsers, error: queryError } = await supabase
+    const { data: existingUsers, error: queryError } = await adminSupabase
       .from('users')
       .select('*')
       .eq('telegram_id', telegramId);
@@ -38,6 +39,24 @@ export async function handleStart(ctx: Context) {
       
       if (updateError) {
         console.error('Error updating user:', updateError);
+      }
+
+      // Verificar se o email já está registrado
+      if (!existingUser.email) {
+        // Iniciar conversa para obter email
+        if (!ctx.session) ctx.session = {};
+        ctx.session.conversationState = {
+          active: true,
+          command: 'start',
+          step: 'email',
+          data: {}
+        };
+
+        return ctx.reply(`
+Olá, ${firstName}! Percebo que ainda não temos seu email registrado.
+
+Para uma experiência completa com o ZettiBot, por favor, me informe seu email profissional:
+        `);
       }
       
       return ctx.reply(`
@@ -70,6 +89,15 @@ Estou pronto para ajudar a transformar seu dia comercial em resultados incrívei
         console.error('Error details on creating user:', createError);
         return ctx.reply('Erro ao criar seu perfil. Por favor, tente novamente mais tarde.');
       }
+
+      // Iniciar conversa para obter email
+      if (!ctx.session) ctx.session = {};
+      ctx.session.conversationState = {
+        active: true,
+        command: 'start',
+        step: 'email',
+        data: {}
+      };
       
       return ctx.reply(`
 Olá, ${firstName}! Sou o ZettiBot 🚀, seu assistente digital de vendas.

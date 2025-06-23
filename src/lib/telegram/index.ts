@@ -1,6 +1,7 @@
 import { Telegraf, session } from 'telegraf';
 import { BotContext } from './middleware/session';
 import { userMiddleware } from './middleware/user';
+import { conversationMiddleware } from './middleware/conversation';
 import { registerCommands } from './commands';
 
 // Initialize bot with token
@@ -12,11 +13,14 @@ if (!token) {
 // Create bot instance with proper typing
 const bot = new Telegraf<BotContext>(token);
 
-// Define session
+// Define session middleware
 bot.use(session());
 
 // Add user middleware to attach user to context
 bot.use(userMiddleware);
+
+// Add conversation middleware to handle ongoing conversations
+bot.use(conversationMiddleware);
 
 // Register all commands
 registerCommands(bot);
