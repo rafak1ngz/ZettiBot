@@ -12,13 +12,19 @@ if (!token) {
 // Create bot instance
 const bot = new Telegraf(token);
 
-// Add user middleware to attach user to context
+//=============================================================================
+// MIDDLEWARES - Adicionados antes dos comandos para processar cada mensagem
+//=============================================================================
+// Middleware para identificar e anexar usuário ao contexto
 bot.use(userMiddleware);
 
-// Add conversation middleware to handle ongoing conversations
+// Middleware para processar conversas em andamento
 bot.use(conversationMiddleware);
 
-// Register all commands
+//=============================================================================
+// COMANDOS - Registrando todos os comandos do bot
+//=============================================================================
+// Função que registra todos os comandos (implementada em commands/index.ts)
 registerCommands(bot);
 
 export default bot;
