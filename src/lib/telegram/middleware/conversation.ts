@@ -181,11 +181,140 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             );
             return;
 
+          // Etapas de edição
+          case 'edit_nome_empresa':
+            // Atualizar nome da empresa
+            const novoNome = ctx.message.text.trim();
+            
+            if (!novoNome || novoNome.length < 2) {
+              await ctx.reply('Por favor, forneça um nome de empresa válido.');
+              return;
+            }
+            
+            // Atualizar dados na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, nome_empresa: novoNome },
+                step: 'confirmar',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+            
+            // Mostrar dados atualizados para confirmação
+            await ctx.reply(
+              `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+              `Empresa: ${novoNome}\n` +
+              `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+              `Contato: ${session.data.contato_nome}\n` +
+              `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
+              `Os dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+                [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+                [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+              ])
+            );
+            return;
+
+          case 'edit_cnpj':
+            // Atualizar CNPJ
+            const novoCnpj = ctx.message.text.trim();
+            const cnpjValue = (novoCnpj.toLowerCase() === 'pular') ? null : novoCnpj;
+            
+            // Atualizar dados na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, cnpj: cnpjValue },
+                step: 'confirmar',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+            
+            // Mostrar dados atualizados para confirmação
+            await ctx.reply(
+              `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+              `Empresa: ${session.data.nome_empresa}\n` +
+              `CNPJ: ${cnpjValue || 'Não informado'}\n` +
+              `Contato: ${session.data.contato_nome}\n` +
+              `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
+              `Os dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+                [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+                [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+              ])
+            );
+            return;
+
+          case 'edit_contato_nome':
+            // Atualizar nome do contato
+            const novoContato = ctx.message.text.trim();
+            
+            // Atualizar dados na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, contato_nome: novoContato },
+                step: 'confirmar',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+            
+            // Mostrar dados atualizados para confirmação
+            await ctx.reply(
+              `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+              `Empresa: ${session.data.nome_empresa}\n` +
+              `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+              `Contato: ${novoContato}\n` +
+              `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
+              `Os dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+                [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+                [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+              ])
+            );
+            return;
+
+          case 'edit_contato_telefone':
+            // Atualizar telefone
+            const novoTelefone = ctx.message.text.trim();
+            const telefoneEditValue = (novoTelefone.toLowerCase() === 'pular') ? null : novoTelefone;
+            
+            // Atualizar dados na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, contato_telefone: telefoneEditValue },
+                step: 'confirmar',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+            
+            // Mostrar dados atualizados para confirmação
+            await ctx.reply(
+              `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+              `Empresa: ${session.data.nome_empresa}\n` +
+              `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+              `Contato: ${session.data.contato_nome}\n` +
+              `Telefone: ${telefoneEditValue || 'Não informado'}\n\n` +
+              `Os dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+                [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+                [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+              ])
+            );
+            return;
+
           case 'confirmar':
             // Este caso não será usado por texto, apenas por botões
             await ctx.reply('Por favor, use os botões abaixo para confirmar, editar ou cancelar.');
             return;
         }
+        
       } catch (error) {
         console.error('Erro no processamento de cliente:', error);
         await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');

@@ -164,11 +164,135 @@ O que deseja fazer agora?`,
     }
   });
   
-  bot.action('cliente_editar', (ctx) => {
+// No mesmo arquivo, substitua a ação 'cliente_editar' existente:
+
+bot.action('cliente_editar', async (ctx) => {
+  try {
     ctx.answerCbQuery();
-    ctx.reply('Esta funcionalidade ainda não está disponível. Por favor, cancele e inicie novamente.');
-  });
-  
+    
+    // Obter a sessão atual
+    const telegramId = ctx.from?.id;
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+      
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, inicie o processo novamente.');
+    }
+    
+    const session = sessions[0];
+    
+    // Apresentar opções de campos para edição
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); // Remover botões atuais
+    
+    await ctx.reply(
+      `Qual campo você deseja editar?`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('Nome da Empresa', 'edit_nome_empresa')],
+        [Markup.button.callback('CNPJ', 'edit_cnpj')],
+        [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
+        [Markup.button.callback('Telefone', 'edit_contato_telefone')],
+        [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
+      ])
+    );
+    
+  } catch (error) {
+    console.error('Erro ao editar cliente:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+bot.action('edit_nome_empresa', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão para indicar que estamos editando o nome da empresa
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_nome_empresa',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite o novo nome da empresa:');
+  } catch (error) {
+    console.error('Erro ao configurar edição:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+bot.action('edit_cnpj', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão para indicar que estamos editando o CNPJ
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_cnpj',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite o novo CNPJ (ou "pular" para deixar em branco):');
+  } catch (error) {
+    console.error('Erro ao configurar edição:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+bot.action('edit_contato_nome', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão para indicar que estamos editando o nome do contato
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_contato_nome',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite o novo nome do contato:');
+  } catch (error) {
+    console.error('Erro ao configurar edição:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+bot.action('edit_contato_telefone', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão para indicar que estamos editando o telefone
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_contato_telefone',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite o novo telefone (ou "pular" para deixar em branco):');
+  } catch (error) {
+    console.error('Erro ao configurar edição:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});  
+
   // Botão de menu principal
   bot.action('menu_principal', (ctx) => {
     ctx.answerCbQuery();
