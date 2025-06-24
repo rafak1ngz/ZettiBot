@@ -1,7 +1,7 @@
 import { Telegraf, Markup } from 'telegraf';
 import { handleStart } from './start';
 import { handleAjuda } from './ajuda';
-import { handleClientes, handleClientesAdicionar, handleClientesListar } from './clientes';
+import { handleClientes, handleClientesAdicionar, handleClientesListar, handleClientesBuscar } from './clientes';
 import { adminSupabase } from '@/lib/supabase';
 // Importação de comandos futuros:
 // import { handleAgenda } from './agenda';
@@ -21,8 +21,8 @@ export const registerCommands = (bot: Telegraf) => {
   bot.command('clientes', handleClientes);
   bot.command('clientes_adicionar', handleClientesAdicionar);
   bot.command('clientes_listar', handleClientesListar);
+  bot.command('clientes_buscar', handleClientesBuscar);
   // Comandos futuros de clientes:
-  // bot.command('clientes_buscar', handleClientesBuscar);
   // bot.command('clientes_editar', handleClientesEditar);
   
   //=============================================================================
@@ -69,7 +69,73 @@ export const registerCommands = (bot: Telegraf) => {
     ctx.answerCbQuery();
     return ctx.reply('Esta funcionalidade ainda está em desenvolvimento.');
   });
+
+  bot.action('buscar_nome_empresa', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      
+      // Atualizar sessão para busca por nome de empresa
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'buscar_nome_empresa',
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+      
+      await ctx.reply('Digite o nome da empresa que deseja buscar:');
+    } catch (error) {
+      console.error('Erro ao configurar busca:', error);
+      await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    }
+  });
   
+  bot.action('buscar_cnpj', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      
+      // Atualizar sessão para busca por CNPJ
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'buscar_cnpj',
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+      
+      await ctx.reply('Digite o CNPJ que deseja buscar:');
+    } catch (error) {
+      console.error('Erro ao configurar busca:', error);
+      await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    }
+  });
+
+  bot.action('buscar_contato', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      
+      // Atualizar sessão para busca por nome do contato
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'buscar_contato',
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+      
+      await ctx.reply('Digite o nome do contato que deseja buscar:');
+    } catch (error) {
+      console.error('Erro ao configurar busca:', error);
+      await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    }
+  });
+
   // Callbacks para confirmação de cadastro de cliente
   bot.action('cliente_confirmar', async (ctx) => {
     try {
