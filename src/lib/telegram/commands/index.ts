@@ -299,43 +299,50 @@ export const registerCommands = (bot: Telegraf) => {
     }
   });
 
-  bot.action('agenda_edit_data', async (ctx) => {
-    try {
-      ctx.answerCbQuery();
+bot.action('agenda_edit_data', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return;
+    
+    // Atualizar sessão para editar data
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .limit(1);
       
-      const telegramId = ctx.from?.id;
-      if (!telegramId) return;
-      
-      // Atualizar sessão para editar data
-      const { data: sessions } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .limit(1);
-        
-      if (!sessions || sessions.length === 0) {
-        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
-      }
-      
-      await adminSupabase
-        .from('sessions')
-        .update({
-          step: 'edit_data_compromisso',
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', sessions[0].id);
-        
-      await ctx.editMessageText(
-        'Digite a nova data do compromisso no formato DD/MM/YYYY:',
-        Markup.keyboard([
-          ['Hoje', 'Amanhã']
-        ]).oneTime().resize()
-      );
-    } catch (error) {
-      console.error('Erro ao editar data:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
     }
-  });
+    
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_data_compromisso',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', sessions[0].id);
+      
+    // Primeiro, remova os botões da mensagem atual
+    await ctx.editMessageText(
+      'Digite a nova data do compromisso no formato DD/MM/YYYY:',
+      { reply_markup: { inline_keyboard: [] } }
+    );
+    
+    // Então, envie uma nova mensagem com os botões de teclado
+    await ctx.reply(
+      'Escolha uma opção ou digite a data:',
+      Markup.keyboard([
+        ['Hoje', 'Amanhã']
+      ]).oneTime().resize()
+    );
+  } catch (error) {
+    console.error('Erro ao editar data:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
 
   bot.action('agenda_edit_hora', async (ctx) => {
     try {
