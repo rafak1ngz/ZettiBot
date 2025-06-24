@@ -184,7 +184,7 @@ export const registerCommands = (bot: Telegraf) => {
         return;
       }
       
-      // Apresentar opções de campos para edição
+      // Apresentar opções de campos para edição - ADICIONADO EMAIL
       await ctx.reply(
         `O que você deseja editar em "${cliente.nome_empresa}"?`,
         Markup.inlineKeyboard([
@@ -192,6 +192,7 @@ export const registerCommands = (bot: Telegraf) => {
           [Markup.button.callback('CNPJ', 'edit_cnpj')],
           [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
           [Markup.button.callback('Telefone', 'edit_contato_telefone')],
+          [Markup.button.callback('Email', 'edit_contato_email')], // Nova opção
           [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
         ])
       );
@@ -200,7 +201,6 @@ export const registerCommands = (bot: Telegraf) => {
       ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
     }
   });
-
 
   // Manipular botões de exclusão de cliente
   bot.action(/excluir_cliente_(.+)/, async (ctx) => {
@@ -403,8 +403,7 @@ export const registerCommands = (bot: Telegraf) => {
     }
   });
   
-// No mesmo arquivo, substitua a ação 'cliente_editar' existente:
-
+// EDITAR CLIENTE
 bot.action('cliente_editar', async (ctx) => {
   try {
     ctx.answerCbQuery();
@@ -424,7 +423,7 @@ bot.action('cliente_editar', async (ctx) => {
     
     const session = sessions[0];
     
-    // Apresentar opções de campos para edição
+    // Apresentar opções de campos para edição - ADICIONADO EMAIL
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); // Remover botões atuais
     
     await ctx.reply(
@@ -434,6 +433,7 @@ bot.action('cliente_editar', async (ctx) => {
         [Markup.button.callback('CNPJ', 'edit_cnpj')],
         [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
         [Markup.button.callback('Telefone', 'edit_contato_telefone')],
+        [Markup.button.callback('Email', 'edit_contato_email')], // Nova opção
         [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
       ])
     );
@@ -531,6 +531,28 @@ bot.action('edit_contato_telefone', async (ctx) => {
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 });  
+
+bot.action('edit_contato_email', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão para indicar que estamos editando o email
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_contato_email',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite o novo email do contato (ou "pular" para deixar em branco):');
+  } catch (error) {
+    console.error('Erro ao configurar edição de email:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
 
   // Botão de menu principal
   bot.action('menu_principal', (ctx) => {
