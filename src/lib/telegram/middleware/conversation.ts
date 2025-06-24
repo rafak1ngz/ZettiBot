@@ -2,6 +2,7 @@ import { MiddlewareFn } from 'telegraf';
 import { BotContext } from './session';
 import { adminSupabase } from '@/lib/supabase';
 import { Markup } from 'telegraf';
+import { Cliente } from '@/types/database';
 
 export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   // Se não for mensagem de texto ou for um comando, não processar como conversa
