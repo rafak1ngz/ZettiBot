@@ -124,7 +124,10 @@ async function listarClientesPaginados(ctx: Context, userId: string, page: numbe
       console.error('Erro ao contar clientes:', countError);
       return ctx.reply('Ocorreu um erro ao listar os clientes.');
     }
-    
+
+    // Tratamento para garantir que count não seja null
+    const totalClientes = count || 0;
+
     // Buscar clientes da página atual
     const { data: clientes, error } = await adminSupabase
       .from('clientes')
@@ -146,8 +149,8 @@ Use /clientes_adicionar para cadastrar seu primeiro cliente!
       `);
     }
 
-    // Calcular total de páginas
-    const totalPages = Math.ceil(count / pageSize);
+    // Calcular total de páginas usando o valor tratado
+    const totalPages = Math.ceil(totalClientes / pageSize);
     
     // Construir resposta
     let response = `📋 <b>Seus Clientes</b> (${page + 1}/${totalPages})\n\n`;
