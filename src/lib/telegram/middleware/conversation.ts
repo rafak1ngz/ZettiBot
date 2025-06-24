@@ -253,13 +253,20 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
+          // Formato do telefone se existir
+          const telefoneExibicao = session.data.contato_telefone 
+            ? validators.formatters.telefone(session.data.contato_telefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${novoNome}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
-            `Os dados estão corretos?`,
+            `Telefone: ${telefoneExibicao}\n` + // Use a variável formatada
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
+            `\nOs dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
               [Markup.button.callback('🔄 Editar', 'cliente_editar')],
@@ -282,13 +289,20 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
+          // Formato do telefone se existir
+          const telefoneExibicao = session.data.contato_telefone 
+            ? validators.formatters.telefone(session.data.contato_telefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${cnpjValue || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
-            `Os dados estão corretos?`,
+            `Telefone: ${telefoneExibicao}\n` + // Use a variável formatada
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
+            `\nOs dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
               [Markup.button.callback('🔄 Editar', 'cliente_editar')],
@@ -310,13 +324,20 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
+          // Formato do telefone se existir
+          const telefoneExibicao = session.data.contato_telefone 
+            ? validators.formatters.telefone(session.data.contato_telefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${novoContato}\n` +
-            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n\n` +
-            `Os dados estão corretos?`,
+            `Telefone: ${telefoneExibicao}\n` + // Use a variável formatada
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
+            `\nOs dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
               [Markup.button.callback('🔄 Editar', 'cliente_editar')],
@@ -326,7 +347,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           return;
         }
 
-        // No caso de edição de contato_telefone
         case 'edit_contato_telefone': {
           const novoTelefone = ctx.message.text.trim();
           const telefoneEditValue = (novoTelefone.toLowerCase() === 'pular') ? null : novoTelefone;
@@ -344,13 +364,17 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
-          // Mostrar dados atualizados para confirmação
+          // Formato do telefone se existir
+          const telefoneExibicao = novoTelefone 
+            ? validators.formatters.telefone(novoTelefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${telefoneEditValue || 'Não informado'}\n` +
+            `Telefone: ${telefoneEditValue}\n` + // Use a variável formatada
             `Email: ${session.data.contato_email || 'Não informado'}\n` +
             (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
             `\nOs dados estão corretos?`,
@@ -386,15 +410,20 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
-          // Mostrar dados atualizados para confirmação
+          // Formato do telefone se existir
+          const telefoneExibicao = session.data.contato_telefone 
+            ? validators.formatters.telefone(session.data.contato_telefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
-            `Email: ${emailEditValue || 'Não informado'}\n\n` +
-            `Os dados estão corretos?`,
+            `Telefone: ${telefoneExibicao}\n` + // Use a variável formatada
+            `Email: ${emailEditValue || 'Não informado'}\n` +
+            (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
+            `\nOs dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
               [Markup.button.callback('🔄 Editar', 'cliente_editar')],
@@ -418,16 +447,20 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
-          // Mostrar dados atualizados para confirmação
+          // Formato do telefone se existir
+          const telefoneExibicao = session.data.contato_telefone 
+            ? validators.formatters.telefone(session.data.contato_telefone)
+            : 'Não informado';
+
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
+            `Telefone: ${telefoneExibicao}\n` + // Use a variável formatada
             `Email: ${session.data.contato_email || 'Não informado'}\n` +
-            `Observações: ${obsValue || 'Não informado'}\n\n` +
-            `Os dados estão corretos?`,
+            (novasObs ? `Observações: ${novasObs}\n` : '') +
+            `\nOs dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
               [Markup.button.callback('🔄 Editar', 'cliente_editar')],
