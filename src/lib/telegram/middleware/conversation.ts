@@ -1449,39 +1449,42 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               return;
             }
             
-            // Extrair a data atual do compromisso
-            const dataAtual = new Date(session.data.data_hora);
-            const dataTexto = format(dataAtual, 'dd/MM/yyyy');
-            
-            // Construir nova data e hora
             try {
-              const novaDataHoraTexto = `${dataTexto} ${horaTexto}`;
-              const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
+              // Obter a data atual do compromisso
+              const dataAtual = new Date(session.data.data_hora);
               
-              if (isNaN(novaDataHora.getTime())) {
-                throw new Error('Data ou hora inválida');
+              // Separar a hora e minuto fornecidos
+              const [horas, minutos] = horaTexto.split(':').map(Number);
+              
+              // Criar nova data mantendo a data atual mas com o novo horário
+              const novaData = new Date(dataAtual);
+              novaData.setHours(horas);
+              novaData.setMinutes(minutos);
+              
+              // Verificar se a data é válida
+              if (isNaN(novaData.getTime())) {
+                throw new Error('Data inválida');
               }
               
-              // Atualizar hora na sessão
+              // Atualizar sessão
               await adminSupabase
                 .from('sessions')
                 .update({
                   data: { 
                     ...session.data, 
-                    hora_texto: horaTexto,
-                    data_hora: novaDataHora.toISOString() 
+                    data_hora: novaData.toISOString()
                   },
                   step: 'confirmar_compromisso',
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', session.id);
-                
-              // Construir resposta
-              const dataFormatada = format(novaDataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              
+              // Formatar para exibição
+              const dataFormatada = format(novaData, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
               const clienteInfo = session.data.nome_cliente 
                 ? `Cliente: ${session.data.nome_cliente}\n`
                 : '';
-                
+              
               // Mostrar dados atualizados
               await ctx.reply(
                 `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
