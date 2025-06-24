@@ -102,8 +102,7 @@ export const registerCommands = (bot: Telegraf) => {
 
   bot.action('menu_agenda', (ctx) => {
     ctx.answerCbQuery();
-    // Temporariamente, avise que está em desenvolvimento
-    return ctx.reply('O módulo de Agenda está em desenvolvimento. Em breve estará disponível!');
+    return handleAgenda(ctx);
   });
 
   bot.action('menu_followup', (ctx) => {
@@ -207,6 +206,249 @@ export const registerCommands = (bot: Telegraf) => {
       );
     } catch (error) {
       console.error('Erro ao confirmar compromisso:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // Editar dados do compromisso antes do registro
+  bot.action('agenda_editar_dados', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      await ctx.editMessageText(
+        'O que você deseja editar?',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('Título', 'agenda_edit_titulo')],
+          [Markup.button.callback('Descrição', 'agenda_edit_descricao')],
+          [Markup.button.callback('Data', 'agenda_edit_data')],
+          [Markup.button.callback('Hora', 'agenda_edit_hora')],
+          [Markup.button.callback('Local', 'agenda_edit_local')],
+          [Markup.button.callback('Voltar', 'agenda_voltar_confirmacao')]
+        ])
+      );
+    } catch (error) {
+      console.error('Erro ao mostrar opções de edição:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // Handlers para cada campo de edição (exemplo para o título)
+  bot.action('agenda_edit_titulo', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      if (!telegramId) return;
+      
+      // Atualizar sessão para editar título
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_titulo_compromisso',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessions[0].id);
+        
+      await ctx.editMessageText('Digite o novo título para o compromisso:');
+    } catch (error) {
+      console.error('Erro ao editar título:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  bot.action('agenda_edit_descricao', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      if (!telegramId) return;
+      
+      // Atualizar sessão para editar descrição
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_descricao_compromisso',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessions[0].id);
+        
+      await ctx.editMessageText('Digite a nova descrição para o compromisso (ou "pular" para remover):');
+    } catch (error) {
+      console.error('Erro ao editar descrição:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  bot.action('agenda_edit_data', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      if (!telegramId) return;
+      
+      // Atualizar sessão para editar data
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_data_compromisso',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessions[0].id);
+        
+      await ctx.editMessageText(
+        'Digite a nova data do compromisso no formato DD/MM/YYYY:',
+        Markup.keyboard([
+          ['Hoje', 'Amanhã']
+        ]).oneTime().resize()
+      );
+    } catch (error) {
+      console.error('Erro ao editar data:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  bot.action('agenda_edit_hora', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      if (!telegramId) return;
+      
+      // Atualizar sessão para editar hora
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_hora_compromisso',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessions[0].id);
+        
+      await ctx.editMessageText(
+        'Digite o novo horário do compromisso no formato HH:MM:',
+        Markup.removeKeyboard()
+      );
+    } catch (error) {
+      console.error('Erro ao editar hora:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  bot.action('agenda_edit_local', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      if (!telegramId) return;
+      
+      // Atualizar sessão para editar local
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_local_compromisso',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', sessions[0].id);
+        
+      await ctx.editMessageText('Digite o novo local do compromisso (ou "pular" para remover):');
+    } catch (error) {
+      console.error('Erro ao editar local:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });  
+
+  // Voltar para confirmação
+  bot.action('agenda_voltar_confirmacao', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      // Obter a sessão atual
+      const telegramId = ctx.from?.id;
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      const session = sessions[0];
+      
+      // Construir data formatada
+      const dataHora = new Date(session.data.data_hora);
+      const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+      const clienteInfo = session.data.nome_cliente 
+        ? `Cliente: ${session.data.nome_cliente}\n`
+        : '';
+        
+      // Atualizar mensagem com os dados atualizados
+      await ctx.editMessageText(
+        `📋 Confirme os dados do compromisso:\n\n` +
+        `Título: ${session.data.titulo}\n` +
+        `${clienteInfo}` +
+        `Data: ${dataFormatada}\n` +
+        (session.data.local ? `Local: ${session.data.local}\n` : '') +
+        (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+        `\nOs dados estão corretos?`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+          [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      );
+    } catch (error) {
+      console.error('Erro ao voltar para confirmação:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   });

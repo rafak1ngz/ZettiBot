@@ -52,38 +52,36 @@ export async function handleNovoCompromisso(ctx: Context) {
 
 export async function handleVincularCliente(ctx: Context) {
   try {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
+      return ctx.reply('Não foi possível identificar seu usuário.');
+    }
+    
     const userId = ctx.state.user?.id;
     if (!userId) {
       return ctx.reply('Você precisa estar autenticado para usar este comando.');
     }
-
-    // Buscar lista de clientes
-    const { data: clientes, error } = await adminSupabase
-      .from('clientes')
-      .select('id, nome_empresa')
-      .eq('user_id', userId)
-      .order('nome_empresa', { ascending: true })
-      .limit(10);
-
-    if (error || !clientes || clientes.length === 0) {
-      await ctx.reply('Você não possui clientes cadastrados ou houve um erro na busca.');
-      return handleNovoCompromisso(ctx);
-    }
-
-    // Criar botões para clientes
-    const clientesButtons = clientes.map(cliente => 
-      [Markup.button.callback(cliente.nome_empresa, `agenda_cliente_${cliente.id}`)]
-    );
-
-    // Adicionar opção de cancelar
-    clientesButtons.push([Markup.button.callback('❌ Cancelar', 'cancelar_acao')]);
-
-    await ctx.editMessageText(
-      'Escolha um cliente para vincular ao compromisso:',
-      { reply_markup: { inline_keyboard: clientesButtons } }
-    );
+    
+    // Criar sessão para busca de cliente
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+      
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'agenda',
+        step: 'busca_cliente',
+        data: {},
+        updated_at: new Date().toISOString()
+      }]);
+      
+    await ctx.editMessageText('Digite o nome ou parte do nome do cliente que deseja buscar:');
   } catch (error) {
-    console.error('Erro ao vincular cliente:', error);
+    console.error('Erro ao iniciar busca de cliente:', error);
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 }

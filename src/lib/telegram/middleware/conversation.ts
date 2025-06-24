@@ -1199,6 +1199,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                 `\nOs dados estão corretos?`,
                 Markup.inlineKeyboard([
                   [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
                   [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
                 ])
               );
@@ -1219,6 +1220,329 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             await ctx.reply('Por favor, use os botões para confirmar ou cancelar o compromisso.');
             return;
           }
+
+          case 'busca_cliente': {
+            const termoBusca = ctx.message.text.trim();
+            
+            // Buscar clientes pelo nome
+            const { data: clientes, error } = await adminSupabase
+              .from('clientes')
+              .select('id, nome_empresa')
+              .eq('user_id', session.user_id)
+              .ilike('nome_empresa', `%${termoBusca}%`)
+              .limit(10);
+            
+            if (error) {
+              console.error('Erro ao buscar clientes:', error);
+              await ctx.reply('Ocorreu um erro ao buscar clientes. Por favor, tente novamente.');
+              return;
+            }
+            
+            if (!clientes || clientes.length === 0) {
+              await ctx.reply(
+                `Nenhum cliente encontrado com o termo "${termoBusca}".`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('🔍 Nova Busca', 'agenda_vincular_cliente')],
+                  [Markup.button.callback('➡️ Continuar sem Cliente', 'agenda_sem_cliente')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+              return;
+            }
+            
+            // Criar botões para os clientes encontrados
+            const clientesButtons = clientes.map(cliente => 
+              [Markup.button.callback(cliente.nome_empresa, `agenda_cliente_${cliente.id}`)]
+            );
+            
+            // Adicionar opções adicionais
+            clientesButtons.push([Markup.button.callback('🔍 Nova Busca', 'agenda_vincular_cliente')]);
+            clientesButtons.push([Markup.button.callback('➡️ Continuar sem Cliente', 'agenda_sem_cliente')]);
+            clientesButtons.push([Markup.button.callback('❌ Cancelar', 'cancelar_acao')]);
+            
+            await ctx.reply(
+              `Resultados da busca por "${termoBusca}":\nSelecione um cliente:`,
+              Markup.inlineKeyboard(clientesButtons)
+            );
+            
+            // Limpar a sessão após exibir os resultados
+            await adminSupabase
+              .from('sessions')
+              .delete()
+              .eq('id', session.id);
+            
+            return;
+          }          
+
+          case 'edit_titulo_compromisso': {
+            const novoTitulo = ctx.message.text.trim();
+            
+            if (!novoTitulo || novoTitulo.length < 3) {
+              await ctx.reply('Por favor, forneça um título válido para o compromisso.');
+              return;
+            }
+            
+            // Atualizar título na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, titulo: novoTitulo },
+                step: 'confirmar_compromisso',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            // Construir data formatada
+            const dataHora = new Date(session.data.data_hora);
+            const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+            const clienteInfo = session.data.nome_cliente 
+              ? `Cliente: ${session.data.nome_cliente}\n`
+              : '';
+              
+            // Mostrar dados atualizados
+            await ctx.reply(
+              `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+              `Título: ${novoTitulo}\n` +
+              `${clienteInfo}` +
+              `Data: ${dataFormatada}\n` +
+              (session.data.local ? `Local: ${session.data.local}\n` : '') +
+              (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+              `\nOs dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+              ])
+            );
+            return;
+          }
+
+          case 'edit_descricao_compromisso': {
+            const novaDescricao = ctx.message.text.trim();
+            const descricaoValue = (novaDescricao.toLowerCase() === 'pular') ? null : novaDescricao;
+            
+            // Atualizar descrição na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, descricao: descricaoValue },
+                step: 'confirmar_compromisso',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            // Construir data formatada
+            const dataHora = new Date(session.data.data_hora);
+            const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+            const clienteInfo = session.data.nome_cliente 
+              ? `Cliente: ${session.data.nome_cliente}\n`
+              : '';
+              
+            // Mostrar dados atualizados
+            await ctx.reply(
+              `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+              `Título: ${session.data.titulo}\n` +
+              `${clienteInfo}` +
+              `Data: ${dataFormatada}\n` +
+              (session.data.local ? `Local: ${session.data.local}\n` : '') +
+              (descricaoValue ? `Descrição: ${descricaoValue}\n` : '') +
+              `\nOs dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+              ])
+            );
+            return;
+          }
+
+          case 'edit_data_compromisso': {
+            let dataTexto = ctx.message.text.trim();
+            let data;
+            
+            // Processar atalhos
+            if (dataTexto.toLowerCase() === 'hoje') {
+              data = new Date();
+              dataTexto = format(data, 'dd/MM/yyyy');
+            } else if (dataTexto.toLowerCase() === 'amanhã') {
+              data = new Date();
+              data.setDate(data.getDate() + 1);
+              dataTexto = format(data, 'dd/MM/yyyy');
+            } else {
+              // Validar formato da data
+              try {
+                data = parse(dataTexto, 'dd/MM/yyyy', new Date());
+                
+                // Verificar se é uma data válida
+                if (isNaN(data.getTime())) {
+                  await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
+                  return;
+                }
+              } catch (error) {
+                await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
+                return;
+              }
+            }
+            
+            // Extrair a hora atual do compromisso
+            const dataAtual = new Date(session.data.data_hora);
+            const horaAtual = format(dataAtual, 'HH:mm');
+            
+            // Construir nova data e hora
+            try {
+              const novaDataHoraTexto = `${dataTexto} ${horaAtual}`;
+              const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
+              
+              if (isNaN(novaDataHora.getTime())) {
+                throw new Error('Data ou hora inválida');
+              }
+              
+              // Atualizar data na sessão
+              await adminSupabase
+                .from('sessions')
+                .update({
+                  data: { 
+                    ...session.data, 
+                    data_texto: dataTexto,
+                    data_hora: novaDataHora.toISOString() 
+                  },
+                  step: 'confirmar_compromisso',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', session.id);
+                
+              // Construir resposta
+              const dataFormatada = format(novaDataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              const clienteInfo = session.data.nome_cliente 
+                ? `Cliente: ${session.data.nome_cliente}\n`
+                : '';
+                
+              // Mostrar dados atualizados
+              await ctx.reply(
+                `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+                `Título: ${session.data.titulo}\n` +
+                `${clienteInfo}` +
+                `Data: ${dataFormatada}\n` +
+                (session.data.local ? `Local: ${session.data.local}\n` : '') +
+                (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+                `\nOs dados estão corretos?`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+            } catch (error) {
+              console.error('Erro ao processar data:', error);
+              await ctx.reply('Ocorreu um erro ao processar a data. Por favor, tente novamente.');
+            }
+            return;
+          }
+
+          case 'edit_hora_compromisso': {
+            const horaTexto = ctx.message.text.trim();
+            
+            // Validar formato da hora
+            const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+            if (!horaRegex.test(horaTexto)) {
+              await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
+              return;
+            }
+            
+            // Extrair a data atual do compromisso
+            const dataAtual = new Date(session.data.data_hora);
+            const dataTexto = format(dataAtual, 'dd/MM/yyyy');
+            
+            // Construir nova data e hora
+            try {
+              const novaDataHoraTexto = `${dataTexto} ${horaTexto}`;
+              const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
+              
+              if (isNaN(novaDataHora.getTime())) {
+                throw new Error('Data ou hora inválida');
+              }
+              
+              // Atualizar hora na sessão
+              await adminSupabase
+                .from('sessions')
+                .update({
+                  data: { 
+                    ...session.data, 
+                    hora_texto: horaTexto,
+                    data_hora: novaDataHora.toISOString() 
+                  },
+                  step: 'confirmar_compromisso',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', session.id);
+                
+              // Construir resposta
+              const dataFormatada = format(novaDataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              const clienteInfo = session.data.nome_cliente 
+                ? `Cliente: ${session.data.nome_cliente}\n`
+                : '';
+                
+              // Mostrar dados atualizados
+              await ctx.reply(
+                `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+                `Título: ${session.data.titulo}\n` +
+                `${clienteInfo}` +
+                `Data: ${dataFormatada}\n` +
+                (session.data.local ? `Local: ${session.data.local}\n` : '') +
+                (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+                `\nOs dados estão corretos?`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+            } catch (error) {
+              console.error('Erro ao processar hora:', error);
+              await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente.');
+            }
+            return;
+          }
+
+          case 'edit_local_compromisso': {
+            const novoLocal = ctx.message.text.trim();
+            const localValue = (novoLocal.toLowerCase() === 'pular') ? null : novoLocal;
+            
+            // Atualizar local na sessão
+            await adminSupabase
+              .from('sessions')
+              .update({
+                data: { ...session.data, local: localValue },
+                step: 'confirmar_compromisso',
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            // Construir data formatada
+            const dataHora = new Date(session.data.data_hora);
+            const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+            const clienteInfo = session.data.nome_cliente 
+              ? `Cliente: ${session.data.nome_cliente}\n`
+              : '';
+              
+            // Mostrar dados atualizados
+            await ctx.reply(
+              `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+              `Título: ${session.data.titulo}\n` +
+              `${clienteInfo}` +
+              `Data: ${dataFormatada}\n` +
+              (localValue ? `Local: ${localValue}\n` : '') +
+              (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+              `\nOs dados estão corretos?`,
+              Markup.inlineKeyboard([
+                [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+              ])
+            );
+            return;
+          }
+
         }
       } catch (error) {
         console.error('Erro no processamento de agenda:', error);
