@@ -308,7 +308,7 @@ export const registerCommands = (bot: Telegraf) => {
             contato_nome: session.data.contato_nome,
             contato_telefone: session.data.contato_telefone,
             contato_email: session.data.contato_email,
-            bservacoes: session.data.observacoes,
+            observacoes: session.data.observacoes,
             updated_at: new Date().toISOString()
           })
           .eq('id', clienteId);
@@ -344,7 +344,7 @@ export const registerCommands = (bot: Telegraf) => {
             contato_nome: session.data.contato_nome,
             contato_telefone: session.data.contato_telefone,
             contato_email: session.data.contato_email,
-            bservacoes: session.data.observacoes,
+            observacoes: session.data.observacoes,
             updated_at: new Date().toISOString()
           });
 
