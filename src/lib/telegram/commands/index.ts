@@ -464,7 +464,7 @@ export const registerCommands = (bot: Telegraf) => {
   });
 
 // Handler para edição de compromisso
-bot.action(/agenda_editar_(\d+)/, async (ctx) => {
+bot.action(/agenda_editar_([0-9a-fA-F-]+)/, async (ctx) => {
   try {
     ctx.answerCbQuery();
     
@@ -528,7 +528,7 @@ bot.action(/agenda_editar_(\d+)/, async (ctx) => {
 });
 
 // Handler para concluir compromisso
-bot.action(/agenda_concluir_(\d+)/, async (ctx) => {
+bot.action(/agenda_concluir_([0-9a-fA-F-]+)/, async (ctx) => {
   try {
     ctx.answerCbQuery();
     
@@ -561,7 +561,7 @@ bot.action(/agenda_concluir_(\d+)/, async (ctx) => {
 });
 
 // Handler para cancelar compromisso
-bot.action(/agenda_cancelar_(\d+)/, async (ctx) => {
+bot.action(/agenda_cancelar_([0-9a-fA-F-]+)/, async (ctx) => {
   try {
     ctx.answerCbQuery();
     
@@ -584,7 +584,7 @@ bot.action(/agenda_cancelar_(\d+)/, async (ctx) => {
 });
 
 // Confirmar cancelamento de compromisso
-bot.action(/confirmar_cancelamento_(\d+)/, async (ctx) => {
+bot.action(/confirmar_cancelamento_([0-9a-fA-F-]+)/, async (ctx) => {
   try {
     ctx.answerCbQuery();
     

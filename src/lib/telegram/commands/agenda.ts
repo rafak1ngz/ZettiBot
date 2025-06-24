@@ -233,6 +233,7 @@ export async function handleListarCompromissos(ctx: Context) {
           ]
         ])
       );
+
     }
 
     await ctx.reply(
