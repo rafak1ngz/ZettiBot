@@ -192,7 +192,8 @@ export const registerCommands = (bot: Telegraf) => {
           [Markup.button.callback('CNPJ', 'edit_cnpj')],
           [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
           [Markup.button.callback('Telefone', 'edit_contato_telefone')],
-          [Markup.button.callback('Email', 'edit_contato_email')], // Nova opção
+          [Markup.button.callback('Email', 'edit_contato_email')],
+          [Markup.button.callback('Observações', 'edit_observacoes')],
           [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
         ])
       );
@@ -433,7 +434,8 @@ bot.action('cliente_editar', async (ctx) => {
         [Markup.button.callback('CNPJ', 'edit_cnpj')],
         [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
         [Markup.button.callback('Telefone', 'edit_contato_telefone')],
-        [Markup.button.callback('Email', 'edit_contato_email')], // Nova opção
+        [Markup.button.callback('Email', 'edit_contato_email')],
+        [Markup.button.callback('Observações', 'edit_observacoes')],
         [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
       ])
     );
@@ -553,6 +555,60 @@ bot.action('edit_contato_email', async (ctx) => {
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 });
+
+bot.action('edit_observacoes', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    
+    // Atualizar sessão
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'edit_observacoes',
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+    
+    await ctx.reply('Digite as novas observações (ou "pular" para deixar em branco):');
+  } catch (error) {
+    console.error('Erro ao configurar edição:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+// Função para listar clientes com paginação
+bot.action(/listar_pagina_(\d+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const page = parseInt(ctx.match[1]);
+    const telegramId = ctx.from?.id;
+    const userId = ctx.state.user?.id;
+    
+    if (!userId) {
+      return ctx.reply('Sessão expirada. Por favor, tente novamente.');
+    }
+    
+    // Atualizar sessão
+    await adminSupabase
+      .from('sessions')
+      .update({
+        data: { page },
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+      
+    // Buscar nova página
+    await listarClientesPaginados(ctx, userId, page);
+  } catch (error) {
+    console.error('Erro na paginação:', error);
+    ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+
 
   // Botão de menu principal
   bot.action('menu_principal', (ctx) => {

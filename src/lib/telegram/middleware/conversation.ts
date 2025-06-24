@@ -175,11 +175,32 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           const email = ctx.message.text.trim();
           const emailValue = (email.toLowerCase() === 'pular') ? null : email;
 
-          // Validação simples de e-mail se não for pular
-          if (emailValue && !emailValue.includes('@')) {
+          // Validação de e-mail
+          if (emailValue && !validators.email(emailValue)) {
             await ctx.reply('Por favor, digite um email válido ou "pular" para continuar.');
             return;
           }
+
+          // Atualizar sessão para capturar observações
+          await adminSupabase
+            .from('sessions')
+            .update({
+              step: 'observacoes',
+              data: { 
+                ...session.data, 
+                contato_email: emailValue
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
+
+          await ctx.reply('Observações adicionais sobre o cliente (opcional, digite "pular" para continuar):');
+          return;
+        }
+
+        case 'observacoes': {
+          const obs = ctx.message.text.trim();
+          const obsValue = (obs.toLowerCase() === 'pular') ? null : obs;
 
           // Atualizar sessão para confirmação
           await adminSupabase
@@ -188,7 +209,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               step: 'confirmar',
               data: { 
                 ...session.data, 
-                contato_email: emailValue
+                observacoes: obsValue
               },
               updated_at: new Date().toISOString()
             })
@@ -201,7 +222,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
             `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
-            `Email: ${emailValue || 'Não informado'}\n\n` +
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            `Observações: ${obsValue || 'Não informado'}\n\n` +
             `Os dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
@@ -211,7 +233,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           );
           return;
         }
-
+        
         // ETAPAS DE EDIÇÃO
         case 'edit_nome_empresa': {
           const novoNome = ctx.message.text.trim();
@@ -366,6 +388,39 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           return;
         }
 
+        case 'edit_observacoes': {
+          const novasObs = ctx.message.text.trim();
+          const obsValue = (novasObs.toLowerCase() === 'pular') ? null : novasObs;
+          
+          // Atualizar dados na sessão
+          await adminSupabase
+            .from('sessions')
+            .update({
+              data: { ...session.data, observacoes: obsValue },
+              step: 'confirmar',
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
+          
+          // Mostrar dados atualizados para confirmação
+          await ctx.reply(
+            `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+            `Empresa: ${session.data.nome_empresa}\n` +
+            `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+            `Contato: ${session.data.contato_nome}\n` +
+            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            `Observações: ${obsValue || 'Não informado'}\n\n` +
+            `Os dados estão corretos?`,
+            Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+              [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+              [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+            ])
+          );
+          return;
+        }
+
         case 'confirmar': {
           // Este caso não será usado por texto, apenas por botões
           await ctx.reply('Por favor, use os botões abaixo para confirmar, editar ou cancelar.');
@@ -408,11 +463,12 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             for (const cliente of clientes) {
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
-                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
-                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
-                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
-                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
+                `------------------------------------------\n` +
+                (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
+                (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
               
               await ctx.reply(mensagem, {
                 parse_mode: 'HTML',
@@ -473,11 +529,12 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             for (const cliente of clientes) {
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
-                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
-                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
-                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
-                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
+                `------------------------------------------\n` +
+                (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
+                (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
               
               await ctx.reply(mensagem, {
                 parse_mode: 'HTML',
@@ -486,7 +543,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                   [Markup.button.callback('🗑️ Excluir Cliente', `excluir_cliente_${cliente.id}`)]
                 ])
               });
-            }            
+            }
 
             // Finalizar com botões de navegação
             await ctx.reply('O que deseja fazer agora?', 
@@ -538,12 +595,13 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             for (const cliente of clientes) {
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
-                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
-                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
-                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
-                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
-
+                `------------------------------------------\n` +
+                (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
+                (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
+              
               await ctx.reply(mensagem, {
                 parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([

@@ -19,7 +19,6 @@ export async function handleClientes(ctx: Context) {
       [Markup.button.callback('1️⃣ Adicionar novo cliente', 'clientes_adicionar')],
       [Markup.button.callback('2️⃣ Buscar cliente existente', 'clientes_buscar')],
       [Markup.button.callback('3️⃣ Listar todos os clientes', 'clientes_listar')],
-      [Markup.button.callback('4️⃣ Editar informações de cliente', 'clientes_editar')]
     ])
   );
 }
@@ -73,16 +72,66 @@ Por favor, me informe o nome da empresa:
 export async function handleClientesListar(ctx: Context) {
   const userId = ctx.state.user?.id;
   if (!userId) {
-    return ctx.reply('Você precisa estar autenticado para usar este comando. Use /inicio para registrar-se.');
+    return ctx.reply('Você precisa estar autenticado para usar este comando.');
   }
 
+  // Verificar se há um parâmetro de página
+  let page = 0;
+  
+  // Criar sessão para armazenar estado de paginação
   try {
+    const telegramId = ctx.from?.id;
+    
+    // Limpar sessões existentes
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+      
+    // Salvar estado inicial de paginação
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'clientes',
+        step: 'listar_paginacao',
+        data: { page },
+        updated_at: new Date().toISOString()
+      }]);
+      
+    // Buscar clientes com paginação
+    return listarClientesPaginados(ctx, userId, page);
+  } catch (error) {
+    console.error('Erro ao iniciar listagem:', error);
+    return ctx.reply('Ocorreu um erro ao listar clientes. Por favor, tente novamente.');
+  }
+}
+
+// Função para listar clientes com paginação
+async function listarClientesPaginados(ctx: Context, userId: string, page: number) {
+  try {
+    const pageSize = 5; // 5 clientes por página
+    const offset = page * pageSize;
+    
+    // Contar total de clientes
+    const { count, error: countError } = await adminSupabase
+      .from('clientes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+      
+    if (countError) {
+      console.error('Erro ao contar clientes:', countError);
+      return ctx.reply('Ocorreu um erro ao listar os clientes.');
+    }
+    
+    // Buscar clientes da página atual
     const { data: clientes, error } = await adminSupabase
       .from('clientes')
       .select('*')
       .eq('user_id', userId)
-      .order('created_at', { ascending: false })
-      .limit(10);
+      .order('nome_empresa', { ascending: true })
+      .range(offset, offset + pageSize - 1);
 
     if (error) {
       console.error('Erro ao listar clientes:', error);
@@ -97,16 +146,46 @@ Use /clientes_adicionar para cadastrar seu primeiro cliente!
       `);
     }
 
-    let response = "📋 Seus últimos 10 clientes:\n\n";
-    clientes.forEach((cliente: Cliente, index: number) => {
-      response += `${index + 1}. ${cliente.nome_empresa}\n`;
-      if (cliente.contato_nome) response += `   Contato: ${cliente.contato_nome}\n`;
-      if (cliente.contato_telefone) response += `   Telefone: ${cliente.contato_telefone}\n\n`;
+    // Calcular total de páginas
+    const totalPages = Math.ceil(count / pageSize);
+    
+    // Construir resposta
+    let response = `📋 <b>Seus Clientes</b> (${page + 1}/${totalPages})\n\n`;
+    
+    clientes.forEach((cliente, index) => {
+      response += `<b>${index + 1 + offset}. ${cliente.nome_empresa}</b>\n`;
+      if (cliente.contato_nome) response += `👤 ${cliente.contato_nome}\n`;
+      if (cliente.contato_telefone) response += `📞 ${cliente.contato_telefone}\n`;
+      if (cliente.contato_email) response += `✉️ ${cliente.contato_email}\n`;
+      response += '\n';
     });
-
-    response += "\nPara ver mais detalhes ou editar um cliente, use /clientes_buscar";
-
-    return ctx.reply(response);
+    
+    // Botões de navegação
+    const buttons = [];
+    
+    // Linha de botões de paginação
+    const paginationButtons = [];
+    
+    if (page > 0) {
+      paginationButtons.push(Markup.button.callback('⬅️ Anterior', `listar_pagina_${page - 1}`));
+    }
+    
+    if (page < totalPages - 1) {
+      paginationButtons.push(Markup.button.callback('➡️ Próxima', `listar_pagina_${page + 1}`));
+    }
+    
+    if (paginationButtons.length > 0) {
+      buttons.push(paginationButtons);
+    }
+    
+    // Botões de ações
+    buttons.push([Markup.button.callback('🔍 Buscar Cliente', 'clientes_buscar')]);
+    buttons.push([Markup.button.callback('🏠 Menu Principal', 'menu_principal')]);
+    
+    return ctx.reply(response, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard(buttons)
+    });
   } catch (error) {
     console.error('Erro inesperado:', error);
     return ctx.reply('Ocorreu um erro ao listar os clientes.');
