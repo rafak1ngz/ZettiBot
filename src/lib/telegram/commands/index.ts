@@ -8,12 +8,18 @@ import {
   handleClientesBuscar,
   listarClientesPaginados 
 } from './clientes';
+import { 
+  handleAgenda, 
+  handleNovoCompromisso, 
+  handleVincularCliente,
+  handleSemCliente,
+  handleListarCompromissos,
+  handleSelecionarCliente
+} from './agenda';
 import { adminSupabase } from '@/lib/supabase';
+import { format, parse, isValid } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
-// Importação de comandos futuros:
-// import { handleAgenda } from './agenda';
-// import { handleFollowUp } from './followup';
-// import { handleLembrete } from './lembrete';
 
 // Comando para cancelar qualquer operação atual
 export async function handleCancelar(ctx: Context) {
@@ -81,13 +87,14 @@ export const registerCommands = (bot: Telegraf) => {
   bot.command('cancelar', handleCancelar);
   bot.action('cancelar_acao', handleCancelar);
 
+  //=============================================================================
   // COMANDOS MENU PRINCIPAL
+  //=============================================================================
   bot.action('menu_principal', (ctx) => {
     ctx.answerCbQuery();
     return handleMenuPrincipal(ctx);
   });
 
-  // E adicione handlers para cada opção do menu
   bot.action('menu_clientes', (ctx) => {
     ctx.answerCbQuery();
     return handleClientes(ctx);
@@ -123,16 +130,87 @@ export const registerCommands = (bot: Telegraf) => {
   bot.command('clientes_adicionar', handleClientesAdicionar);
   bot.command('clientes_listar', handleClientesListar);
   bot.command('clientes_buscar', handleClientesBuscar);
-  // Comandos futuros de clientes:
-  // bot.command('clientes_editar', handleClientesEditar);
   
   //=============================================================================
   // COMANDOS DE AGENDA (comentados até implementação)
   //=============================================================================
-  // bot.command('agenda', handleAgenda);
-  // bot.command('agenda_registrar', handleAgendaRegistrar);
-  // bot.command('agenda_visualizar', handleAgendaVisualizar);
   
+  // Registro do comando /agenda
+  bot.command('agenda', handleAgenda);
+  
+  // Callbacks para o menu da agenda
+  bot.action('agenda_novo', handleNovoCompromisso);
+  bot.action('agenda_vincular_cliente', handleVincularCliente);
+  bot.action('agenda_sem_cliente', handleSemCliente);
+  bot.action('agenda_listar', handleListarCompromissos);
+  bot.action(/agenda_cliente_(.+)/, (ctx) => {
+    const clienteId = ctx.match[1];
+    return handleSelecionarCliente(ctx, clienteId);
+  });  
+
+  // Confirmação de compromisso
+  bot.action('agenda_confirmar', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      // Obter a sessão atual
+      const telegramId = ctx.from?.id;
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .order('updated_at', { ascending: false })
+        .limit(1);
+        
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie o processo novamente.');
+      }
+      
+      const session = sessions[0];
+      
+      // Inserir compromisso
+      const { error: insertError } = await adminSupabase
+        .from('compromissos')
+        .insert({
+          user_id: session.user_id,
+          cliente_id: session.data.cliente_id,
+          titulo: session.data.titulo,
+          descricao: session.data.descricao,
+          data_compromisso: session.data.data_hora,
+          local: session.data.local,
+          status: 'pendente',
+          updated_at: new Date().toISOString()
+        });
+        
+      if (insertError) {
+        console.error('Erro ao inserir compromisso:', insertError);
+        await ctx.reply('Ocorreu um erro ao salvar o compromisso. Por favor, tente novamente.');
+        return;
+      }
+      
+      // Limpar sessão
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('id', session.id);
+        
+      // Feedback de sucesso
+      await ctx.editMessageText(
+        '✅ Compromisso registrado com sucesso!\n\nO que deseja fazer agora?',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
+            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar')
+          ],
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+    } catch (error) {
+      console.error('Erro ao confirmar compromisso:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
   //=============================================================================
   // COMANDOS DE FOLLOW-UP (comentados até implementação)
   //=============================================================================

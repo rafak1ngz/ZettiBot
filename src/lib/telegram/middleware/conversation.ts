@@ -4,6 +4,8 @@ import { adminSupabase } from '@/lib/supabase';
 import { Markup } from 'telegraf';
 import { Cliente } from '@/types/database';
 import { validators } from '@/utils/validators';
+import { format, parse, isValid } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 // Função de cancelamento
 async function cancelarOperacao(ctx: BotContext, telegramId: number) {
@@ -1037,12 +1039,193 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
     //=============================================================================
     // COMANDO: AGENDA - GERENCIAMENTO DE COMPROMISSOS
     //=============================================================================
-    /* 
     if (session.command === 'agenda') {
-      // Implementação futura para compromissos
+      try {
+        switch (session.step) {
+          case 'titulo_compromisso': {
+            const titulo = ctx.message.text.trim();
+            
+            if (!titulo || titulo.length < 3) {
+              await ctx.reply('Por favor, forneça um título válido para o compromisso.');
+              return;
+            }
+            
+            // Atualizar sessão para o próximo passo
+            await adminSupabase
+              .from('sessions')
+              .update({
+                step: 'descricao_compromisso',
+                data: { ...session.data, titulo },
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            await ctx.reply('Digite uma descrição para o compromisso (opcional, digite "pular" para continuar):');
+            return;
+          }
+          
+          case 'descricao_compromisso': {
+            const descricao = ctx.message.text.trim();
+            const descricaoValue = (descricao.toLowerCase() === 'pular') ? null : descricao;
+            
+            // Atualizar sessão para o próximo passo
+            await adminSupabase
+              .from('sessions')
+              .update({
+                step: 'data_compromisso',
+                data: { ...session.data, descricao: descricaoValue },
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            await ctx.reply(
+              'Digite a data do compromisso no formato DD/MM/YYYY:',
+              Markup.keyboard([
+                ['Hoje', 'Amanhã']
+              ]).oneTime().resize()
+            );
+            return;
+          }
+          
+          case 'data_compromisso': {
+            let dataTexto = ctx.message.text.trim();
+            let data;
+            
+            // Processar atalhos
+            if (dataTexto.toLowerCase() === 'hoje') {
+              data = new Date();
+              dataTexto = format(data, 'dd/MM/yyyy');
+            } else if (dataTexto.toLowerCase() === 'amanhã') {
+              data = new Date();
+              data.setDate(data.getDate() + 1);
+              dataTexto = format(data, 'dd/MM/yyyy');
+            } else {
+              // Validar formato da data
+              try {
+                data = parse(dataTexto, 'dd/MM/yyyy', new Date());
+                
+                // Verificar se é uma data válida
+                if (isNaN(data.getTime())) {
+                  await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
+                  return;
+                }
+              } catch (error) {
+                await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
+                return;
+              }
+            }
+            
+            // Atualizar sessão para o próximo passo
+            await adminSupabase
+              .from('sessions')
+              .update({
+                step: 'hora_compromisso',
+                data: { ...session.data, data_texto: dataTexto },
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            await ctx.reply(
+              'Digite o horário do compromisso no formato HH:MM:',
+              Markup.removeKeyboard()
+            );
+            return;
+          }
+          
+          case 'hora_compromisso': {
+            const horaTexto = ctx.message.text.trim();
+            
+            // Validar formato da hora
+            const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+            if (!horaRegex.test(horaTexto)) {
+              await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
+              return;
+            }
+            
+            // Atualizar sessão para o próximo passo
+            await adminSupabase
+              .from('sessions')
+              .update({
+                step: 'local_compromisso',
+                data: { ...session.data, hora_texto: horaTexto },
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', session.id);
+              
+            await ctx.reply('Digite o local do compromisso (opcional, digite "pular" para continuar):');
+            return;
+          }
+          
+          case 'local_compromisso': {
+            const local = ctx.message.text.trim();
+            const localValue = (local.toLowerCase() === 'pular') ? null : local;
+            
+            // Construir data e hora completa
+            try {
+              const dataHoraTexto = `${session.data.data_texto} ${session.data.hora_texto}`;
+              const dataHora = parse(dataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
+              
+              if (isNaN(dataHora.getTime())) {
+                throw new Error('Data ou hora inválida');
+              }
+              
+              // Atualizar sessão para confirmação
+              await adminSupabase
+                .from('sessions')
+                .update({
+                  step: 'confirmar_compromisso',
+                  data: { 
+                    ...session.data, 
+                    local: localValue,
+                    data_hora: dataHora.toISOString()
+                  },
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', session.id);
+                
+              // Informações para exibição
+              const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              const clienteInfo = session.data.nome_cliente 
+                ? `Cliente: ${session.data.nome_cliente}\n`
+                : '';
+                
+              await ctx.reply(
+                `📋 Confirme os dados do compromisso:\n\n` +
+                `Título: ${session.data.titulo}\n` +
+                `${clienteInfo}` +
+                `Data: ${dataFormatada}\n` +
+                (localValue ? `Local: ${localValue}\n` : '') +
+                (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+                `\nOs dados estão corretos?`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+            } catch (error) {
+              console.error('Erro ao processar data/hora:', error);
+              await ctx.reply('Ocorreu um erro ao processar a data e hora. Por favor, tente novamente.');
+              
+              // Limpar sessão em caso de erro
+              await adminSupabase
+                .from('sessions')
+                .delete()
+                .eq('id', session.id);
+            }
+            return;
+          }
+          
+          case 'confirmar_compromisso': {
+            await ctx.reply('Por favor, use os botões para confirmar ou cancelar o compromisso.');
+            return;
+          }
+        }
+      } catch (error) {
+        console.error('Erro no processamento de agenda:', error);
+        await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+      }
     }
-    */
-    
+
     //=============================================================================
     // COMANDO: FOLLOWUP - GERENCIAMENTO DE FOLLOW-UPS
     //=============================================================================
