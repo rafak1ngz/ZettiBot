@@ -229,7 +229,7 @@ export async function handleListarCompromissos(ctx: Context) {
           [
             Markup.button.callback('✏️ Editar', `agenda_editar_${compromisso.id}`),
             Markup.button.callback('✅ Concluído', `agenda_concluir_${compromisso.id}`),
-            Markup.button.callback('🗑️ Excluir', `agenda_excluir_${compromisso.id}`)
+            Markup.button.callback('❌ Cancelar', `agenda_cancelar_${compromisso.id}`)
           ]
         ])
       );

@@ -463,6 +463,171 @@ export const registerCommands = (bot: Telegraf) => {
     }
   });
 
+// Handler para edição de compromisso
+bot.action(/agenda_editar_(\d+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const compromissoId = ctx.match[1];
+    const telegramId = ctx.from?.id;
+    
+    // Buscar o compromisso
+    const { data: compromisso, error } = await adminSupabase
+      .from('compromissos')
+      .select(`
+        *,
+        clientes (
+          nome_empresa
+        )
+      `)
+      .eq('id', compromissoId)
+      .single();
+    
+    if (error || !compromisso) {
+      console.error('Erro ao buscar compromisso:', error);
+      await ctx.reply('Erro ao buscar compromisso. Por favor, tente novamente.');
+      return;
+    }
+    
+    // Armazenar dados do compromisso em uma sessão
+    await adminSupabase
+      .from('sessions')
+      .delete() // Limpar sessões antigas
+      .eq('telegram_id', telegramId);
+      
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: compromisso.user_id,
+        command: 'agenda',
+        step: 'editar_compromisso',
+        data: {
+          ...compromisso,
+          nome_cliente: compromisso.clientes?.nome_empresa
+        },
+        updated_at: new Date().toISOString()
+      }]);
+    
+    // Mostrar opções de edição
+    await ctx.reply(
+      `O que você deseja editar no compromisso "${compromisso.titulo}"?`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('Título', 'agenda_edit_titulo')],
+        [Markup.button.callback('Descrição', 'agenda_edit_descricao')],
+        [Markup.button.callback('Data', 'agenda_edit_data')],
+        [Markup.button.callback('Hora', 'agenda_edit_hora')],
+        [Markup.button.callback('Local', 'agenda_edit_local')],
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao iniciar edição:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// Handler para concluir compromisso
+bot.action(/agenda_concluir_(\d+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const compromissoId = ctx.match[1];
+    
+    // Atualizar status do compromisso
+    const { error } = await adminSupabase
+      .from('compromissos')
+      .update({
+        status: 'concluido',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', compromissoId);
+    
+    if (error) {
+      console.error('Erro ao concluir compromisso:', error);
+      await ctx.reply('Erro ao concluir compromisso. Por favor, tente novamente.');
+      return;
+    }
+    
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    await ctx.reply('✅ Compromisso marcado como concluído!');
+    
+    // Mostrar lista atualizada
+    return handleListarCompromissos(ctx);
+  } catch (error) {
+    console.error('Erro ao concluir compromisso:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// Handler para cancelar compromisso
+bot.action(/agenda_cancelar_(\d+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const compromissoId = ctx.match[1];
+    
+    // Pedir confirmação
+    await ctx.reply(
+      '⚠️ Tem certeza que deseja cancelar este compromisso?',
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Sim, cancelar', `confirmar_cancelamento_${compromissoId}`),
+          Markup.button.callback('❌ Não', 'voltar_compromissos')
+        ]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao processar cancelamento:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// Confirmar cancelamento de compromisso
+bot.action(/confirmar_cancelamento_(\d+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const compromissoId = ctx.match[1];
+    
+    // Atualizar status do compromisso
+    const { error } = await adminSupabase
+      .from('compromissos')
+      .update({
+        status: 'cancelado',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', compromissoId);
+    
+    if (error) {
+      console.error('Erro ao cancelar compromisso:', error);
+      await ctx.reply('Erro ao cancelar compromisso. Por favor, tente novamente.');
+      return;
+    }
+    
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    await ctx.reply('❌ Compromisso cancelado!');
+    
+    // Mostrar lista atualizada
+    return handleListarCompromissos(ctx);
+  } catch (error) {
+    console.error('Erro ao cancelar compromisso:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// Voltar para lista de compromissos
+bot.action('voltar_compromissos', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+    return handleListarCompromissos(ctx);
+  } catch (error) {
+    console.error('Erro ao voltar:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});  
+
   //=============================================================================
   // COMANDOS DE FOLLOW-UP (comentados até implementação)
   //=============================================================================
