@@ -1,4 +1,4 @@
-import { Telegraf, Markup } from 'telegraf';
+import { Telegraf, Markup, Context } from 'telegraf';
 import { handleStart } from './start';
 import { handleAjuda } from './ajuda';
 import { 
@@ -15,12 +15,49 @@ import { adminSupabase } from '@/lib/supabase';
 // import { handleFollowUp } from './followup';
 // import { handleLembrete } from './lembrete';
 
+export async function handleCancelar(ctx: Context) {
+  const telegramId = ctx.from?.id;
+  
+  if (!telegramId) {
+    return ctx.reply('Não foi possível identificar seu usuário.');
+  }
+
+  try {
+    // Limpar qualquer sessão ativa
+    const { error } = await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+
+    if (error) {
+      console.error('Erro ao limpar sessão:', error);
+      return ctx.reply('Ocorreu um erro ao cancelar a operação.');
+    }
+
+    // Mensagem de cancelamento
+    await ctx.reply(`
+❌ Operação cancelada com sucesso!
+
+Você pode começar uma nova ação digitando /inicio ou escolhendo uma opção no menu.
+    `, 
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+    ]));
+
+  } catch (error) {
+    console.error('Erro inesperado no cancelamento:', error);
+    await ctx.reply('Ocorreu um erro ao cancelar a operação.');
+  }
+}
+
 export const registerCommands = (bot: Telegraf) => {
   //=============================================================================
   // COMANDOS BÁSICOS
   //=============================================================================
   bot.command(['start', 'inicio'], handleStart);
   bot.command('ajuda', handleAjuda);
+  bot.command('cancelar', handleCancelar);
+  bot.action('cancelar_acao', handleCancelar);
   
   //=============================================================================
   // COMANDOS DE CLIENTES

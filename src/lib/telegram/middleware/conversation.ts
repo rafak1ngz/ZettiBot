@@ -5,9 +5,55 @@ import { Markup } from 'telegraf';
 import { Cliente } from '@/types/database';
 import { validators } from '@/utils/validators';
 
+// Função de cancelamento
+async function cancelarOperacao(ctx: BotContext, telegramId: number) {
+  try {
+    // Limpar qualquer sessão ativa
+    const { error } = await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+
+    if (error) {
+      console.error('Erro ao limpar sessão:', error);
+      return ctx.reply('Ocorreu um erro ao cancelar a operação.');
+    }
+
+    // Mensagem de cancelamento
+    await ctx.reply(`
+❌ Operação cancelada com sucesso!
+
+Você pode começar uma nova ação digitando /inicio ou escolhendo uma opção no menu.
+    `, 
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+    ]));
+    
+    return true;
+  } catch (error) {
+    console.error('Erro inesperado no cancelamento:', error);
+    await ctx.reply('Ocorreu um erro ao cancelar a operação.');
+    return false;
+  }
+}
+
 export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next) => {
   // Se não for mensagem de texto ou for um comando, não processar como conversa
-  if (!ctx.message || !('text' in ctx.message) || ctx.message.text.startsWith('/')) {
+  if (!ctx.message || !('text' in ctx.message)) {
+    return next();
+  }
+  
+  // Verificar se é o comando /cancelar
+  if (ctx.message.text.toLowerCase() === '/cancelar') {
+    const telegramId = ctx.from?.id;
+    if (telegramId) {
+      await cancelarOperacao(ctx, telegramId);
+      return; // Encerra o processamento após cancelar
+    }
+  }
+  
+  // Verificar se é outro comando
+  if (ctx.message.text.startsWith('/')) {
     return next();
   }
 
