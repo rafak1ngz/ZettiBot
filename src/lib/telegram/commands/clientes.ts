@@ -1,6 +1,7 @@
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
 import { Cliente } from '@/types/database';
+import { validators } from '@/utils/validators';
 
 /**
  * Manipulador principal para o comando /clientes
