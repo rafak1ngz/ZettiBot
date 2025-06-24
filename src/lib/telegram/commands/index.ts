@@ -62,7 +62,7 @@ export const registerCommands = (bot: Telegraf) => {
   
   bot.action('clientes_buscar', (ctx) => {
     ctx.answerCbQuery();
-    return ctx.reply('Esta funcionalidade ainda está em desenvolvimento.');
+    return handleClientesBuscar(ctx);
   });
   
   bot.action('clientes_editar', (ctx) => {
@@ -135,6 +135,123 @@ export const registerCommands = (bot: Telegraf) => {
       await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
     }
   });
+
+// Adicione no final da seção de callbacks
+// Manipular botões de edição de cliente específico
+bot.action(/editar_cliente_(.+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    // Extrair o ID do cliente do botão
+    const clienteId = ctx.match[1];
+    const telegramId = ctx.from?.id;
+    
+    // Buscar o cliente
+    const { data: cliente, error } = await adminSupabase
+      .from('clientes')
+      .select('*')
+      .eq('id', clienteId)
+      .single();
+    
+    if (error || !cliente) {
+      console.error('Erro ao buscar cliente:', error);
+      await ctx.reply('Erro ao buscar cliente. Por favor, tente novamente.');
+      return;
+    }
+    
+    // Armazenar dados do cliente em uma sessão
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: cliente.user_id,
+        command: 'clientes',
+        step: 'editar_cliente',
+        data: cliente,
+        updated_at: new Date().toISOString()
+      }]);
+    
+    // Apresentar opções de campos para edição
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); // Remover botões atuais
+    
+    await ctx.reply(
+      `Qual campo você deseja editar?`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('Nome da Empresa', 'edit_nome_empresa')],
+        [Markup.button.callback('CNPJ', 'edit_cnpj')],
+        [Markup.button.callback('Nome do Contato', 'edit_contato_nome')],
+        [Markup.button.callback('Telefone', 'edit_contato_telefone')],
+        [Markup.button.callback('Cancelar Edição', 'cliente_cancelar')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao processar edição:', error);
+    ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+// Manipular botões de exclusão de cliente
+bot.action(/excluir_cliente_(.+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    // Extrair o ID do cliente do botão
+    const clienteId = ctx.match[1];
+    
+    // Pedir confirmação antes de excluir
+    await ctx.reply(
+      `⚠️ Tem certeza que deseja excluir este cliente? Esta ação não pode ser desfeita.`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Sim, excluir', `confirmar_exclusao_${clienteId}`)],
+        [Markup.button.callback('❌ Não, cancelar', 'cancelar_exclusao')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao processar exclusão:', error);
+    ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+// Confirmação de exclusão
+bot.action(/confirmar_exclusao_(.+)/, async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    // Extrair o ID do cliente do botão
+    const clienteId = ctx.match[1];
+    
+    // Excluir o cliente
+    const { error } = await adminSupabase
+      .from('clientes')
+      .delete()
+      .eq('id', clienteId);
+    
+    if (error) {
+      console.error('Erro ao excluir cliente:', error);
+      await ctx.reply('Erro ao excluir cliente. Por favor, tente novamente.');
+      return;
+    }
+    
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); // Remover botões
+    
+    await ctx.reply('✅ Cliente excluído com sucesso!', 
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao confirmar exclusão:', error);
+    ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+});
+
+// Cancelar exclusão
+bot.action('cancelar_exclusao', async (ctx) => {
+  ctx.answerCbQuery();
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); // Remover botões
+  await ctx.reply('Exclusão cancelada.');
+});
+
 
   // Callbacks para confirmação de cadastro de cliente
   bot.action('cliente_confirmar', async (ctx) => {

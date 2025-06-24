@@ -310,7 +310,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
 
         // ETAPAS DE BUSCA
         case 'buscar_nome_empresa': {
-          const empresaNome = ctx.message.text.trim(); // Renomeado para evitar conflito
+          const empresaNome = ctx.message.text.trim();
           
           try {
             const { data: clientes, error } = await adminSupabase
@@ -331,23 +331,38 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               return;
             }
             
-            let resposta = `🔍 Resultados para "${empresaNome}":\n\n`;
-            clientes.forEach((cliente: Cliente, index: number) => {
-              resposta += `${index + 1}. ${cliente.nome_empresa}\n`;
-              if (cliente.contato_nome) resposta += `   Contato: ${cliente.contato_nome}\n`;
-              if (cliente.contato_telefone) resposta += `   Telefone: ${cliente.contato_telefone}\n\n`;
-            });
-            
             // Limpar sessão após busca
             await adminSupabase
               .from('sessions')
               .delete()
               .eq('id', session.id);
             
-            await ctx.reply(resposta, 
+            // Primeiro envia uma mensagem com os resultados
+            await ctx.reply(`🔍 Resultados da busca por "${empresaNome}":`);
+            
+            // Envia cada cliente como uma mensagem separada com botões
+            for (const cliente of clientes) {
+              const mensagem = 
+                `📋 <b>${cliente.nome_empresa}</b>\n` +
+                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
+              
+              await ctx.reply(mensagem, {
+                parse_mode: 'HTML',
+                ...Markup.inlineKeyboard([
+                  [Markup.button.callback('✏️ Editar Cliente', `editar_cliente_${cliente.id}`)],
+                  [Markup.button.callback('🗑️ Excluir Cliente', `excluir_cliente_${cliente.id}`)]
+                ])
+              });
+            }
+            
+            // Finalizar com botões de navegação
+            await ctx.reply('O que deseja fazer agora?', 
               Markup.inlineKeyboard([
-                [Markup.button.callback('Nova Busca', 'clientes_buscar')],
-                [Markup.button.callback('Menu Principal', 'menu_principal')]
+                [Markup.button.callback('🔍 Nova Busca', 'clientes_buscar')],
+                [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
               ])
             );
             return;
@@ -359,7 +374,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
         }
 
         case 'buscar_cnpj': {
-          const cnpjBusca = ctx.message.text.trim(); // Renomeado para evitar conflito
+          const cnpjBusca = ctx.message.text.trim();
           
           try {
             const { data: clientes, error } = await adminSupabase
@@ -379,24 +394,39 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               await ctx.reply(`Nenhum cliente encontrado com o CNPJ "${cnpjBusca}".`);
               return;
             }
-            
-            let resposta = `🔍 Resultados para CNPJ "${cnpjBusca}":\n\n`;
-            clientes.forEach((cliente: Cliente, index: number) => {
-              resposta += `${index + 1}. ${cliente.nome_empresa}\n`;
-              if (cliente.contato_nome) resposta += `   Contato: ${cliente.contato_nome}\n`;
-              if (cliente.contato_telefone) resposta += `   Telefone: ${cliente.contato_telefone}\n\n`;
-            });
-            
+
             // Limpar sessão após busca
             await adminSupabase
               .from('sessions')
               .delete()
               .eq('id', session.id);
             
-            await ctx.reply(resposta, 
+            // Primeiro envia uma mensagem com os resultados
+            await ctx.reply(`🔍 Resultados da busca por "${cnpjBusca}":`);
+
+            // Envia cada cliente como uma mensagem separada com botões
+            for (const cliente of clientes) {
+              const mensagem = 
+                `📋 <b>${cliente.nome_empresa}</b>\n` +
+                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
+              
+              await ctx.reply(mensagem, {
+                parse_mode: 'HTML',
+                ...Markup.inlineKeyboard([
+                  [Markup.button.callback('✏️ Editar Cliente', `editar_cliente_${cliente.id}`)],
+                  [Markup.button.callback('🗑️ Excluir Cliente', `excluir_cliente_${cliente.id}`)]
+                ])
+              });
+            }            
+
+            // Finalizar com botões de navegação
+            await ctx.reply('O que deseja fazer agora?', 
               Markup.inlineKeyboard([
-                [Markup.button.callback('Nova Busca', 'clientes_buscar')],
-                [Markup.button.callback('Menu Principal', 'menu_principal')]
+                [Markup.button.callback('🔍 Nova Busca', 'clientes_buscar')],
+                [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
               ])
             );
             return;
@@ -408,7 +438,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
         }
 
         case 'buscar_contato': {
-          const contatoBusca = ctx.message.text.trim(); // Renomeado para evitar conflito
+          const contatoBusca = ctx.message.text.trim();
           
           try {
             const { data: clientes, error } = await adminSupabase
@@ -429,23 +459,38 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               return;
             }
             
-            let resposta = `🔍 Resultados para Contato "${contatoBusca}":\n\n`;
-            clientes.forEach((cliente: Cliente, index: number) => {
-              resposta += `${index + 1}. ${cliente.nome_empresa}\n`;
-              if (cliente.contato_nome) resposta += `   Contato: ${cliente.contato_nome}\n`;
-              if (cliente.contato_telefone) resposta += `   Telefone: ${cliente.contato_telefone}\n\n`;
-            });
-            
             // Limpar sessão após busca
             await adminSupabase
               .from('sessions')
               .delete()
               .eq('id', session.id);
             
-            await ctx.reply(resposta, 
+            // Primeiro envia uma mensagem com os resultados
+            await ctx.reply(`🔍 Resultados da busca por "${contatoBusca}":`);
+            
+            // Envia cada cliente como uma mensagem separada com botões
+            for (const cliente of clientes) {
+              const mensagem = 
+                `📋 <b>${cliente.nome_empresa}</b>\n` +
+                (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
+                (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
+              
+              await ctx.reply(mensagem, {
+                parse_mode: 'HTML',
+                ...Markup.inlineKeyboard([
+                  [Markup.button.callback('✏️ Editar Cliente', `editar_cliente_${cliente.id}`)],
+                  [Markup.button.callback('🗑️ Excluir Cliente', `excluir_cliente_${cliente.id}`)]
+                ])
+              });
+            }
+            
+            // Finalizar com botões de navegação
+            await ctx.reply('O que deseja fazer agora?', 
               Markup.inlineKeyboard([
-                [Markup.button.callback('Nova Busca', 'clientes_buscar')],
-                [Markup.button.callback('Menu Principal', 'menu_principal')]
+                [Markup.button.callback('🔍 Nova Busca', 'clientes_buscar')],
+                [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
               ])
             );
             return;
@@ -455,6 +500,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           }
           return;
         }
+        
+
       }
     } catch (error) {
       console.error('Erro no processamento de cliente:', error);
