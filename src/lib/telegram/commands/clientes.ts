@@ -109,7 +109,7 @@ export async function handleClientesListar(ctx: Context) {
 }
 
 // Função para listar clientes com paginação
-async function listarClientesPaginados(ctx: Context, userId: string, page: number) {
+export async function listarClientesPaginados(ctx: Context, userId: string, page: number) {
   try {
     const pageSize = 5; // 5 clientes por página
     const offset = page * pageSize;

@@ -1,8 +1,15 @@
 import { Telegraf, Markup } from 'telegraf';
 import { handleStart } from './start';
 import { handleAjuda } from './ajuda';
-import { handleClientes, handleClientesAdicionar, handleClientesListar, handleClientesBuscar } from './clientes';
+import { 
+  handleClientes, 
+  handleClientesAdicionar, 
+  handleClientesListar, 
+  handleClientesBuscar,
+  listarClientesPaginados 
+} from './clientes';
 import { adminSupabase } from '@/lib/supabase';
+
 // Importação de comandos futuros:
 // import { handleAgenda } from './agenda';
 // import { handleFollowUp } from './followup';
