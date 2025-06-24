@@ -1450,29 +1450,48 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             }
             
             try {
-              // Obter a data atual do compromisso
-              const dataAtual = new Date(session.data.data_hora);
+              console.log('Dados da sessão:', session.data);
+              console.log('Data hora atual:', session.data.data_hora);
               
+              // Verificar se temos uma data válida na sessão
+              if (!session.data.data_hora) {
+                throw new Error('Data não encontrada na sessão');
+              }
+
               // Separar a hora e minuto fornecidos
               const [horas, minutos] = horaTexto.split(':').map(Number);
-              
-              // Criar nova data mantendo a data atual mas com o novo horário
-              const novaData = new Date(dataAtual);
-              novaData.setHours(horas);
-              novaData.setMinutes(minutos);
-              
+              console.log('Nova hora:', horas, 'Novos minutos:', minutos);
+
+              // Criar data a partir da string ISO
+              const dataAtual = new Date(session.data.data_hora);
+              console.log('Data atual parseada:', dataAtual);
+
               // Verificar se a data é válida
-              if (isNaN(novaData.getTime())) {
-                throw new Error('Data inválida');
+              if (isNaN(dataAtual.getTime())) {
+                throw new Error('Data atual inválida');
               }
-              
+
+              // Criar nova data usando UTC para evitar problemas de fuso horário
+              const novaData = new Date(dataAtual.getTime());
+              novaData.setUTCHours(horas);
+              novaData.setUTCMinutes(minutos);
+              console.log('Nova data criada:', novaData);
+
+              // Verificar se a nova data é válida
+              if (isNaN(novaData.getTime())) {
+                throw new Error('Nova data inválida');
+              }
+
               // Atualizar sessão
+              const novaDataISO = novaData.toISOString();
+              console.log('Nova data ISO:', novaDataISO);
+
               await adminSupabase
                 .from('sessions')
                 .update({
                   data: { 
                     ...session.data, 
-                    data_hora: novaData.toISOString()
+                    data_hora: novaDataISO
                   },
                   step: 'confirmar_compromisso',
                   updated_at: new Date().toISOString()
@@ -1481,6 +1500,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               
               // Formatar para exibição
               const dataFormatada = format(novaData, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              console.log('Data formatada:', dataFormatada);
+
               const clienteInfo = session.data.nome_cliente 
                 ? `Cliente: ${session.data.nome_cliente}\n`
                 : '';
@@ -1502,7 +1523,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               );
             } catch (error) {
               console.error('Erro ao processar hora:', error);
-              await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente.');
+              await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente. Se o problema persistir, tente reiniciar a edição.');
             }
             return;
           }
