@@ -1,4 +1,3 @@
-// User type definition matching the database
 export interface User {
   id: string;
   telegram_id: number;
@@ -10,7 +9,6 @@ export interface User {
   is_active: boolean;
 }
 
-// Cliente type definition
 export interface Cliente {
   id: string;
   user_id: string;
@@ -24,4 +22,16 @@ export interface Cliente {
   created_at: string;
   updated_at: string;
 }
-// Add other type definitions as needed
+
+export interface Compromisso {
+  id: string;
+  user_id: string;
+  cliente_id?: string;
+  titulo: string;
+  descricao?: string;
+  data_compromisso: string;
+  local?: string;
+  status: 'pendente' | 'concluido' | 'cancelado';
+  created_at: string;
+  updated_at: string;
+}
