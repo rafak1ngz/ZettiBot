@@ -1,5 +1,6 @@
 import { Context } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
+import { handleMenuPrincipal } from './index';
 
 export async function handleStart(ctx: Context) {
   const telegramId = ctx.from?.id;
@@ -68,13 +69,9 @@ Para uma experiência completa com o ZettiBot, por favor, me informe seu email p
         `);
       }
       
-      return ctx.reply(`
-Olá novamente! Sou o ZettiBot 🚀, seu assistente digital de vendas.
+      // Usuário já registrado e com email, mostrar menu principal
+      return handleMenuPrincipal(ctx);
 
-Estou pronto para ajudar a transformar seu dia comercial em resultados incríveis!
-
-👉 Digite /ajuda para ver todos os comandos disponíveis
-      `);
     } else {
       // Usuário não encontrado, criar novo
       console.log(`Creating new user for telegramId: ${telegramId}`);

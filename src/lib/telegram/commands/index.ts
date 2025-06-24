@@ -15,6 +15,7 @@ import { adminSupabase } from '@/lib/supabase';
 // import { handleFollowUp } from './followup';
 // import { handleLembrete } from './lembrete';
 
+// Comando para cancelar qualquer operação atual
 export async function handleCancelar(ctx: Context) {
   const telegramId = ctx.from?.id;
   
@@ -34,19 +35,40 @@ export async function handleCancelar(ctx: Context) {
       return ctx.reply('Ocorreu um erro ao cancelar a operação.');
     }
 
-    // Mensagem de cancelamento
-    await ctx.reply(`
-❌ Operação cancelada com sucesso!
-
-Você pode começar uma nova ação digitando /inicio ou escolhendo uma opção no menu.
-    `, 
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-    ]));
+    // Mensagem de cancelamento e exibir menu principal
+    await ctx.reply(`❌ Operação cancelada com sucesso!`);
+    
+    // Mostrar o menu principal
+    return handleMenuPrincipal(ctx);
 
   } catch (error) {
     console.error('Erro inesperado no cancelamento:', error);
-    await ctx.reply('Ocorreu um erro ao cancelar a operação.');
+    return ctx.reply('Ocorreu um erro ao cancelar a operação.');
+  }
+}
+
+// Função para exibir o menu principal
+export async function handleMenuPrincipal(ctx: Context) {
+  try {
+    await ctx.reply(`
+Olá, ${ctx.from?.first_name || 'vendedor'}! 👋 
+
+Bem-vindo ao ZettiBot 🚀, seu assistente digital de vendas.
+
+Escolha uma das opções abaixo:
+    `,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('👥 Gerenciar Clientes', 'menu_clientes')],
+      [Markup.button.callback('📅 Gerenciar Agenda', 'menu_agenda')],
+      [Markup.button.callback('📊 Follow Up', 'menu_followup')],
+      [Markup.button.callback('🔔 Lembretes', 'menu_lembretes')],
+      [Markup.button.callback('❓ Ajuda', 'menu_ajuda')]
+    ])
+    );
+    return true;
+  } catch (error) {
+    console.error('Erro ao mostrar menu principal:', error);
+    return false;
   }
 }
 
@@ -58,7 +80,42 @@ export const registerCommands = (bot: Telegraf) => {
   bot.command('ajuda', handleAjuda);
   bot.command('cancelar', handleCancelar);
   bot.action('cancelar_acao', handleCancelar);
-  
+
+  // COMANDOS MENU PRINCIPAL
+  bot.action('menu_principal', (ctx) => {
+    ctx.answerCbQuery();
+    return handleMenuPrincipal(ctx);
+  });
+
+  // E adicione handlers para cada opção do menu
+  bot.action('menu_clientes', (ctx) => {
+    ctx.answerCbQuery();
+    return handleClientes(ctx);
+  });
+
+  bot.action('menu_agenda', (ctx) => {
+    ctx.answerCbQuery();
+    // Temporariamente, avise que está em desenvolvimento
+    return ctx.reply('O módulo de Agenda está em desenvolvimento. Em breve estará disponível!');
+  });
+
+  bot.action('menu_followup', (ctx) => {
+    ctx.answerCbQuery();
+    // Temporariamente, avise que está em desenvolvimento
+    return ctx.reply('O módulo de Follow Up está em desenvolvimento. Em breve estará disponível!');
+  });
+
+  bot.action('menu_lembretes', (ctx) => {
+    ctx.answerCbQuery();
+    // Temporariamente, avise que está em desenvolvimento
+    return ctx.reply('O módulo de Lembretes está em desenvolvimento. Em breve estará disponível!');
+  });
+
+  bot.action('menu_ajuda', (ctx) => {
+    ctx.answerCbQuery();
+    return handleAjuda(ctx);
+  });
+
   //=============================================================================
   // COMANDOS DE CLIENTES
   //=============================================================================
