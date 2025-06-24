@@ -56,6 +56,20 @@ export const validators = {
         // Se não for um formato reconhecido
         return value;
       }
+    },
+    
+    // Nova função para formatar CNPJ
+    cnpj: (value: string): string => {
+      if (!value) return '';
+      
+      // Remover caracteres não numéricos
+      const cleaned = value.replace(/[^\d]/g, '');
+      
+      // Verificar se tem 14 dígitos (padrão CNPJ)
+      if (cleaned.length !== 14) return value;
+      
+      // Formatar como: XX.XXX.XXX/XXXX-XX
+      return `${cleaned.slice(0, 2)}.${cleaned.slice(2, 5)}.${cleaned.slice(5, 8)}/${cleaned.slice(8, 12)}-${cleaned.slice(12)}`;
     }
   }
-};
+}
