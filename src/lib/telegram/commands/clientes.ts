@@ -158,7 +158,11 @@ Use /clientes_adicionar para cadastrar seu primeiro cliente!
     clientes.forEach((cliente, index) => {
       response += `<b>${index + 1 + offset}. ${cliente.nome_empresa}</b>\n`;
       if (cliente.contato_nome) response += `👤 ${cliente.contato_nome}\n`;
-      if (cliente.contato_telefone) response += `📞 ${cliente.contato_telefone}\n`;
+      // Aplicar formatação ao telefone
+      if (cliente.contato_telefone) {
+        const telefoneFormatado = validators.formatters.telefone(cliente.contato_telefone);
+        response += `📞 ${telefoneFormatado}\n`;
+      }
       if (cliente.contato_email) response += `✉️ ${cliente.contato_email}\n`;
       response += '\n';
     });

@@ -331,11 +331,11 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           const novoTelefone = ctx.message.text.trim();
           const telefoneEditValue = (novoTelefone.toLowerCase() === 'pular') ? null : novoTelefone;
           
-          // Atualizar sessão para capturar email
+          // Atualizar sessão para confirmação (não para edit_contato_email)
           await adminSupabase
             .from('sessions')
             .update({
-              step: 'edit_contato_email',
+              step: 'confirmar',  // Alterado de edit_contato_email para confirmar
               data: { 
                 ...session.data, 
                 contato_telefone: telefoneEditValue
@@ -344,7 +344,22 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
           
-          await ctx.reply('Email do contato (opcional, digite "pular" para continuar):');
+          // Mostrar dados atualizados para confirmação
+          await ctx.reply(
+            `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
+            `Empresa: ${session.data.nome_empresa}\n` +
+            `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
+            `Contato: ${session.data.contato_nome}\n` +
+            `Telefone: ${telefoneEditValue || 'Não informado'}\n` +
+            `Email: ${session.data.contato_email || 'Não informado'}\n` +
+            (session.data.observacoes ? `Observações: ${session.data.observacoes}\n` : '') +
+            `\nOs dados estão corretos?`,
+            Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
+              [Markup.button.callback('🔄 Editar', 'cliente_editar')],
+              [Markup.button.callback('❌ Cancelar', 'cliente_cancelar')]
+            ])
+          );
           return;
         }
 
@@ -462,12 +477,19 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             
             // Envia cada cliente como uma mensagem separada com botões
             for (const cliente of clientes) {
+
+              // Formatar telefone, se existir
+              let telefoneExibicao = 'Não informado';
+              if (cliente.contato_telefone) {
+                telefoneExibicao = validators.formatters.telefone(cliente.contato_telefone);
+              }   
+
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 `------------------------------------------\n` +
                 (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                `📞 Telefone: ${telefoneExibicao}\n` +
                 (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
               
@@ -528,12 +550,19 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
 
             // Envia cada cliente como uma mensagem separada com botões
             for (const cliente of clientes) {
+
+              // Formatar telefone, se existir
+              let telefoneExibicao = 'Não informado';
+              if (cliente.contato_telefone) {
+                telefoneExibicao = validators.formatters.telefone(cliente.contato_telefone);
+              }   
+
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 `------------------------------------------\n` +
                 (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                `📞 Telefone: ${telefoneExibicao}\n` +
                 (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
               
@@ -594,12 +623,19 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             
             // Envia cada cliente como uma mensagem separada com botões
             for (const cliente of clientes) {
+
+              // Formatar telefone, se existir
+              let telefoneExibicao = 'Não informado';
+              if (cliente.contato_telefone) {
+                telefoneExibicao = validators.formatters.telefone(cliente.contato_telefone);
+              }   
+
               const mensagem = 
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 `------------------------------------------\n` +
                 (cliente.cnpj ? `📝 CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `👤 Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `📞 Telefone: ${cliente.contato_telefone}\n` : '') +
+                `📞 Telefone: ${telefoneExibicao}\n` +
                 (cliente.contato_email ? `✉️ Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `📌 Obs: ${cliente.observacoes}\n` : '');
               
