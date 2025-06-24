@@ -16,7 +16,7 @@ export const validators = {
     return true; // Implementar algoritmo completo se necessário
   },
   
-    // Validação básica de telefone
+  // Validação básica de telefone
   telefone: (value: string): boolean => {
     if (!value) return true; // Aceitar vazio
     
@@ -34,7 +34,7 @@ export const validators = {
     // Expressão regular simples para validar email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(value);
-  }
+  },
   
   // Funções formatadoras
   formatters: {
