@@ -154,10 +154,11 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           const telefone = ctx.message.text.trim();
           const telefoneValue = (telefone.toLowerCase() === 'pular') ? null : telefone;
 
+          // Atualizar sessão para capturar email
           await adminSupabase
             .from('sessions')
             .update({
-              step: 'confirmar',
+              step: 'contato_email',
               data: { 
                 ...session.data, 
                 contato_telefone: telefoneValue
@@ -166,12 +167,41 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             })
             .eq('id', session.id);
 
+          await ctx.reply('Email do contato (opcional, digite "pular" para continuar):');
+          return;
+        }
+
+        case 'contato_email': {
+          const email = ctx.message.text.trim();
+          const emailValue = (email.toLowerCase() === 'pular') ? null : email;
+
+          // Validação simples de e-mail se não for pular
+          if (emailValue && !emailValue.includes('@')) {
+            await ctx.reply('Por favor, digite um email válido ou "pular" para continuar.');
+            return;
+          }
+
+          // Atualizar sessão para confirmação
+          await adminSupabase
+            .from('sessions')
+            .update({
+              step: 'confirmar',
+              data: { 
+                ...session.data, 
+                contato_email: emailValue
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
+
+          // Mostrar resumo e solicitar confirmação
           await ctx.reply(
             `📋 Verifique os dados do cliente a ser cadastrado:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${telefoneValue || 'Não informado'}\n\n` +
+            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
+            `Email: ${emailValue || 'Não informado'}\n\n` +
             `Os dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
@@ -273,25 +303,59 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           return;
         }
 
+        // No caso de edição de contato_telefone
         case 'edit_contato_telefone': {
           const novoTelefone = ctx.message.text.trim();
           const telefoneEditValue = (novoTelefone.toLowerCase() === 'pular') ? null : novoTelefone;
           
+          // Atualizar sessão para capturar email
           await adminSupabase
             .from('sessions')
             .update({
-              data: { ...session.data, contato_telefone: telefoneEditValue },
-              step: 'confirmar',
+              step: 'edit_contato_email',
+              data: { 
+                ...session.data, 
+                contato_telefone: telefoneEditValue
+              },
               updated_at: new Date().toISOString()
             })
             .eq('id', session.id);
           
+          await ctx.reply('Email do contato (opcional, digite "pular" para continuar):');
+          return;
+        }
+
+        case 'edit_contato_email': {
+          const novoEmail = ctx.message.text.trim();
+          const emailEditValue = (novoEmail.toLowerCase() === 'pular') ? null : novoEmail;
+          
+          // Validação simples de e-mail se não for pular
+          if (emailEditValue && !emailEditValue.includes('@')) {
+            await ctx.reply('Por favor, digite um email válido ou "pular" para continuar.');
+            return;
+          }
+          
+          // Atualizar sessão para confirmação
+          await adminSupabase
+            .from('sessions')
+            .update({
+              step: 'confirmar',
+              data: { 
+                ...session.data, 
+                contato_email: emailEditValue
+              },
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', session.id);
+          
+          // Mostrar dados atualizados para confirmação
           await ctx.reply(
             `📋 Verifique os dados ATUALIZADOS do cliente:\n\n` +
             `Empresa: ${session.data.nome_empresa}\n` +
             `CNPJ: ${session.data.cnpj || 'Não informado'}\n` +
             `Contato: ${session.data.contato_nome}\n` +
-            `Telefone: ${telefoneEditValue || 'Não informado'}\n\n` +
+            `Telefone: ${session.data.contato_telefone || 'Não informado'}\n` +
+            `Email: ${emailEditValue || 'Não informado'}\n\n` +
             `Os dados estão corretos?`,
             Markup.inlineKeyboard([
               [Markup.button.callback('✅ Confirmar e Salvar', 'cliente_confirmar')],
@@ -346,7 +410,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
               
               await ctx.reply(mensagem, {
@@ -410,7 +475,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
               
               await ctx.reply(mensagem, {
@@ -474,9 +540,10 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                 `📋 <b>${cliente.nome_empresa}</b>\n` +
                 (cliente.cnpj ? `CNPJ: ${cliente.cnpj}\n` : '') +
                 (cliente.contato_nome ? `Contato: ${cliente.contato_nome}\n` : '') +
-                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') + 
+                (cliente.contato_telefone ? `Telefone: ${cliente.contato_telefone}\n` : '') +
+                (cliente.contato_email ? `Email: ${cliente.contato_email}\n` : '') +
                 (cliente.observacoes ? `\nObs: ${cliente.observacoes}\n` : '');
-              
+
               await ctx.reply(mensagem, {
                 parse_mode: 'HTML',
                 ...Markup.inlineKeyboard([
