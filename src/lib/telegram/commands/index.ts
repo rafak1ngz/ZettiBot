@@ -175,7 +175,7 @@ export const registerCommands = (bot: Telegraf) => {
           cliente_id: session.data.cliente_id,
           titulo: session.data.titulo,
           descricao: session.data.descricao,
-          data_compromisso: session.data.data_hora,
+          data_compromisso: session.data.data_compromisso || session.data.data_hora, // usar qualquer um dos dois
           local: session.data.local,
           status: 'pendente',
           updated_at: new Date().toISOString()

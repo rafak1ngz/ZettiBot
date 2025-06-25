@@ -1282,38 +1282,44 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               return;
             }
             
-            // Atualizar título na sessão
-            await adminSupabase
-              .from('sessions')
-              .update({
-                data: { ...session.data, titulo: novoTitulo },
-                step: 'confirmar_compromisso',
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', session.id);
+            try {
+              await adminSupabase
+                .from('sessions')
+                .update({
+                  data: { 
+                    ...session.data, 
+                    titulo: novoTitulo,
+                    data_hora: session.data.data_compromisso 
+                  },
+                  step: 'confirmar_compromisso',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', session.id);
               
-            // Construir data formatada
-            const dataHora = new Date(session.data.data_hora);
-            const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-            const clienteInfo = session.data.nome_cliente 
-              ? `Cliente: ${session.data.nome_cliente}\n`
-              : '';
+              const dataHora = new Date(session.data.data_compromisso);
+              const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              const clienteInfo = session.data.nome_cliente 
+                ? `Cliente: ${session.data.nome_cliente}\n`
+                : '';
               
-            // Mostrar dados atualizados
-            await ctx.reply(
-              `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
-              `Título: ${novoTitulo}\n` +
-              `${clienteInfo}` +
-              `Data: ${dataFormatada}\n` +
-              (session.data.local ? `Local: ${session.data.local}\n` : '') +
-              (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
-              `\nOs dados estão corretos?`,
-              Markup.inlineKeyboard([
-                [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
-                [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
-                [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-              ])
-            );
+              await ctx.reply(
+                `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+                `Título: ${novoTitulo}\n` +
+                `${clienteInfo}` +
+                `Data: ${dataFormatada}\n` +
+                (session.data.local ? `Local: ${session.data.local}\n` : '') +
+                (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
+                `\nOs dados estão corretos?`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+            } catch (error) {
+              console.error('Erro ao processar título:', error);
+              await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+            }
             return;
           }
 
@@ -1321,38 +1327,44 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             const novaDescricao = ctx.message.text.trim();
             const descricaoValue = (novaDescricao.toLowerCase() === 'pular') ? null : novaDescricao;
             
-            // Atualizar descrição na sessão
-            await adminSupabase
-              .from('sessions')
-              .update({
-                data: { ...session.data, descricao: descricaoValue },
-                step: 'confirmar_compromisso',
-                updated_at: new Date().toISOString()
-              })
-              .eq('id', session.id);
-              
-            // Construir data formatada
-            const dataHora = new Date(session.data.data_hora);
-            const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-            const clienteInfo = session.data.nome_cliente 
-              ? `Cliente: ${session.data.nome_cliente}\n`
-              : '';
-              
-            // Mostrar dados atualizados
-            await ctx.reply(
-              `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
-              `Título: ${session.data.titulo}\n` +
-              `${clienteInfo}` +
-              `Data: ${dataFormatada}\n` +
-              (session.data.local ? `Local: ${session.data.local}\n` : '') +
-              (descricaoValue ? `Descrição: ${descricaoValue}\n` : '') +
-              `\nOs dados estão corretos?`,
-              Markup.inlineKeyboard([
-                [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
-                [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
-                [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-              ])
-            );
+            try {
+              await adminSupabase
+                .from('sessions')
+                .update({
+                  data: { 
+                    ...session.data, 
+                    descricao: descricaoValue,
+                    data_hora: session.data.data_compromisso
+                  },
+                  step: 'confirmar_compromisso',
+                  updated_at: new Date().toISOString()
+                })
+                .eq('id', session.id);
+                
+              const dataHora = new Date(session.data.data_compromisso);
+              const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+              const clienteInfo = session.data.nome_cliente 
+                ? `Cliente: ${session.data.nome_cliente}\n`
+                : '';
+                
+              await ctx.reply(
+                `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+                `Título: ${session.data.titulo}\n` +
+                `${clienteInfo}` +
+                `Data: ${dataFormatada}\n` +
+                (session.data.local ? `Local: ${session.data.local}\n` : '') +
+                (descricaoValue ? `Descrição: ${descricaoValue}\n` : '') +
+                `\nOs dados estão corretos?`,
+                Markup.inlineKeyboard([
+                  [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+                  [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+                  [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+                ])
+              );
+            } catch (error) {
+              console.error('Erro ao processar descrição:', error);
+              await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+            }
             return;
           }
 
@@ -1360,7 +1372,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             let dataTexto = ctx.message.text.trim();
             let data;
             
-            // Processar atalhos
             if (dataTexto.toLowerCase() === 'hoje') {
               data = new Date();
               dataTexto = format(data, 'dd/MM/yyyy');
@@ -1369,11 +1380,8 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               data.setDate(data.getDate() + 1);
               dataTexto = format(data, 'dd/MM/yyyy');
             } else {
-              // Validar formato da data
               try {
                 data = parse(dataTexto, 'dd/MM/yyyy', new Date());
-                
-                // Verificar se é uma data válida
                 if (isNaN(data.getTime())) {
                   await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
                   return;
@@ -1384,11 +1392,9 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               }
             }
             
-            // Extrair a hora atual do compromisso
             const dataAtual = new Date(session.data.data_hora);
             const horaAtual = format(dataAtual, 'HH:mm');
             
-            // Construir nova data e hora
             try {
               const novaDataHoraTexto = `${dataTexto} ${horaAtual}`;
               const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
@@ -1397,27 +1403,25 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
                 throw new Error('Data ou hora inválida');
               }
               
-              // Atualizar data na sessão
               await adminSupabase
                 .from('sessions')
                 .update({
                   data: { 
                     ...session.data, 
                     data_texto: dataTexto,
-                    data_hora: novaDataHora.toISOString() 
+                    data_compromisso: novaDataHora.toISOString(),
+                    data_hora: novaDataHora.toISOString()
                   },
                   step: 'confirmar_compromisso',
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', session.id);
                 
-              // Construir resposta
               const dataFormatada = format(novaDataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
               const clienteInfo = session.data.nome_cliente 
                 ? `Cliente: ${session.data.nome_cliente}\n`
                 : '';
                 
-              // Mostrar dados atualizados
               await ctx.reply(
                 `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
                 `Título: ${session.data.titulo}\n` +
@@ -1442,7 +1446,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
           case 'edit_hora_compromisso': {
             const horaTexto = ctx.message.text.trim();
             
-            // Validar formato da hora
             const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
             if (!horaRegex.test(horaTexto)) {
               await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
@@ -1451,62 +1454,35 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             
             try {
               console.log('Dados da sessão:', session.data);
-              console.log('Data hora atual:', session.data.data_hora);
-              
-              // Verificar se temos uma data válida na sessão
-              if (!session.data.data_hora) {
-                throw new Error('Data não encontrada na sessão');
-              }
+              const dataAtual = new Date(session.data.data_compromisso);
+              console.log('Data atual:', dataAtual);
 
-              // Separar a hora e minuto fornecidos
               const [horas, minutos] = horaTexto.split(':').map(Number);
               console.log('Nova hora:', horas, 'Novos minutos:', minutos);
 
-              // Criar data a partir da string ISO
-              const dataAtual = new Date(session.data.data_hora);
-              console.log('Data atual parseada:', dataAtual);
-
-              // Verificar se a data é válida
-              if (isNaN(dataAtual.getTime())) {
-                throw new Error('Data atual inválida');
-              }
-
-              // Criar nova data usando UTC para evitar problemas de fuso horário
-              const novaData = new Date(dataAtual.getTime());
-              novaData.setUTCHours(horas);
-              novaData.setUTCMinutes(minutos);
-              console.log('Nova data criada:', novaData);
-
-              // Verificar se a nova data é válida
-              if (isNaN(novaData.getTime())) {
-                throw new Error('Nova data inválida');
-              }
-
-              // Atualizar sessão
-              const novaDataISO = novaData.toISOString();
-              console.log('Nova data ISO:', novaDataISO);
+              const novaData = new Date(dataAtual);
+              novaData.setHours(horas);
+              novaData.setMinutes(minutos);
+              console.log('Nova data:', novaData);
 
               await adminSupabase
                 .from('sessions')
                 .update({
                   data: { 
                     ...session.data, 
-                    data_hora: novaDataISO
+                    data_compromisso: novaData.toISOString(),
+                    data_hora: novaData.toISOString()
                   },
                   step: 'confirmar_compromisso',
                   updated_at: new Date().toISOString()
                 })
                 .eq('id', session.id);
               
-              // Formatar para exibição
               const dataFormatada = format(novaData, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-              console.log('Data formatada:', dataFormatada);
-
               const clienteInfo = session.data.nome_cliente 
                 ? `Cliente: ${session.data.nome_cliente}\n`
                 : '';
               
-              // Mostrar dados atualizados
               await ctx.reply(
                 `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
                 `Título: ${session.data.titulo}\n` +
@@ -1523,7 +1499,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               );
             } catch (error) {
               console.error('Erro ao processar hora:', error);
-              await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente. Se o problema persistir, tente reiniciar a edição.');
+              await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente.');
             }
             return;
           }
@@ -1532,7 +1508,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             const novoLocal = ctx.message.text.trim();
             const localValue = (novoLocal.toLowerCase() === 'pular') ? null : novoLocal;
             
-            // Atualizar local na sessão
             await adminSupabase
               .from('sessions')
               .update({
@@ -1542,14 +1517,12 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
               })
               .eq('id', session.id);
               
-            // Construir data formatada
             const dataHora = new Date(session.data.data_hora);
             const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
             const clienteInfo = session.data.nome_cliente 
               ? `Cliente: ${session.data.nome_cliente}\n`
               : '';
               
-            // Mostrar dados atualizados
             await ctx.reply(
               `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
               `Título: ${session.data.titulo}\n` +
@@ -1566,7 +1539,6 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
             );
             return;
           }
-
         }
       } catch (error) {
         console.error('Erro no processamento de agenda:', error);
