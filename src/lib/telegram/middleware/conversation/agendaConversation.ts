@@ -1,6 +1,6 @@
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid, addDays, subHours } from 'date-fns';
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ============================================================================
@@ -181,8 +181,7 @@ async function handleLocalCompromisso(ctx: Context, session: any, local: string)
 
   // Mostrar resumo para confirmação (usando horário brasileiro para exibição)
   const dataHora = new Date(session.data.data_compromisso);
-  const dataHoraBrasil = subHours(dataHora, 3); // Converter para horário brasileiro para exibição
-  const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const clienteInfo = session.data.nome_cliente 
     ? `👥 Cliente: ${session.data.nome_cliente}\n`
     : '';
@@ -408,8 +407,7 @@ function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } |
 
 async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
   const dataHora = new Date(dados.data_compromisso);
-  const dataHoraBrasil = subHours(dataHora, 3); // Converter para horário brasileiro
-  const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const clienteInfo = dados.nome_cliente 
     ? `👥 Cliente: ${dados.nome_cliente}\n`
     : '';
