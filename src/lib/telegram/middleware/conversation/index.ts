@@ -3,7 +3,7 @@ import { BotContext } from '../session';
 import { adminSupabase } from '@/lib/supabase';
 import { handleStartConversation } from './startConversation';
 import { handleClientesConversation } from './clientesConversation';
-import { handleAgendaConversation } from './agendaConversation';
+import { processAgendaConversation } from './agendaConversation';
 
 // Função de cancelamento compartilhada
 export async function cancelarOperacao(ctx: BotContext, telegramId: number) {
@@ -88,7 +88,7 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
       case 'clientes':
         return handleClientesConversation(ctx, session);
       case 'agenda':
-        return handleAgendaConversation(ctx, session);
+        return processAgendaConversation(ctx, session);
       default:
         console.log(`Unknown command: ${session.command}`);
         return next();
