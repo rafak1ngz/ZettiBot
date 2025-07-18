@@ -147,17 +147,21 @@ async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: stri
   const dataCompleta = new Date(dataBase);
   dataCompleta.setHours(horaData.horas, horaData.minutos, 0, 0);
 
-  // CORREÇÃO: Verificar considerando horário brasileiro + margem de 5 minutos
-  const agora = getBrazilianTime();
-  const margemMinima = new Date(agora.getTime() + 5 * 60 * 1000); // 5 minutos no futuro
+  // Verificação simples: só validar se é hoje
+  const hoje = new Date();
+  const dataEscolhida = new Date(session.data.data_selecionada);
   
-  // Ajustar para horário brasileiro na comparação
-  const dataCompletaBrasil = new Date(dataCompleta.getTime() - 3 * 60 * 60 * 1000); // UTC-3
-  
-  if (dataCompletaBrasil <= margemMinima) {
-    const horaAtual = format(agora, 'HH:mm');
-    await ctx.reply(`Não é possível agendar compromissos para horários muito próximos ao atual (${horaAtual}). Por favor, digite um horário pelo menos 5 minutos no futuro.`);
-    return true;
+  // Se for hoje, verificar horário
+  if (dataEscolhida.toDateString() === hoje.toDateString()) {
+    const agora = new Date();
+    const horaAtualMinutos = agora.getHours() * 60 + agora.getMinutes();
+    const horaEscolhidaMinutos = horaData.horas * 60 + horaData.minutos;
+    
+    if (horaEscolhidaMinutos <= horaAtualMinutos + 5) {
+      const horaAtual = format(agora, 'HH:mm');
+      await ctx.reply(`Não é possível agendar compromissos para horários muito próximos ao atual (${horaAtual}). Por favor, digite um horário pelo menos 5 minutos no futuro.`);
+      return true;
+    }
   }
 
   await adminSupabase
@@ -414,13 +418,6 @@ function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } |
   } catch {
     return null;
   }
-}
-
-// NOVA FUNÇÃO: Obter horário brasileiro
-function getBrazilianTime(): Date {
-  const now = new Date();
-  // Converter UTC para horário brasileiro (UTC-3)
-  return subHours(now, 3);
 }
 
 async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
