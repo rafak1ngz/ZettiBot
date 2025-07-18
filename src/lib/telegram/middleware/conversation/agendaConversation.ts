@@ -379,15 +379,32 @@ async function handleEditDataCompromisso(ctx: BotContext, session: any) {
     }
   }
   
-  const dataAtual = new Date(session.data.data_hora);
-  const horaAtual = format(dataAtual, 'HH:mm');
-  
   try {
+    // Usar data_compromisso do compromisso original (mais confiável)
+    let dataAtual;
+    if (session.data.data_compromisso) {
+      dataAtual = new Date(session.data.data_compromisso);
+    } else if (session.data.data_hora) {
+      dataAtual = new Date(session.data.data_hora);
+    } else {
+      // Fallback para horário atual se não tiver data válida
+      dataAtual = new Date();
+      dataAtual.setHours(9, 0, 0, 0); // 09:00 como padrão
+    }
+    
+    // Verificar se a data é válida antes de formatar
+    let horaAtual;
+    if (!isNaN(dataAtual.getTime())) {
+      horaAtual = format(dataAtual, 'HH:mm');
+    } else {
+      horaAtual = '09:00'; // Horário padrão se data inválida
+    }
+    
     const novaDataHoraTexto = `${dataTexto} ${horaAtual}`;
     const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
     
     if (isNaN(novaDataHora.getTime())) {
-      throw new Error('Data ou hora inválida');
+      throw new Error('Data ou hora inválida após parse');
     }
     
     await adminSupabase
@@ -406,7 +423,8 @@ async function handleEditDataCompromisso(ctx: BotContext, session: any) {
       
     await mostrarConfirmacaoCompromisso(ctx, { 
       ...session.data, 
-      data_hora: novaDataHora.toISOString() 
+      data_compromisso: novaDataHora.toISOString(),
+      data_hora: novaDataHora.toISOString()
     });
   } catch (error) {
     console.error('Erro ao processar data:', error);
@@ -426,8 +444,25 @@ async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
   
   try {
     console.log('Dados da sessão:', session.data);
-    const dataAtual = new Date(session.data.data_compromisso);
+    
+    // Usar data_compromisso do compromisso original (mais confiável)
+    let dataAtual;
+    if (session.data.data_compromisso) {
+      dataAtual = new Date(session.data.data_compromisso);
+    } else if (session.data.data_hora) {
+      dataAtual = new Date(session.data.data_hora);
+    } else {
+      // Fallback para data atual se não tiver data válida
+      dataAtual = new Date();
+    }
+    
     console.log('Data atual:', dataAtual);
+
+    // Verificar se a data é válida
+    if (isNaN(dataAtual.getTime())) {
+      console.error('Data inválida encontrada, usando data atual');
+      dataAtual = new Date();
+    }
 
     const [horas, minutos] = horaTexto.split(':').map(Number);
     console.log('Nova hora:', horas, 'Novos minutos:', minutos);
@@ -435,6 +470,8 @@ async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
     const novaData = new Date(dataAtual);
     novaData.setHours(horas);
     novaData.setMinutes(minutos);
+    novaData.setSeconds(0);
+    novaData.setMilliseconds(0);
     console.log('Nova data:', novaData);
 
     await adminSupabase
@@ -452,6 +489,7 @@ async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
     
     await mostrarConfirmacaoCompromisso(ctx, { 
       ...session.data, 
+      data_compromisso: novaData.toISOString(),
       data_hora: novaData.toISOString() 
     });
   } catch (error) {
@@ -485,24 +523,47 @@ async function handleEditLocalCompromisso(ctx: BotContext, session: any) {
 // ============================================================================
 
 async function mostrarConfirmacaoCompromisso(ctx: BotContext, data: any) {
-  const dataHora = new Date(data.data_hora);
-  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  const clienteInfo = data.nome_cliente 
-    ? `Cliente: ${data.nome_cliente}\n`
-    : '';
+  try {
+    // Verificar se temos uma data válida
+    let dataHora;
+    if (data.data_hora) {
+      dataHora = new Date(data.data_hora);
+    } else if (data.data_compromisso) {
+      dataHora = new Date(data.data_compromisso);
+    } else {
+      console.error('Nenhuma data encontrada nos dados do compromisso');
+      await ctx.reply('Erro: Data do compromisso não encontrada. Por favor, inicie novamente.');
+      return;
+    }
     
-  await ctx.reply(
-    `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
-    `Título: ${data.titulo}\n` +
-    `${clienteInfo}` +
-    `Data: ${dataFormatada}\n` +
-    (data.local ? `Local: ${data.local}\n` : '') +
-    (data.descricao ? `Descrição: ${data.descricao}\n` : '') +
-    `\nOs dados estão corretos?`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
-      [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-    ])
-  );
+    // Verificar se a data é válida
+    if (isNaN(dataHora.getTime())) {
+      console.error('Data inválida encontrada:', data.data_hora, data.data_compromisso);
+      await ctx.reply('Erro: Data inválida. Por favor, inicie novamente.');
+      return;
+    }
+    
+    const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    const clienteInfo = data.nome_cliente 
+      ? `Cliente: ${data.nome_cliente}\n`
+      : '';
+      
+    await ctx.reply(
+      `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
+      `Título: ${data.titulo}\n` +
+      `${clienteInfo}` +
+      `Data: ${dataFormatada}\n` +
+      (data.local ? `Local: ${data.local}\n` : '') +
+      (data.descricao ? `Descrição: ${data.descricao}\n` : '') +
+      `\nOs dados estão corretos?`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+        [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao mostrar confirmação:', error);
+    await ctx.reply('Ocorreu um erro ao exibir os dados. Por favor, tente novamente.');
+  }
 }
