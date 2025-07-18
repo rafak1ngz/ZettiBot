@@ -1,6 +1,5 @@
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { Cliente } from '@/types/database';
 import { validators } from '@/utils/validators';
 
 /**
@@ -242,12 +241,3 @@ export async function handleClientesBuscar(ctx: Context) {
     return ctx.reply('Ocorreu um erro ao iniciar a busca. Por favor, tente novamente.');
   }
 }
-
-/**
- * Manipulador para editar clientes (a ser implementado)
- */
-/*
-export async function handleClientesEditar(ctx: Context) {
-  // Implementação futura
-}
-*/

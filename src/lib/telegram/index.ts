@@ -1,6 +1,6 @@
 import { Telegraf } from 'telegraf';
 import { userMiddleware } from './middleware/user';
-import { conversationMiddleware } from './middleware/conversation';
+import { conversationMiddleware } from './middleware/conversation/index';
 import { registerCommands } from './commands';
 
 // Initialize bot with token
