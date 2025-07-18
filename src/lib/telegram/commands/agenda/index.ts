@@ -60,7 +60,6 @@ export function registerAgendaCommands(bot: Telegraf) {
   // ========================================================================
   // CALLBACKS DE CONFIRMAÇÃO
   // ========================================================================
-  bot.action('agenda_confirmar', handleConfirmarCompromisso);
   bot.action('agenda_atualizar', async (ctx) => {
     try {
       ctx.answerCbQuery();
