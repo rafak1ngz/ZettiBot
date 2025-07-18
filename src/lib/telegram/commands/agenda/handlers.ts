@@ -1,8 +1,11 @@
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid } from 'date-fns';
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
+// ============================================================================
+// MENU PRINCIPAL
+// ============================================================================
 export async function handleAgenda(ctx: Context) {
   const userId = ctx.state.user?.id;
   if (!userId) {
@@ -25,6 +28,9 @@ O que deseja fazer?
   ]));
 }
 
+// ============================================================================
+// CRIAR NOVO COMPROMISSO
+// ============================================================================
 export async function handleNovoCompromisso(ctx: Context) {
   try {
     const userId = ctx.state.user?.id;
@@ -32,7 +38,6 @@ export async function handleNovoCompromisso(ctx: Context) {
       return ctx.reply('Você precisa estar autenticado para usar este comando.');
     }
 
-    // Verificar se deseja vincular a um cliente
     await ctx.editMessageText('Deseja vincular este compromisso a um cliente?',
       Markup.inlineKeyboard([
         [
@@ -50,16 +55,16 @@ export async function handleNovoCompromisso(ctx: Context) {
   }
 }
 
+// ============================================================================
+// VINCULAR CLIENTE
+// ============================================================================
 export async function handleVincularCliente(ctx: Context) {
   try {
     const telegramId = ctx.from?.id;
-    if (!telegramId) {
-      return ctx.reply('Não foi possível identificar seu usuário.');
-    }
-    
     const userId = ctx.state.user?.id;
-    if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
+    
+    if (!telegramId || !userId) {
+      return ctx.reply('Não foi possível identificar seu usuário.');
     }
     
     // Criar sessão para busca de cliente
@@ -86,19 +91,19 @@ export async function handleVincularCliente(ctx: Context) {
   }
 }
 
+// ============================================================================
+// COMPROMISSO SEM CLIENTE
+// ============================================================================
 export async function handleSemCliente(ctx: Context) {
   try {
     const telegramId = ctx.from?.id;
-    if (!telegramId) {
+    const userId = ctx.state.user?.id;
+
+    if (!telegramId || !userId) {
       return ctx.reply('Não foi possível identificar seu usuário.');
     }
 
-    const userId = ctx.state.user?.id;
-    if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
-    }
-
-    // Criar sessão para registrar compromisso sem cliente
+    // Criar sessão para compromisso sem cliente
     await adminSupabase
       .from('sessions')
       .delete()
@@ -106,18 +111,15 @@ export async function handleSemCliente(ctx: Context) {
 
     await adminSupabase
       .from('sessions')
-      .insert([
-        {
-          telegram_id: telegramId,
-          user_id: userId,
-          command: 'agenda',
-          step: 'titulo_compromisso',
-          data: { cliente_id: null },
-          updated_at: new Date().toISOString()
-        }
-      ]);
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'agenda',
+        step: 'titulo_compromisso',
+        data: { cliente_id: null },
+        updated_at: new Date().toISOString()
+      }]);
 
-    // Solicitar título do compromisso
     await ctx.editMessageText('Digite o título do compromisso:');
   } catch (error) {
     console.error('Erro ao processar compromisso sem cliente:', error);
@@ -125,16 +127,16 @@ export async function handleSemCliente(ctx: Context) {
   }
 }
 
+// ============================================================================
+// SELECIONAR CLIENTE ESPECÍFICO
+// ============================================================================
 export async function handleSelecionarCliente(ctx: Context, clienteId: string) {
   try {
     const telegramId = ctx.from?.id;
-    if (!telegramId) {
-      return ctx.reply('Não foi possível identificar seu usuário.');
-    }
-
     const userId = ctx.state.user?.id;
-    if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
+
+    if (!telegramId || !userId) {
+      return ctx.reply('Não foi possível identificar seu usuário.');
     }
 
     // Verificar se o cliente existe
@@ -149,7 +151,7 @@ export async function handleSelecionarCliente(ctx: Context, clienteId: string) {
       return ctx.reply('Cliente não encontrado ou você não tem permissão para acessá-lo.');
     }
 
-    // Criar sessão para registrar compromisso com cliente
+    // Criar sessão para compromisso com cliente
     await adminSupabase
       .from('sessions')
       .delete()
@@ -157,18 +159,15 @@ export async function handleSelecionarCliente(ctx: Context, clienteId: string) {
 
     await adminSupabase
       .from('sessions')
-      .insert([
-        {
-          telegram_id: telegramId,
-          user_id: userId,
-          command: 'agenda',
-          step: 'titulo_compromisso',
-          data: { cliente_id: clienteId, nome_cliente: cliente.nome_empresa },
-          updated_at: new Date().toISOString()
-        }
-      ]);
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'agenda',
+        step: 'titulo_compromisso',
+        data: { cliente_id: clienteId, nome_cliente: cliente.nome_empresa },
+        updated_at: new Date().toISOString()
+      }]);
 
-    // Solicitar título do compromisso
     await ctx.editMessageText(`Cliente selecionado: ${cliente.nome_empresa}\n\nDigite o título do compromisso:`);
   } catch (error) {
     console.error('Erro ao selecionar cliente:', error);
@@ -176,6 +175,9 @@ export async function handleSelecionarCliente(ctx: Context, clienteId: string) {
   }
 }
 
+// ============================================================================
+// LISTAR COMPROMISSOS
+// ============================================================================
 export async function handleListarCompromissos(ctx: Context) {
   try {
     const userId = ctx.state.user?.id;
@@ -233,7 +235,6 @@ export async function handleListarCompromissos(ctx: Context) {
           ]
         ])
       );
-
     }
 
     await ctx.reply(
@@ -248,5 +249,77 @@ export async function handleListarCompromissos(ctx: Context) {
   } catch (error) {
     console.error('Erro ao listar compromissos:', error);
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+  }
+}
+
+// ============================================================================
+// EDITAR COMPROMISSO EXISTENTE
+// ============================================================================
+export async function handleEditarCompromisso(ctx: Context, compromissoId: string) {
+  try {
+    const telegramId = ctx.from?.id;
+    const userId = ctx.state.user?.id;
+    
+    if (!telegramId || !userId) {
+      return ctx.reply('Não foi possível identificar seu usuário.');
+    }
+
+    // Buscar o compromisso
+    const { data: compromisso, error } = await adminSupabase
+      .from('compromissos')
+      .select(`
+        *,
+        clientes (nome_empresa)
+      `)
+      .eq('id', compromissoId)
+      .eq('user_id', userId)
+      .single();
+    
+    if (error || !compromisso) {
+      console.error('Erro ao buscar compromisso:', error);
+      await ctx.reply('Compromisso não encontrado.');
+      return;
+    }
+    
+    // Armazenar dados do compromisso em sessão
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+      
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'agenda',
+        step: 'editar_compromisso',
+        data: {
+          id: compromisso.id,
+          titulo: compromisso.titulo,
+          descricao: compromisso.descricao,
+          data_compromisso: compromisso.data_compromisso,
+          local: compromisso.local,
+          cliente_id: compromisso.cliente_id,
+          nome_cliente: compromisso.clientes?.nome_empresa || null
+        },
+        updated_at: new Date().toISOString()
+      }]);
+    
+    // Mostrar opções de edição
+    await ctx.reply(
+      `O que você deseja editar no compromisso "${compromisso.titulo}"?`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback('📝 Título', 'agenda_edit_titulo')],
+        [Markup.button.callback('📄 Descrição', 'agenda_edit_descricao')],
+        [Markup.button.callback('📅 Data', 'agenda_edit_data')],
+        [Markup.button.callback('🕐 Hora', 'agenda_edit_hora')],
+        [Markup.button.callback('📍 Local', 'agenda_edit_local')],
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao iniciar edição:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }

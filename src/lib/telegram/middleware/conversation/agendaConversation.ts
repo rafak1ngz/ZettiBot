@@ -1,77 +1,72 @@
-import { BotContext } from '../session';
+import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid } from 'date-fns';
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { Markup } from 'telegraf';
 
-export async function handleAgendaConversation(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
+// ============================================================================
+// PROCESSAMENTO DE CONVERSAÇÃO DE AGENDA
+// ============================================================================
+export async function processAgendaConversation(ctx: Context, session: any): Promise<boolean> {
+  if (!ctx.message || !('text' in ctx.message)) return false;
+
+  const messageText = ctx.message.text.trim();
 
   try {
     switch (session.step) {
-      case 'titulo_compromisso': {
-        return await handleTituloCompromisso(ctx, session);
-      }
-      case 'descricao_compromisso': {
-        return await handleDescricaoCompromisso(ctx, session);
-      }
-      case 'data_compromisso': {
-        return await handleDataCompromisso(ctx, session);
-      }
-      case 'hora_compromisso': {
-        return await handleHoraCompromisso(ctx, session);
-      }
-      case 'local_compromisso': {
-        return await handleLocalCompromisso(ctx, session);
-      }
-      case 'confirmar_compromisso': {
-        await ctx.reply('Por favor, use os botões para confirmar ou cancelar o compromisso.');
-        return;
-      }
-      case 'busca_cliente': {
-        return await handleBuscaCliente(ctx, session);
-      }
-      // Etapas de edição
-      case 'edit_titulo_compromisso': {
-        return await handleEditTituloCompromisso(ctx, session);
-      }
-      case 'edit_descricao_compromisso': {
-        return await handleEditDescricaoCompromisso(ctx, session);
-      }
-      case 'edit_data_compromisso': {
-        return await handleEditDataCompromisso(ctx, session);
-      }
-      case 'edit_hora_compromisso': {
-        return await handleEditHoraCompromisso(ctx, session);
-      }
-      case 'edit_local_compromisso': {
-        return await handleEditLocalCompromisso(ctx, session);
-      }
-      default: {
-        console.log(`Unknown agenda step: ${session.step}`);
-        return;
-      }
+      case 'titulo_compromisso':
+        return await handleTituloCompromisso(ctx, session, messageText);
+
+      case 'descricao_compromisso':
+        return await handleDescricaoCompromisso(ctx, session, messageText);
+
+      case 'data_compromisso':
+        return await handleDataCompromisso(ctx, session, messageText);
+
+      case 'hora_compromisso':
+        return await handleHoraCompromisso(ctx, session, messageText);
+
+      case 'local_compromisso':
+        return await handleLocalCompromisso(ctx, session, messageText);
+
+      case 'busca_cliente':
+        return await handleBuscaCliente(ctx, session, messageText);
+
+      // Steps de edição
+      case 'edit_titulo_compromisso':
+        return await handleEditTitulo(ctx, session, messageText);
+
+      case 'edit_descricao_compromisso':
+        return await handleEditDescricao(ctx, session, messageText);
+
+      case 'edit_data_compromisso':
+        return await handleEditData(ctx, session, messageText);
+
+      case 'edit_hora_compromisso':
+        return await handleEditHora(ctx, session, messageText);
+
+      case 'edit_local_compromisso':
+        return await handleEditLocal(ctx, session, messageText);
+
+      default:
+        return false;
     }
   } catch (error) {
     console.error('Erro no processamento de agenda:', error);
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    return true;
   }
 }
 
 // ============================================================================
-// HANDLERS PARA CADASTRO DE COMPROMISSO
+// CRIAR NOVO COMPROMISSO - STEPS
 // ============================================================================
 
-async function handleTituloCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const titulo = ctx.message.text.trim();
-  
+async function handleTituloCompromisso(ctx: Context, session: any, titulo: string): Promise<boolean> {
   if (!titulo || titulo.length < 3) {
-    await ctx.reply('Por favor, forneça um título válido para o compromisso.');
-    return;
+    await ctx.reply('Por favor, forneça um título válido para o compromisso (mínimo 3 caracteres).');
+    return true;
   }
-  
-  // Atualizar sessão para o próximo passo
+
   await adminSupabase
     .from('sessions')
     .update({
@@ -80,16 +75,14 @@ async function handleTituloCompromisso(ctx: BotContext, session: any) {
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
-    
+
   await ctx.reply('Digite uma descrição para o compromisso (opcional, digite "pular" para continuar):');
+  return true;
 }
 
-async function handleDescricaoCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const descricao = ctx.message.text.trim();
+async function handleDescricaoCompromisso(ctx: Context, session: any, descricao: string): Promise<boolean> {
   const descricaoValue = (descricao.toLowerCase() === 'pular') ? null : descricao;
-  
-  // Atualizar sessão para o próximo passo
+
   await adminSupabase
     .from('sessions')
     .update({
@@ -98,148 +91,130 @@ async function handleDescricaoCompromisso(ctx: BotContext, session: any) {
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
-    
+
   await ctx.reply(
     'Digite a data do compromisso no formato DD/MM/YYYY:',
     Markup.keyboard([
       ['Hoje', 'Amanhã']
     ]).oneTime().resize()
   );
+  return true;
 }
 
-async function handleDataCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  let dataTexto = ctx.message.text.trim();
-  let data;
+async function handleDataCompromisso(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
+  const data = parseDataTexto(dataTexto);
   
-  // Processar atalhos
-  if (dataTexto.toLowerCase() === 'hoje') {
-    data = new Date();
-    dataTexto = format(data, 'dd/MM/yyyy');
-  } else if (dataTexto.toLowerCase() === 'amanhã') {
-    data = new Date();
-    data.setDate(data.getDate() + 1);
-    dataTexto = format(data, 'dd/MM/yyyy');
-  } else {
-    // Validar formato da data
-    try {
-      data = parse(dataTexto, 'dd/MM/yyyy', new Date());
-      
-      // Verificar se é uma data válida
-      if (isNaN(data.getTime())) {
-        await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
-        return;
-      }
-    } catch (error) {
-      await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
-      return;
-    }
+  if (!data) {
+    await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY ou digite "hoje" ou "amanhã".');
+    return true;
   }
+
+  // Verificar se a data não é no passado
+  const hoje = new Date();
+  hoje.setHours(0, 0, 0, 0);
   
-  // Atualizar sessão para o próximo passo
+  if (data < hoje) {
+    await ctx.reply('Não é possível agendar compromissos para datas passadas. Por favor, digite uma data futura.');
+    return true;
+  }
+
   await adminSupabase
     .from('sessions')
     .update({
       step: 'hora_compromisso',
-      data: { ...session.data, data_texto: dataTexto },
+      data: { ...session.data, data_texto: dataTexto, data_selecionada: data.toISOString() },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
-    
+
   await ctx.reply(
     'Digite o horário do compromisso no formato HH:MM:',
     Markup.removeKeyboard()
   );
+  return true;
 }
 
-async function handleHoraCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const horaTexto = ctx.message.text.trim();
+async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: string): Promise<boolean> {
+  const horaData = parseHoraTexto(horaTexto);
   
-  // Validar formato da hora
-  const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
-  if (!horaRegex.test(horaTexto)) {
+  if (!horaData) {
     await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
-    return;
+    return true;
   }
-  
-  // Atualizar sessão para o próximo passo
+
+  // Combinar data e hora
+  const dataBase = new Date(session.data.data_selecionada);
+  const dataCompleta = new Date(dataBase);
+  dataCompleta.setHours(horaData.horas, horaData.minutos, 0, 0);
+
+  // Verificar se não é no passado
+  if (dataCompleta <= new Date()) {
+    await ctx.reply('Não é possível agendar compromissos para horários passados. Por favor, digite um horário futuro.');
+    return true;
+  }
+
   await adminSupabase
     .from('sessions')
     .update({
       step: 'local_compromisso',
-      data: { ...session.data, hora_texto: horaTexto },
+      data: { 
+        ...session.data, 
+        hora_texto: horaTexto,
+        data_compromisso: dataCompleta.toISOString()
+      },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
-    
+
   await ctx.reply('Digite o local do compromisso (opcional, digite "pular" para continuar):');
+  return true;
 }
 
-async function handleLocalCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const local = ctx.message.text.trim();
+async function handleLocalCompromisso(ctx: Context, session: any, local: string): Promise<boolean> {
   const localValue = (local.toLowerCase() === 'pular') ? null : local;
-  
-  // Construir data e hora completa
-  try {
-    const dataHoraTexto = `${session.data.data_texto} ${session.data.hora_texto}`;
-    const dataHora = parse(dataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
-    
-    if (isNaN(dataHora.getTime())) {
-      throw new Error('Data ou hora inválida');
-    }
-    
-    // Atualizar sessão para confirmação
-    await adminSupabase
-      .from('sessions')
-      .update({
-        step: 'confirmar_compromisso',
-        data: { 
-          ...session.data, 
-          local: localValue,
-          data_hora: dataHora.toISOString()
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-      
-    // Informações para exibição
-    const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-    const clienteInfo = session.data.nome_cliente 
-      ? `Cliente: ${session.data.nome_cliente}\n`
-      : '';
-      
-    await ctx.reply(
-      `📋 Confirme os dados do compromisso:\n\n` +
-      `Título: ${session.data.titulo}\n` +
-      `${clienteInfo}` +
-      `Data: ${dataFormatada}\n` +
-      (localValue ? `Local: ${localValue}\n` : '') +
-      (session.data.descricao ? `Descrição: ${session.data.descricao}\n` : '') +
-      `\nOs dados estão corretos?`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
-        [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
-        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-      ])
-    );
-  } catch (error) {
-    console.error('Erro ao processar data/hora:', error);
-    await ctx.reply('Ocorreu um erro ao processar a data e hora. Por favor, tente novamente.');
-    
-    // Limpar sessão em caso de erro
-    await adminSupabase
-      .from('sessions')
-      .delete()
-      .eq('id', session.id);
-  }
+
+  await adminSupabase
+    .from('sessions')
+    .update({
+      step: 'confirmar_compromisso',
+      data: { ...session.data, local: localValue },
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
+
+  // Mostrar resumo para confirmação
+  const dataHora = new Date(session.data.data_compromisso);
+  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const clienteInfo = session.data.nome_cliente 
+    ? `👥 Cliente: ${session.data.nome_cliente}\n`
+    : '';
+
+  await ctx.reply(
+    `📋 Confirme os dados do compromisso:\n\n` +
+    `📝 Título: ${session.data.titulo}\n` +
+    `${clienteInfo}` +
+    `📅 Data: ${dataFormatada}\n` +
+    (localValue ? `📍 Local: ${localValue}\n` : '') +
+    (session.data.descricao ? `📄 Descrição: ${session.data.descricao}\n` : '') +
+    `\nOs dados estão corretos?`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
+      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+    ])
+  );
+  return true;
 }
 
-async function handleBuscaCliente(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const termoBusca = ctx.message.text.trim();
-  
+// ============================================================================
+// BUSCA DE CLIENTE
+// ============================================================================
+
+async function handleBuscaCliente(ctx: Context, session: any, termoBusca: string): Promise<boolean> {
+  if (termoBusca.length < 2) {
+    await ctx.reply('Por favor, digite pelo menos 2 caracteres para buscar.');
+    return true;
+  }
+
   // Buscar clientes pelo nome
   const { data: clientes, error } = await adminSupabase
     .from('clientes')
@@ -247,13 +222,13 @@ async function handleBuscaCliente(ctx: BotContext, session: any) {
     .eq('user_id', session.user_id)
     .ilike('nome_empresa', `%${termoBusca}%`)
     .limit(10);
-  
+
   if (error) {
     console.error('Erro ao buscar clientes:', error);
     await ctx.reply('Ocorreu um erro ao buscar clientes. Por favor, tente novamente.');
-    return;
+    return true;
   }
-  
+
   if (!clientes || clientes.length === 0) {
     await ctx.reply(
       `Nenhum cliente encontrado com o termo "${termoBusca}".`,
@@ -263,307 +238,194 @@ async function handleBuscaCliente(ctx: BotContext, session: any) {
         [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
       ])
     );
-    return;
+    return true;
   }
-  
+
   // Criar botões para os clientes encontrados
   const clientesButtons = clientes.map(cliente => 
     [Markup.button.callback(cliente.nome_empresa, `agenda_cliente_${cliente.id}`)]
   );
-  
+
   // Adicionar opções adicionais
   clientesButtons.push([Markup.button.callback('🔍 Nova Busca', 'agenda_vincular_cliente')]);
   clientesButtons.push([Markup.button.callback('➡️ Continuar sem Cliente', 'agenda_sem_cliente')]);
   clientesButtons.push([Markup.button.callback('❌ Cancelar', 'cancelar_acao')]);
-  
+
   await ctx.reply(
     `Resultados da busca por "${termoBusca}":\nSelecione um cliente:`,
     Markup.inlineKeyboard(clientesButtons)
   );
-  
+
   // Limpar a sessão após exibir os resultados
   await adminSupabase
     .from('sessions')
     .delete()
     .eq('id', session.id);
+
+  return true;
 }
 
 // ============================================================================
-// HANDLERS PARA EDIÇÃO DE COMPROMISSO
+// EDIÇÃO DE COMPROMISSO EXISTENTE
 // ============================================================================
 
-async function handleEditTituloCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const novoTitulo = ctx.message.text.trim();
-  
+async function handleEditTitulo(ctx: Context, session: any, novoTitulo: string): Promise<boolean> {
   if (!novoTitulo || novoTitulo.length < 3) {
-    await ctx.reply('Por favor, forneça um título válido para o compromisso.');
-    return;
+    await ctx.reply('Por favor, forneça um título válido para o compromisso (mínimo 3 caracteres).');
+    return true;
   }
-  
-  try {
-    await adminSupabase
-      .from('sessions')
-      .update({
-        data: { 
-          ...session.data, 
-          titulo: novoTitulo,
-          data_hora: session.data.data_compromisso 
-        },
-        step: 'confirmar_compromisso',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-    
-    await mostrarConfirmacaoCompromisso(ctx, { 
-      ...session.data, 
-      titulo: novoTitulo 
-    });
-  } catch (error) {
-    console.error('Erro ao processar título:', error);
-    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
-  }
+
+  await adminSupabase
+    .from('sessions')
+    .update({
+      data: { ...session.data, titulo: novoTitulo },
+      step: 'confirmar_edicao',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
+
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, titulo: novoTitulo });
+  return true;
 }
 
-async function handleEditDescricaoCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const novaDescricao = ctx.message.text.trim();
+async function handleEditDescricao(ctx: Context, session: any, novaDescricao: string): Promise<boolean> {
   const descricaoValue = (novaDescricao.toLowerCase() === 'pular') ? null : novaDescricao;
-  
-  try {
-    await adminSupabase
-      .from('sessions')
-      .update({
-        data: { 
-          ...session.data, 
-          descricao: descricaoValue,
-          data_hora: session.data.data_compromisso
-        },
-        step: 'confirmar_compromisso',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-      
-    await mostrarConfirmacaoCompromisso(ctx, { 
-      ...session.data, 
-      descricao: descricaoValue 
-    });
-  } catch (error) {
-    console.error('Erro ao processar descrição:', error);
-    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
-  }
+
+  await adminSupabase
+    .from('sessions')
+    .update({
+      data: { ...session.data, descricao: descricaoValue },
+      step: 'confirmar_edicao',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
+
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, descricao: descricaoValue });
+  return true;
 }
 
-async function handleEditDataCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  let dataTexto = ctx.message.text.trim();
-  let data;
+async function handleEditData(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
+  const data = parseDataTexto(dataTexto);
   
-  if (dataTexto.toLowerCase() === 'hoje') {
-    data = new Date();
-    dataTexto = format(data, 'dd/MM/yyyy');
-  } else if (dataTexto.toLowerCase() === 'amanhã') {
-    data = new Date();
-    data.setDate(data.getDate() + 1);
-    dataTexto = format(data, 'dd/MM/yyyy');
-  } else {
-    try {
-      data = parse(dataTexto, 'dd/MM/yyyy', new Date());
-      if (isNaN(data.getTime())) {
-        await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
-        return;
-      }
-    } catch (error) {
-      await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY.');
-      return;
-    }
+  if (!data) {
+    await ctx.reply('Data inválida. Por favor, use o formato DD/MM/YYYY ou digite "hoje" ou "amanhã".');
+    return true;
   }
-  
-  try {
-    // Usar data_compromisso do compromisso original (mais confiável)
-    let dataAtual;
-    if (session.data.data_compromisso) {
-      dataAtual = new Date(session.data.data_compromisso);
-    } else if (session.data.data_hora) {
-      dataAtual = new Date(session.data.data_hora);
-    } else {
-      // Fallback para horário atual se não tiver data válida
-      dataAtual = new Date();
-      dataAtual.setHours(9, 0, 0, 0); // 09:00 como padrão
-    }
-    
-    // Verificar se a data é válida antes de formatar
-    let horaAtual;
-    if (!isNaN(dataAtual.getTime())) {
-      horaAtual = format(dataAtual, 'HH:mm');
-    } else {
-      horaAtual = '09:00'; // Horário padrão se data inválida
-    }
-    
-    const novaDataHoraTexto = `${dataTexto} ${horaAtual}`;
-    const novaDataHora = parse(novaDataHoraTexto, 'dd/MM/yyyy HH:mm', new Date());
-    
-    if (isNaN(novaDataHora.getTime())) {
-      throw new Error('Data ou hora inválida após parse');
-    }
-    
-    await adminSupabase
-      .from('sessions')
-      .update({
-        data: { 
-          ...session.data, 
-          data_texto: dataTexto,
-          data_compromisso: novaDataHora.toISOString(),
-          data_hora: novaDataHora.toISOString()
-        },
-        step: 'confirmar_compromisso',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-      
-    await mostrarConfirmacaoCompromisso(ctx, { 
-      ...session.data, 
-      data_compromisso: novaDataHora.toISOString(),
-      data_hora: novaDataHora.toISOString()
-    });
-  } catch (error) {
-    console.error('Erro ao processar data:', error);
-    await ctx.reply('Ocorreu um erro ao processar a data. Por favor, tente novamente.');
-  }
+
+  // Manter a hora atual
+  const dataAtual = new Date(session.data.data_compromisso);
+  const novaData = new Date(data);
+  novaData.setHours(dataAtual.getHours(), dataAtual.getMinutes(), 0, 0);
+
+  await adminSupabase
+    .from('sessions')
+    .update({
+      data: { ...session.data, data_compromisso: novaData.toISOString() },
+      step: 'confirmar_edicao',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
+
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaData.toISOString() });
+  return true;
 }
 
-async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const horaTexto = ctx.message.text.trim();
+async function handleEditHora(ctx: Context, session: any, horaTexto: string): Promise<boolean> {
+  const horaData = parseHoraTexto(horaTexto);
   
-  const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
-  if (!horaRegex.test(horaTexto)) {
+  if (!horaData) {
     await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
-    return;
+    return true;
   }
-  
-  try {
-    console.log('Dados da sessão:', session.data);
-    
-    // Usar data_compromisso do compromisso original (mais confiável)
-    let dataAtual;
-    if (session.data.data_compromisso) {
-      dataAtual = new Date(session.data.data_compromisso);
-    } else if (session.data.data_hora) {
-      dataAtual = new Date(session.data.data_hora);
-    } else {
-      // Fallback para data atual se não tiver data válida
-      dataAtual = new Date();
-    }
-    
-    console.log('Data atual:', dataAtual);
 
-    // Verificar se a data é válida
-    if (isNaN(dataAtual.getTime())) {
-      console.error('Data inválida encontrada, usando data atual');
-      dataAtual = new Date();
-    }
+  const dataAtual = new Date(session.data.data_compromisso);
+  const novaData = new Date(dataAtual);
+  novaData.setHours(horaData.horas, horaData.minutos, 0, 0);
 
-    const [horas, minutos] = horaTexto.split(':').map(Number);
-    console.log('Nova hora:', horas, 'Novos minutos:', minutos);
+  await adminSupabase
+    .from('sessions')
+    .update({
+      data: { ...session.data, data_compromisso: novaData.toISOString() },
+      step: 'confirmar_edicao',
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
 
-    const novaData = new Date(dataAtual);
-    novaData.setHours(horas);
-    novaData.setMinutes(minutos);
-    novaData.setSeconds(0);
-    novaData.setMilliseconds(0);
-    console.log('Nova data:', novaData);
-
-    await adminSupabase
-      .from('sessions')
-      .update({
-        data: { 
-          ...session.data, 
-          data_compromisso: novaData.toISOString(),
-          data_hora: novaData.toISOString()
-        },
-        step: 'confirmar_compromisso',
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-    
-    await mostrarConfirmacaoCompromisso(ctx, { 
-      ...session.data, 
-      data_compromisso: novaData.toISOString(),
-      data_hora: novaData.toISOString() 
-    });
-  } catch (error) {
-    console.error('Erro ao processar hora:', error);
-    await ctx.reply('Ocorreu um erro ao processar o horário. Por favor, tente novamente.');
-  }
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaData.toISOString() });
+  return true;
 }
 
-async function handleEditLocalCompromisso(ctx: BotContext, session: any) {
-  if (!ctx.message || !('text' in ctx.message)) return;
-  const novoLocal = ctx.message.text.trim();
+async function handleEditLocal(ctx: Context, session: any, novoLocal: string): Promise<boolean> {
   const localValue = (novoLocal.toLowerCase() === 'pular') ? null : novoLocal;
-  
+
   await adminSupabase
     .from('sessions')
     .update({
       data: { ...session.data, local: localValue },
-      step: 'confirmar_compromisso',
+      step: 'confirmar_edicao',
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
-    
-  await mostrarConfirmacaoCompromisso(ctx, { 
-    ...session.data, 
-    local: localValue 
-  });
+
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, local: localValue });
+  return true;
 }
 
 // ============================================================================
-// FUNÇÕES UTILITÁRIAS
+// UTILITÁRIOS
 // ============================================================================
 
-async function mostrarConfirmacaoCompromisso(ctx: BotContext, data: any) {
+function parseDataTexto(dataTexto: string): Date | null {
   try {
-    // Verificar se temos uma data válida
-    let dataHora;
-    if (data.data_hora) {
-      dataHora = new Date(data.data_hora);
-    } else if (data.data_compromisso) {
-      dataHora = new Date(data.data_compromisso);
-    } else {
-      console.error('Nenhuma data encontrada nos dados do compromisso');
-      await ctx.reply('Erro: Data do compromisso não encontrada. Por favor, inicie novamente.');
-      return;
+    if (dataTexto.toLowerCase() === 'hoje') {
+      return new Date();
+    } else if (dataTexto.toLowerCase() === 'amanhã') {
+      return addDays(new Date(), 1);
     }
     
-    // Verificar se a data é válida
-    if (isNaN(dataHora.getTime())) {
-      console.error('Data inválida encontrada:', data.data_hora, data.data_compromisso);
-      await ctx.reply('Erro: Data inválida. Por favor, inicie novamente.');
-      return;
-    }
-    
-    const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-    const clienteInfo = data.nome_cliente 
-      ? `Cliente: ${data.nome_cliente}\n`
-      : '';
-      
-    await ctx.reply(
-      `📋 Confirme os dados ATUALIZADOS do compromisso:\n\n` +
-      `Título: ${data.titulo}\n` +
-      `${clienteInfo}` +
-      `Data: ${dataFormatada}\n` +
-      (data.local ? `Local: ${data.local}\n` : '') +
-      (data.descricao ? `Descrição: ${data.descricao}\n` : '') +
-      `\nOs dados estão corretos?`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('✅ Confirmar', 'agenda_confirmar')],
-        [Markup.button.callback('✏️ Editar', 'agenda_editar_dados')],
-        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-      ])
-    );
-  } catch (error) {
-    console.error('Erro ao mostrar confirmação:', error);
-    await ctx.reply('Ocorreu um erro ao exibir os dados. Por favor, tente novamente.');
+    const data = parse(dataTexto, 'dd/MM/yyyy', new Date());
+    return isValid(data) ? data : null;
+  } catch {
+    return null;
   }
+}
+
+function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } | null {
+  try {
+    const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
+    const match = horaTexto.match(horaRegex);
+    
+    if (match) {
+      return {
+        horas: parseInt(match[1]),
+        minutos: parseInt(match[2])
+      };
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
+  const dataHora = new Date(dados.data_compromisso);
+  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const clienteInfo = dados.nome_cliente 
+    ? `👥 Cliente: ${dados.nome_cliente}\n`
+    : '';
+
+  await ctx.reply(
+    `📋 Confirme as alterações do compromisso:\n\n` +
+    `📝 Título: ${dados.titulo}\n` +
+    `${clienteInfo}` +
+    `📅 Data: ${dataFormatada}\n` +
+    (dados.local ? `📍 Local: ${dados.local}\n` : '') +
+    (dados.descricao ? `📄 Descrição: ${dados.descricao}\n` : '') +
+    `\nOs dados estão corretos?`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('✅ Salvar Alterações', 'agenda_atualizar')],
+      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+    ])
+  );
 }
