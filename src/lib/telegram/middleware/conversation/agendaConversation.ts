@@ -1,12 +1,12 @@
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid, addDays } from 'date-fns';
+import { format, parse, isValid, addDays, subHours } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // ============================================================================
 // PROCESSAMENTO DE CONVERSAÇÃO DE AGENDA
 // ============================================================================
-export async function processAgendaConversation(ctx: Context, session: any): Promise<boolean> {
+export async function handleAgendaConversation(ctx: Context, session: any): Promise<boolean> {
   if (!ctx.message || !('text' in ctx.message)) return false;
 
   const messageText = ctx.message.text.trim();
@@ -109,9 +109,9 @@ async function handleDataCompromisso(ctx: Context, session: any, dataTexto: stri
     return true;
   }
 
-  // Verificar se a data não é no passado
-  const hoje = new Date();
-  hoje.setHours(0, 0, 0, 0);
+  // Verificar se a data não é no passado (considerando fuso brasileiro)
+  const agora = getBrazilianTime();
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   
   if (data < hoje) {
     await ctx.reply('Não é possível agendar compromissos para datas passadas. Por favor, digite uma data futura.');
@@ -147,9 +147,16 @@ async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: stri
   const dataCompleta = new Date(dataBase);
   dataCompleta.setHours(horaData.horas, horaData.minutos, 0, 0);
 
-  // Verificar se não é no passado
-  if (dataCompleta <= new Date()) {
-    await ctx.reply('Não é possível agendar compromissos para horários passados. Por favor, digite um horário futuro.');
+  // CORREÇÃO: Verificar considerando horário brasileiro + margem de 5 minutos
+  const agora = getBrazilianTime();
+  const margemMinima = new Date(agora.getTime() + 5 * 60 * 1000); // 5 minutos no futuro
+  
+  // Ajustar para horário brasileiro na comparação
+  const dataCompletaBrasil = new Date(dataCompleta.getTime() - 3 * 60 * 60 * 1000); // UTC-3
+  
+  if (dataCompletaBrasil <= margemMinima) {
+    const horaAtual = format(agora, 'HH:mm');
+    await ctx.reply(`Não é possível agendar compromissos para horários muito próximos ao atual (${horaAtual}). Por favor, digite um horário pelo menos 5 minutos no futuro.`);
     return true;
   }
 
@@ -182,9 +189,10 @@ async function handleLocalCompromisso(ctx: Context, session: any, local: string)
     })
     .eq('id', session.id);
 
-  // Mostrar resumo para confirmação
+  // Mostrar resumo para confirmação (usando horário brasileiro para exibição)
   const dataHora = new Date(session.data.data_compromisso);
-  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const dataHoraBrasil = subHours(dataHora, 3); // Converter para horário brasileiro para exibição
+  const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const clienteInfo = session.data.nome_cliente 
     ? `👥 Cliente: ${session.data.nome_cliente}\n`
     : '';
@@ -408,9 +416,17 @@ function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } |
   }
 }
 
+// NOVA FUNÇÃO: Obter horário brasileiro
+function getBrazilianTime(): Date {
+  const now = new Date();
+  // Converter UTC para horário brasileiro (UTC-3)
+  return subHours(now, 3);
+}
+
 async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
   const dataHora = new Date(dados.data_compromisso);
-  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+  const dataHoraBrasil = subHours(dataHora, 3); // Converter para horário brasileiro
+  const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   const clienteInfo = dados.nome_cliente 
     ? `👥 Cliente: ${dados.nome_cliente}\n`
     : '';
