@@ -147,22 +147,8 @@ async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: stri
   const dataCompleta = new Date(dataBase);
   dataCompleta.setHours(horaData.horas, horaData.minutos, 0, 0);
 
-  // Verificação simples: só validar se é hoje
-  const hoje = new Date();
-  const dataEscolhida = new Date(session.data.data_selecionada);
-  
-  // Se for hoje, verificar horário
-  if (dataEscolhida.toDateString() === hoje.toDateString()) {
-    const agora = new Date();
-    const horaAtualMinutos = agora.getHours() * 60 + agora.getMinutes();
-    const horaEscolhidaMinutos = horaData.horas * 60 + horaData.minutos;
-    
-    if (horaEscolhidaMinutos <= horaAtualMinutos + 5) {
-      const horaAtual = format(agora, 'HH:mm');
-      await ctx.reply(`Não é possível agendar compromissos para horários muito próximos ao atual (${horaAtual}). Por favor, digite um horário pelo menos 5 minutos no futuro.`);
-      return true;
-    }
-  }
+  // Validação simplificada: aceitar qualquer horário válido
+  // (a validação de "passado" será feita apenas na data, não no horário)
 
   await adminSupabase
     .from('sessions')
