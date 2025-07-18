@@ -110,7 +110,7 @@ async function handleDataCompromisso(ctx: Context, session: any, dataTexto: stri
   }
 
   // Verificar se a data não é no passado (considerando fuso brasileiro)
-  const agora = getBrazilianTime();
+  const agora = new Date();
   const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
   
   if (data < hoje) {
