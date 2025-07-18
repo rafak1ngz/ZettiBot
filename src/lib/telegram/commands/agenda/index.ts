@@ -60,7 +60,8 @@ export function registerAgendaCommands(bot: Telegraf) {
   // ========================================================================
   // CALLBACKS DE CONFIRMAÇÃO
   // ========================================================================
-  bot.action('agenda_confirmar', async (ctx) => {
+  bot.action('agenda_confirmar', handleConfirmarCompromisso);
+  bot.action('agenda_atualizar', async (ctx) => {
     try {
       ctx.answerCbQuery();
       
@@ -77,24 +78,28 @@ export function registerAgendaCommands(bot: Telegraf) {
       }
       
       const session = sessions[0];
+      const compromissoId = session.data.id;
       
-      // Inserir compromisso no banco
-      const { error: insertError } = await adminSupabase
+      if (!compromissoId) {
+        return ctx.reply('Erro: ID do compromisso não encontrado.');
+      }
+      
+      // Atualizar compromisso no banco
+      const { error: updateError } = await adminSupabase
         .from('compromissos')
-        .insert({
-          user_id: session.user_id,
-          cliente_id: session.data.cliente_id,
+        .update({
           titulo: session.data.titulo,
           descricao: session.data.descricao,
           data_compromisso: session.data.data_compromisso,
           local: session.data.local,
-          status: 'pendente',
           updated_at: new Date().toISOString()
-        });
+        })
+        .eq('id', compromissoId)
+        .eq('user_id', session.user_id);
           
-      if (insertError) {
-        console.error('Erro ao inserir compromisso:', insertError);
-        await ctx.reply('Ocorreu um erro ao salvar o compromisso. Por favor, tente novamente.');
+      if (updateError) {
+        console.error('Erro ao atualizar compromisso:', updateError);
+        await ctx.reply('Ocorreu um erro ao atualizar o compromisso. Por favor, tente novamente.');
         return;
       }
       
@@ -106,21 +111,20 @@ export function registerAgendaCommands(bot: Telegraf) {
           
       // Feedback de sucesso
       await ctx.editMessageText(
-        '✅ Compromisso registrado com sucesso!\n\nO que deseja fazer agora?',
+        '✅ Compromisso atualizado com sucesso!\n\nO que deseja fazer agora?',
         {
           reply_markup: {
             inline_keyboard: [
               [
-                { text: '➕ Novo Compromisso', callback_data: 'agenda_novo' },
-                { text: '📋 Listar Compromissos', callback_data: 'agenda_listar' }
-              ],
-              [{ text: '🏠 Menu Principal', callback_data: 'menu_principal' }]
+                { text: '📋 Listar Compromissos', callback_data: 'agenda_listar' },
+                { text: '🏠 Menu Principal', callback_data: 'menu_principal' }
+              ]
             ]
           }
         }
       );
     } catch (error) {
-      console.error('Erro ao confirmar compromisso:', error);
+      console.error('Erro ao atualizar compromisso:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   });
