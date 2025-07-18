@@ -279,15 +279,16 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para de
 - **Equipe Telegram** pela excelente Bot API
 - **Vercel** pela plataforma de deploy gratuita
 - **Supabase** pelo backend completo
+- **Claude (Anthropic)** pela parceria incansável no desenvolvimento e arquitetura
 - **Comunidade Open Source** pelas bibliotecas incríveis
 
 ---
 
 <div align="center">
 
-**Desenvolvido com ❤️ por [Rafael King](https://github.com/rafak1ngz)**
+**Desenvolvido com ❤️ por [Rafael Dantas](https://github.com/rafak1ngz)**
 
-**ZettiBot** - *Transformando caos em estratégia desde 2024*
+**ZettiBot** - *Transformando caos em estratégia desde 2025*
 
 [⭐ Star no GitHub](https://github.com/rafak1ngz/ZettiBot) • [🐛 Reportar Bug](https://github.com/rafak1ngz/ZettiBot/issues) • [💡 Sugerir Feature](https://github.com/rafak1ngz/ZettiBot/issues)
 
