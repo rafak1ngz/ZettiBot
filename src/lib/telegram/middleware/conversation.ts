@@ -3,7 +3,7 @@ import { BotContext } from './session';
 import { adminSupabase } from '@/lib/supabase';
 import { Markup } from 'telegraf';
 import { validators } from '@/utils/validators';
-import { processAgendaConversation } from './conversation/agendaConversation';
+import { handleAgendaConversation } from './conversation/agendaConversation';
 
 // ============================================================================
 // FUNÇÃO DE CANCELAMENTO
@@ -129,7 +129,7 @@ Agora você está pronto para usar todas as funcionalidades do ZettiBot.
     // COMANDO: AGENDA - GERENCIAMENTO DE COMPROMISSOS
     // ========================================================================
     if (session.command === 'agenda') {
-      const processed = await processAgendaConversation(ctx, session);
+      const processed = await handleAgendaConversation(ctx, session);
       if (processed) {
         return; // Processado com sucesso
       }
