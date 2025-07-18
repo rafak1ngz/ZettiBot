@@ -75,7 +75,8 @@ export async function handleClientesConversation(ctx: BotContext, session: any) 
 // ============================================================================
 
 async function handleNomeEmpresa(ctx: BotContext, session: any) {
-  const nomeEmpresa = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const nomeEmpresa = ctx.message.text.trim();
   if (!nomeEmpresa || nomeEmpresa.length < 2) {
     await ctx.reply('Por favor, forneça um nome de empresa válido.');
     return;
@@ -94,7 +95,8 @@ async function handleNomeEmpresa(ctx: BotContext, session: any) {
 }
 
 async function handleCnpj(ctx: BotContext, session: any) {
-  const cnpj = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const cnpj = ctx.message.text.trim();
   
   // Se for "pular", não precisa validar
   if (cnpj.toLowerCase() === 'pular') {
@@ -164,7 +166,8 @@ async function handleCnpj(ctx: BotContext, session: any) {
 }
 
 async function handleContatoNome(ctx: BotContext, session: any) {
-  const contatoNome = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const contatoNome = ctx.message.text.trim();
 
   if (!contatoNome || contatoNome.length < 2) {
     await ctx.reply('Por favor, forneça um nome de contato válido.');
@@ -187,7 +190,8 @@ async function handleContatoNome(ctx: BotContext, session: any) {
 }
 
 async function handleContatoTelefone(ctx: BotContext, session: any) {
-  const telefone = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const telefone = ctx.message.text.trim();
   
   // Se for "pular", continuar
   if (telefone.toLowerCase() === 'pular') {
@@ -232,7 +236,8 @@ async function handleContatoTelefone(ctx: BotContext, session: any) {
 }
 
 async function handleContatoEmail(ctx: BotContext, session: any) {
-  const email = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const email = ctx.message.text.trim();
   
   // Se for "pular", continuar
   if (email.toLowerCase() === 'pular') {
@@ -274,7 +279,8 @@ async function handleContatoEmail(ctx: BotContext, session: any) {
 }
 
 async function handleObservacoes(ctx: BotContext, session: any) {
-  const obs = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const obs = ctx.message.text.trim();
   const obsValue = (obs.toLowerCase() === 'pular') ? null : obs;
 
   await adminSupabase
@@ -320,7 +326,8 @@ async function handleObservacoes(ctx: BotContext, session: any) {
 // ============================================================================
 
 async function handleEditNomeEmpresa(ctx: BotContext, session: any) {
-  const novoNome = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoNome = ctx.message.text.trim();
   
   if (!novoNome || novoNome.length < 2) {
     await ctx.reply('Por favor, forneça um nome de empresa válido.');
@@ -340,7 +347,8 @@ async function handleEditNomeEmpresa(ctx: BotContext, session: any) {
 }
 
 async function handleEditCnpj(ctx: BotContext, session: any) {
-  const novoCnpj = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoCnpj = ctx.message.text.trim();
   
   // Se for "pular", continuar
   if (novoCnpj.toLowerCase() === 'pular') {
@@ -405,7 +413,8 @@ async function handleEditCnpj(ctx: BotContext, session: any) {
 
 // Continua com outros handlers de edição...
 async function handleEditContatoNome(ctx: BotContext, session: any) {
-  const novoContato = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoContato = ctx.message.text.trim();
   
   if (!novoContato || novoContato.length < 2) {
     await ctx.reply('Por favor, forneça um nome de contato válido.');
@@ -425,7 +434,8 @@ async function handleEditContatoNome(ctx: BotContext, session: any) {
 }
 
 async function handleEditContatoTelefone(ctx: BotContext, session: any) {
-  const novoTelefone = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoTelefone = ctx.message.text.trim();
   
   // Se for "pular", continuar
   if (novoTelefone.toLowerCase() === 'pular') {
@@ -470,7 +480,8 @@ async function handleEditContatoTelefone(ctx: BotContext, session: any) {
 }
 
 async function handleEditContatoEmail(ctx: BotContext, session: any) {
-  const novoEmail = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoEmail = ctx.message.text.trim();
   
   // Se for "pular", continuar
   if (novoEmail.toLowerCase() === 'pular') {
@@ -512,7 +523,8 @@ async function handleEditContatoEmail(ctx: BotContext, session: any) {
 }
 
 async function handleEditObservacoes(ctx: BotContext, session: any) {
-  const novasObs = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novasObs = ctx.message.text.trim();
   const obsValue = (novasObs.toLowerCase() === 'pular') ? null : novasObs;
   
   await adminSupabase
@@ -532,7 +544,8 @@ async function handleEditObservacoes(ctx: BotContext, session: any) {
 // ============================================================================
 
 async function handleBuscarNomeEmpresa(ctx: BotContext, session: any) {
-  const empresaNome = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const empresaNome = ctx.message.text.trim();
   
   try {
     const { data: clientes, error } = await adminSupabase
@@ -561,7 +574,8 @@ async function handleBuscarNomeEmpresa(ctx: BotContext, session: any) {
 }
 
 async function handleBuscarCnpj(ctx: BotContext, session: any) {
-  const cnpjBusca = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const cnpjBusca = ctx.message.text.trim();
   
   // Limpar CNPJ (apenas números)
   const cnpjLimpo = cnpjBusca.replace(/[^\d]/g, '');
@@ -593,7 +607,8 @@ async function handleBuscarCnpj(ctx: BotContext, session: any) {
 }
 
 async function handleBuscarContato(ctx: BotContext, session: any) {
-  const contatoBusca = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const contatoBusca = ctx.message.text.trim();
   
   try {
     const { data: clientes, error } = await adminSupabase

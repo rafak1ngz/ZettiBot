@@ -63,7 +63,8 @@ export async function handleAgendaConversation(ctx: BotContext, session: any) {
 // ============================================================================
 
 async function handleTituloCompromisso(ctx: BotContext, session: any) {
-  const titulo = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const titulo = ctx.message.text.trim();
   
   if (!titulo || titulo.length < 3) {
     await ctx.reply('Por favor, forneça um título válido para o compromisso.');
@@ -84,7 +85,8 @@ async function handleTituloCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleDescricaoCompromisso(ctx: BotContext, session: any) {
-  const descricao = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const descricao = ctx.message.text.trim();
   const descricaoValue = (descricao.toLowerCase() === 'pular') ? null : descricao;
   
   // Atualizar sessão para o próximo passo
@@ -106,7 +108,8 @@ async function handleDescricaoCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleDataCompromisso(ctx: BotContext, session: any) {
-  let dataTexto = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  let dataTexto = ctx.message.text.trim();
   let data;
   
   // Processar atalhos
@@ -150,7 +153,8 @@ async function handleDataCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleHoraCompromisso(ctx: BotContext, session: any) {
-  const horaTexto = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const horaTexto = ctx.message.text.trim();
   
   // Validar formato da hora
   const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
@@ -173,7 +177,8 @@ async function handleHoraCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleLocalCompromisso(ctx: BotContext, session: any) {
-  const local = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const local = ctx.message.text.trim();
   const localValue = (local.toLowerCase() === 'pular') ? null : local;
   
   // Construir data e hora completa
@@ -232,7 +237,8 @@ async function handleLocalCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleBuscaCliente(ctx: BotContext, session: any) {
-  const termoBusca = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const termoBusca = ctx.message.text.trim();
   
   // Buscar clientes pelo nome
   const { data: clientes, error } = await adminSupabase
@@ -287,7 +293,8 @@ async function handleBuscaCliente(ctx: BotContext, session: any) {
 // ============================================================================
 
 async function handleEditTituloCompromisso(ctx: BotContext, session: any) {
-  const novoTitulo = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoTitulo = ctx.message.text.trim();
   
   if (!novoTitulo || novoTitulo.length < 3) {
     await ctx.reply('Por favor, forneça um título válido para o compromisso.');
@@ -319,7 +326,8 @@ async function handleEditTituloCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleEditDescricaoCompromisso(ctx: BotContext, session: any) {
-  const novaDescricao = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novaDescricao = ctx.message.text.trim();
   const descricaoValue = (novaDescricao.toLowerCase() === 'pular') ? null : novaDescricao;
   
   try {
@@ -347,7 +355,8 @@ async function handleEditDescricaoCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleEditDataCompromisso(ctx: BotContext, session: any) {
-  let dataTexto = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  let dataTexto = ctx.message.text.trim();
   let data;
   
   if (dataTexto.toLowerCase() === 'hoje') {
@@ -406,7 +415,8 @@ async function handleEditDataCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
-  const horaTexto = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const horaTexto = ctx.message.text.trim();
   
   const horaRegex = /^([0-1]?[0-9]|2[0-3]):([0-5][0-9])$/;
   if (!horaRegex.test(horaTexto)) {
@@ -451,7 +461,8 @@ async function handleEditHoraCompromisso(ctx: BotContext, session: any) {
 }
 
 async function handleEditLocalCompromisso(ctx: BotContext, session: any) {
-  const novoLocal = ctx.message!.text.trim();
+  if (!ctx.message || !('text' in ctx.message)) return;
+  const novoLocal = ctx.message.text.trim();
   const localValue = (novoLocal.toLowerCase() === 'pular') ? null : novoLocal;
   
   await adminSupabase
