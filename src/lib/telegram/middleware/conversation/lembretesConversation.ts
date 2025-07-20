@@ -59,7 +59,7 @@ async function handleTituloLembrete(ctx: Context, session: any, titulo: string):
     return true;
   }
 
-  // Atualizar sessão para próximo step - PULAR PRIORIDADE (será selecionada via botões)
+  // Atualizar sessão para próximo step
   await adminSupabase
     .from('sessions')
     .update({
@@ -69,8 +69,12 @@ async function handleTituloLembrete(ctx: Context, session: any, titulo: string):
     })
     .eq('id', session.id);
 
+  // ✅ PRIMEIRA mensagem sem botões
+  await ctx.reply('Digite a data do lembrete no formato DD/MM/YYYY:');
+  
+  // ✅ SEGUNDA mensagem COM botões
   await ctx.reply(
-    'Digite a data do lembrete no formato DD/MM/YYYY:',
+    'Escolha uma opção ou digite a data:',
     Markup.keyboard([
       ['Hoje', 'Amanhã']
     ]).oneTime().resize()
