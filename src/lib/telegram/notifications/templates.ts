@@ -41,20 +41,10 @@ export function gerarMensagemAgenda(dados: TemplateAgenda): string {
   mensagem += `⏰ Seu compromisso será em <b>${tempoTexto}</b>!\n\n`;
   mensagem += `📋 <b>${titulo}</b>\n`;
   mensagem += `🏢 <b>Cliente:</b> ${cliente_nome}\n`;
-  mensagem += `📅 <b>Horário:</b> ${formatarDataHora(data_compromisso)}\n`;
   
-  if (local) {
-    mensagem += `📍 <b>Local:</b> ${local}\n`;
-  }
-  
-  if (descricao) {
-    mensagem += `💬 <b>Observações:</b> ${descricao}\n`;
-  }
-  
-  mensagem += `\n🚀 <b>Boa sorte no seu compromisso!</b>`;
-  
-  return mensagem;
-}
+  // ✅ CORREÇÃO: Converter UTC para Brasil antes de formatar
+  const dataCompromissoBrasil = new Date(data_compromisso.getTime() - (3 * 60 * 60 * 1000));
+  mensagem += `📅 <b>Horário:</b> ${formatarDataHora(dataCompromissoBrasil)}\n`;
 
 export function gerarMensagemFollowup(dados: TemplateFollowup): string {
   const { cliente_nome, dias_sem_contato, ultimo_contato } = dados;

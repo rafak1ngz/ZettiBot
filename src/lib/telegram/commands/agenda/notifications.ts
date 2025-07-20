@@ -2,6 +2,7 @@ import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
 import { criarNotificacao } from '@/lib/telegram/notifications';
 import { CompromissoQuery } from '@/types/database';
+import { utcParaBrasil } from '@/utils/timezone';
 
 export async function handleConfiguracoesNotificacao(ctx: Context, compromissoId: string) {
   try {
@@ -142,7 +143,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       mensagem: `📅 Compromisso em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
                 `🏢 ${nomeCliente}\n` +
                 `📝 ${compromisso.titulo}\n` +
-                `⏰ ${dataCompromissoUTC.toLocaleString('pt-BR')}\n` +
+                `⏰ ${utcParaBrasil(dataCompromissoUTC).toLocaleString('pt-BR')}\n` +
                 (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
                 (compromisso.descricao ? `💬 ${compromisso.descricao}` : ''),
       agendado_para: dataNotificacao
@@ -173,7 +174,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
     await ctx.editMessageText(
       `✅ Compromisso registrado com sucesso!\n⏰ Você receberá um lembrete ${tempoTexto} antes.\n\n` +
       `📅 ${compromisso.titulo}\n🏢 ${nomeCliente}\n\n` +
-      `🔔 Notificação agendada para: ${dataNotificacao.toLocaleString('pt-BR')}`,
+      `🔔 Notificação agendada para: ${utcParaBrasil(dataNotificacao).toLocaleString('pt-BR')}`,
       Markup.inlineKeyboard([
         [
           Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),

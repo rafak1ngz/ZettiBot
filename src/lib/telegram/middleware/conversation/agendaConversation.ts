@@ -178,10 +178,11 @@ async function handleLocalCompromisso(ctx: Context, session: any, local: string)
     })
     .eq('id', session.id);
 
-  // Mostrar resumo para confirmação (usando horário brasileiro para exibição)
-  const dataHora = new Date(session.data.data_compromisso);
-  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  const clienteInfo = session.data.nome_cliente 
+    // ✅ CORREÇÃO: Mostrar resumo convertendo UTC para Brasil
+    const dataHoraUTC = new Date(session.data.data_compromisso);
+    const dataHoraBrasil = new Date(dataHoraUTC.getTime() - (3 * 60 * 60 * 1000));
+    const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    const clienteInfo = session.data.nome_cliente 
     ? `👥 Cliente: ${session.data.nome_cliente}\n`
     : '';
 
