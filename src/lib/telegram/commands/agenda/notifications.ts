@@ -76,20 +76,23 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       '24h': 1440
     }[tempo] || 30;
 
-    // ✅ CORREÇÃO: Usar horário brasileiro (UTC-3) consistentemente
-    const agora = new Date();
-    const dataCompromisso = new Date(compromisso.data_compromisso);
-    
-    // ✅ DEBUG: Logs para entender o problema
-    console.log('=== DEBUG NOTIFICAÇÃO CORRIGIDO ===');
-    console.log('Data atual (local):', agora.toLocaleString('pt-BR'));
-    console.log('Data do compromisso:', dataCompromisso.toLocaleString('pt-BR'));
+    // ✅ CORREÇÃO DEFINITIVA: Tudo em UTC
+    const agoraUTC = new Date(); // Já está em UTC no servidor
+    const dataCompromissoUTC = new Date(compromisso.data_compromisso); // Vem do banco em UTC
+
+    // ✅ DEBUG: Logs para verificar
+    console.log('=== DEBUG NOTIFICAÇÃO UTC ===');
+    console.log('Agora UTC (servidor):', agoraUTC.toISOString());
+    console.log('Compromisso UTC (banco):', dataCompromissoUTC.toISOString());
+    console.log('Agora Brasil:', new Date(agoraUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR'));
+    console.log('Compromisso Brasil:', new Date(dataCompromissoUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR'));
     console.log('Minutos antes:', minutosAntes);
-    
-    // ✅ CORREÇÃO: Calcular diferença de tempo corretamente
-    const diferencaMinutos = Math.floor((dataCompromisso.getTime() - agora.getTime()) / (1000 * 60));
+
+    // ✅ CÁLCULO: Diferença de tempo em UTC
+    const diferencaMinutos = Math.floor((dataCompromissoUTC.getTime() - agoraUTC.getTime()) / (1000 * 60));
     console.log('Diferença até compromisso (minutos):', diferencaMinutos);
-    
+    console.log('============================');
+
     // ✅ CORREÇÃO: Verificar se o compromisso não está no passado
     if (diferencaMinutos <= 0) {
       await ctx.editMessageText(
@@ -116,7 +119,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
     }
 
     // ✅ CORREÇÃO: Calcular data de notificação corretamente
-    const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
+    const dataNotificacao = new Date(dataCompromissoUTC.getTime() - (minutosAntes * 60 * 1000));
     
     console.log('Data da notificação:', dataNotificacao.toLocaleString('pt-BR'));
     console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
@@ -134,7 +137,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       mensagem: `📅 Compromisso em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
                 `🏢 ${nomeCliente}\n` +
                 `📝 ${compromisso.titulo}\n` +
-                `⏰ ${dataCompromisso.toLocaleString('pt-BR')}\n` +
+                `⏰ ${new Date(dataCompromissoUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR')}\n` +
                 (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
                 (compromisso.descricao ? `💬 ${compromisso.descricao}` : ''),
       agendado_para: dataNotificacao

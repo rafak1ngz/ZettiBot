@@ -2,6 +2,7 @@ import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
 import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
+import { parseHoraBrasil, estaNoPassadoBrasil, formatarDataBrasil } from '@/utils/timezone';
 
 // ============================================================================
 // PROCESSAMENTO DE CONVERSAÇÃO DE AGENDA
@@ -135,20 +136,18 @@ async function handleDataCompromisso(ctx: Context, session: any, dataTexto: stri
 }
 
 async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: string): Promise<boolean> {
-  const horaData = parseHoraTexto(horaTexto);
+  const dataBase = new Date(session.data.data_selecionada);
+  const dataUTC = parseHoraBrasil(dataBase, horaTexto);
   
-  if (!horaData) {
+  if (!dataUTC) {
     await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
     return true;
   }
 
-  // Combinar data e hora
-  const dataBase = new Date(session.data.data_selecionada);
-  const dataCompleta = new Date(dataBase);
-  dataCompleta.setHours(horaData.horas, horaData.minutos, 0, 0);
-
-  // Validação simplificada: aceitar qualquer horário válido
-  // (a validação de "passado" será feita apenas na data, não no horário)
+  if (estaNoPassadoBrasil(dataUTC)) {
+    await ctx.reply('Este horário já passou. Por favor, digite um horário futuro.');
+    return true;
+  }
 
   await adminSupabase
     .from('sessions')
@@ -157,7 +156,7 @@ async function handleHoraCompromisso(ctx: Context, session: any, horaTexto: stri
       data: { 
         ...session.data, 
         hora_texto: horaTexto,
-        data_compromisso: dataCompleta.toISOString()
+        data_compromisso: dataUTC.toISOString()
       },
       updated_at: new Date().toISOString()
     })
