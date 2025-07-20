@@ -670,22 +670,12 @@ async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'm
 
     const session = sessions[0];
 
-    // ✅ DEBUG: Verificar dados antes da atualização
-    console.log('=== DEBUG PRIORIDADE ===');
-    console.log('Session data antes:', session.data);
-    console.log('ID do lembrete:', session.data?.id);
-    console.log('Nova prioridade:', novaPrioridade);
-
     // ✅ PRESERVAR todos os dados existentes + nova prioridade
     const dadosAtualizados = {
-      ...session.data,  // Preserva tudo que já tinha
-      prioridade: novaPrioridade  // Atualiza só a prioridade
+      ...session.data,
+      prioridade: novaPrioridade
     };
 
-    console.log('Session data depois:', dadosAtualizados);
-    console.log('=======================');
-
-    // Atualizar prioridade na sessão preservando tudo
     await adminSupabase
       .from('sessions')
       .update({
@@ -695,29 +685,43 @@ async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'm
       })
       .eq('id', session.id);
 
-    // Restante do código permanece igual...
     const textoPrioridade = {
       alta: '🔴 Alta - Urgente',
       media: '🟡 Média - Importante',
       baixa: '🔵 Baixa - Quando possível'
     }[novaPrioridade];
 
-    await ctx.editMessageText(
-      `✅ Prioridade atualizada para: ${textoPrioridade}\n\nDeseja salvar as alterações?`,
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('✅ Salvar', 'lembrete_salvar_edicao'),
-          Markup.button.callback('✏️ Continuar Editando', 'lembrete_continuar_editando')
-        ],
-        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-      ])
-    );
+    // ✅ DIFERENCIAÇÃO: Verificar se é criação ou edição
+    const isEdicao = dadosAtualizados.id !== undefined;
+    
+    if (isEdicao) {
+      // É uma EDIÇÃO de lembrete existente
+      await ctx.editMessageText(
+        `✅ Prioridade atualizada para: ${textoPrioridade}\n\nDeseja salvar as alterações?`,
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('✅ Salvar', 'lembrete_salvar_edicao'),
+            Markup.button.callback('✏️ Continuar Editando', 'lembrete_continuar_editando')
+          ],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      );
+    } else {
+      // É uma CRIAÇÃO de novo lembrete
+      await ctx.editMessageText(
+        `✅ Prioridade selecionada: ${textoPrioridade}\n\nDeseja finalizar a criação do lembrete?`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('✅ Confirmar e Criar', 'lembrete_confirmar')],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      );
+    }
+
   } catch (error) {
     console.error('Erro ao atualizar prioridade:', error);
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }
-
 
 // ============================================================================
 // FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE LEMBRETE
