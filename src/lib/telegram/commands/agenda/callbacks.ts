@@ -10,6 +10,8 @@ import {
   handleSelecionarCliente
 } from './handlers';
 
+import { mostrarOpcoesNotificacao, processarSelecaoNotificacao, cancelarNotificacoesCompromisso } from './notifications';
+
 export function registerAgendaCallbacks(bot: Telegraf) {
   // Callbacks para o menu da agenda
   bot.action('agenda_novo', handleNovoCompromisso);
@@ -42,19 +44,21 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       
       const session = sessions[0];
       
-      // Inserir compromisso
-      const { error: insertError } = await adminSupabase
+      // Inserir compromisso E PEGAR O ID
+      const { data: novoCompromisso, error: insertError } = await adminSupabase
         .from('compromissos')
         .insert({
           user_id: session.user_id,
           cliente_id: session.data.cliente_id,
           titulo: session.data.titulo,
           descricao: session.data.descricao,
-          data_compromisso: session.data.data_compromisso || session.data.data_hora, // usar qualquer um dos dois
+          data_compromisso: session.data.data_compromisso || session.data.data_hora,
           local: session.data.local,
           status: 'pendente',
           updated_at: new Date().toISOString()
-        });
+        })
+        .select('id')  // ← MUDANÇA: Buscar o ID do compromisso criado
+        .single();
         
       if (insertError) {
         console.error('Erro ao inserir compromisso:', insertError);
@@ -68,17 +72,14 @@ export function registerAgendaCallbacks(bot: Telegraf) {
         .delete()
         .eq('id', session.id);
         
-      // Feedback de sucesso
-      await ctx.editMessageText(
-        '✅ Compromisso registrado com sucesso!\n\nO que deseja fazer agora?',
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
-            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar')
-          ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      );
+      // ← MUDANÇA PRINCIPAL: Em vez do feedback direto, mostrar opções de notificação
+      await mostrarOpcoesNotificacao(ctx, novoCompromisso.id, {
+        titulo: session.data.titulo,
+        data_compromisso: session.data.data_compromisso || session.data.data_hora,
+        cliente_nome: session.data.nome_cliente,
+        local: session.data.local
+      });
+      
     } catch (error) {
       console.error('Erro ao confirmar compromisso:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
@@ -464,6 +465,15 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       ctx.answerCbQuery();
       
       const compromissoId = ctx.match[1];
+      const userId = ctx.state.user?.id;
+      
+      if (!userId) {
+        await ctx.reply('Erro: Usuário não identificado.');
+        return;
+      }
+      
+      // Cancelar notificações ANTES de cancelar o compromisso
+      await cancelarNotificacoesCompromisso(compromissoId, userId);
       
       // Atualizar status do compromisso
       const { error } = await adminSupabase
@@ -481,7 +491,7 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       }
       
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-      await ctx.reply('❌ Compromisso cancelado!');
+      await ctx.reply('❌ Compromisso e notificações cancelados!');
       
       // Mostrar lista atualizada
       return handleListarCompromissos(ctx);
@@ -502,4 +512,32 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   });
+
+  // Callbacks de notificação
+  // Handler para "não notificar"
+  bot.action(/agenda_notify_none_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const compromissoId = ctx.match[1];
+      await processarSelecaoNotificacao(ctx, null, compromissoId);
+    } catch (error) {
+      console.error('Erro no callback notify_none:', error);
+      await ctx.reply('Erro ao processar sua solicitação.');
+    }
+  });
+
+  // Handler para tempos específicos
+  bot.action(/agenda_notify_(\d+)_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const minutosAntes = parseInt(ctx.match[1]);
+      const compromissoId = ctx.match[2];
+      await processarSelecaoNotificacao(ctx, minutosAntes, compromissoId);
+    } catch (error) {
+      console.error('Erro no callback notify_time:', error);
+      await ctx.reply('Erro ao processar sua solicitação.');
+    }
+  });
+
+
 }

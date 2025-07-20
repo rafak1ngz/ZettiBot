@@ -1,5 +1,3 @@
-// ARQUIVO: src/lib/telegram/commands/index.ts
-
 import { Telegraf, Markup, Context } from 'telegraf';
 import { handleStart } from './start';
 import { handleAjuda } from './ajuda';
