@@ -406,23 +406,33 @@ function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } |
 }
 
 async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
-  const dataHora = new Date(dados.data_compromisso);
-  const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  const clienteInfo = dados.nome_cliente 
-    ? `👥 Cliente: ${dados.nome_cliente}\n`
-    : '';
+  try {
+    const dataHora = new Date(dados.data_compromisso);
+    const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    const clienteInfo = dados.nome_cliente 
+      ? `👥 Cliente: ${dados.nome_cliente}\n`
+      : '';
 
-  await ctx.reply(
-    `📋 Confirme as alterações do compromisso:\n\n` +
-    `📝 Título: ${dados.titulo}\n` +
-    `${clienteInfo}` +
-    `📅 Data: ${dataFormatada}\n` +
-    (dados.local ? `📍 Local: ${dados.local}\n` : '') +
-    (dados.descricao ? `📄 Descrição: ${dados.descricao}\n` : '') +
-    `\nOs dados estão corretos?`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('✅ Salvar Alterações', 'agenda_atualizar')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-    ])
-  );
+    await ctx.reply(
+      `📋 Confirme as alterações do compromisso:\n\n` +
+      `📝 Título: ${dados.titulo}\n` +
+      `${clienteInfo}` +
+      `📅 Data: ${dataFormatada}\n` +
+      (dados.local ? `📍 Local: ${dados.local}\n` : '') +
+      (dados.descricao ? `💬 Descrição: ${dados.descricao}\n` : '') +
+      `\nDeseja salvar as alterações?`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Salvar Alterações', 'agenda_salvar_edicao'),
+          Markup.button.callback('✏️ Continuar Editando', 'agenda_continuar_editando')
+        ],
+        [
+          Markup.button.callback('❌ Cancelar', 'cancelar_acao')
+        ]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao mostrar confirmação:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
 }

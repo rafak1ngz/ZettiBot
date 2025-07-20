@@ -548,65 +548,81 @@ export function registerAgendaCallbacks(bot: Telegraf) {
     }
   });
 
-  // Callback para salvar alterações de compromisso editado
-  bot.action('agenda_salvar_edicao', async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      
-      const telegramId = ctx.from?.id;
-      const { data: sessions } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .limit(1);
+// Callback para salvar alterações de compromisso editado
+bot.action('agenda_salvar_edicao', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .limit(1);
         
-      if (!sessions || sessions.length === 0) {
-        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
-      }
-      
-      const session = sessions[0];
-      const compromissoData = session.data;
-      
-      // Atualizar compromisso no banco
-      const { error: updateError } = await adminSupabase
-        .from('compromissos')
-        .update({
-          titulo: compromissoData.titulo,
-          descricao: compromissoData.descricao,
-          data_compromisso: compromissoData.data_compromisso,
-          local: compromissoData.local,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', compromissoData.id);
-        
-      if (updateError) {
-        console.error('Erro ao atualizar compromisso:', updateError);
-        await ctx.reply('Erro ao salvar alterações. Por favor, tente novamente.');
-        return;
-      }
-      
-      // Limpar sessão
-      await adminSupabase
-        .from('sessions')
-        .delete()
-        .eq('id', session.id);
-        
-      // Confirmar sucesso
-      await ctx.editMessageText(
-        '✅ Alterações salvas com sucesso!',
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar'),
-            Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-          ]
-        ])
-      );
-      
-    } catch (error) {
-      console.error('Erro ao salvar edição:', error);
-      await ctx.reply('Ocorreu um erro ao salvar as alterações.');
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
     }
-  });  
+    
+    const session = sessions[0];
+    const compromissoData = session.data;
+    
+    // ✅ CORREÇÃO: Verificar se temos o ID do compromisso
+    if (!compromissoData.id) {
+      console.error('ID do compromisso não encontrado na sessão');
+      await ctx.reply('Erro: Compromisso não identificado. Por favor, tente novamente.');
+      return;
+    }
+    
+    // ✅ CORREÇÃO: Atualizar compromisso no banco com dados corretos
+    const { error: updateError } = await adminSupabase
+      .from('compromissos')
+      .update({
+        titulo: compromissoData.titulo,
+        descricao: compromissoData.descricao || null,
+        data_compromisso: compromissoData.data_compromisso,
+        local: compromissoData.local || null,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', compromissoData.id)
+      .eq('user_id', session.user_id); // ✅ Segurança extra
+        
+    if (updateError) {
+      console.error('Erro ao atualizar compromisso:', updateError);
+      await ctx.reply('Erro ao salvar alterações. Por favor, tente novamente.');
+      return;
+    }
+    
+    // ✅ Limpar sessão
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('id', session.id);
+        
+    // ✅ Confirmar sucesso com dados atualizados
+    const dataFormatada = format(new Date(compromissoData.data_compromisso), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    
+    await ctx.editMessageText(
+      `✅ Alterações salvas com sucesso!\n\n` +
+      `📝 ${compromissoData.titulo}\n` +
+      `📅 ${dataFormatada}\n` +
+      (compromissoData.local ? `📍 ${compromissoData.local}\n` : '') +
+      (compromissoData.nome_cliente ? `👥 ${compromissoData.nome_cliente}\n` : '') +
+      (compromissoData.descricao ? `💬 ${compromissoData.descricao}` : ''),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📋 Listar Compromissos', 'agenda_listar'),
+          Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+        ]
+      ])
+    );
+    
+  } catch (error) {
+    console.error('Erro ao salvar edição:', error);
+    await ctx.reply('Ocorreu um erro ao salvar as alterações. Por favor, tente novamente.');
+  }
+});
+
 
   // Callback para continuar editando
   bot.action('agenda_continuar_editando', async (ctx) => {
