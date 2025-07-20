@@ -73,3 +73,19 @@ export interface Notificacao {
   created_at: string;
   updated_at: string;
 }
+
+// INTERFACE PARA LEMBRETES
+export interface Lembrete {
+  id: string;
+  user_id: string;
+  titulo: string;
+  descricao?: string;
+  data_lembrete: string;
+  prioridade: 'baixa' | 'media' | 'alta';
+  status: 'pendente' | 'concluido' | 'cancelado';
+  created_at: string;
+  updated_at: string;
+}
+
+export type PrioridadeLembrete = 'baixa' | 'media' | 'alta';
+export type StatusLembrete = 'pendente' | 'concluido' | 'cancelado';

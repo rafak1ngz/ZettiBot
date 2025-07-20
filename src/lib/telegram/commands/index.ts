@@ -8,6 +8,7 @@ import {
   handleClientesBuscar,
   listarClientesPaginados 
 } from './clientes';
+import { handleLembretes, registerLembretesCallbacks } from './lembretes';
 
 // ============================================================================
 // IMPORTAR NOVO MÓDULO DE AGENDA
@@ -327,6 +328,28 @@ O que deseja fazer agora?`,
     }
   });
 
-  // Manter outros callbacks de clientes...
+  // ========================================================================
+  // COMANDOS DE LEMBRETES
+  // ========================================================================
+  bot.command('lembrete', handleLembretes);
+  bot.command('lembrete_criar', (ctx) => {
+    return handleLembretes(ctx); // Vai para o menu principal
+  });
+  bot.command('lembrete_listar', (ctx) => {
+    return handleLembretes(ctx); // Vai para o menu principal
+  });
+
+  // ========================================================================
+  // CALLBACK DO MENU PRINCIPAL
+  // ========================================================================
+  bot.action('menu_lembretes', (ctx) => {
+    ctx.answerCbQuery();
+    return handleLembretes(ctx);
+  });
+
+  // ========================================================================
+  // REGISTRAR CALLBACKS DE LEMBRETES
+  // ========================================================================
+  registerLembretesCallbacks(bot);
   
 };

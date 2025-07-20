@@ -1,0 +1,615 @@
+import { Telegraf, Markup } from 'telegraf';
+import { adminSupabase } from '@/lib/supabase';
+import { 
+  handleNovoLembrete, 
+  handleListarLembretes,
+  handleConcluirLembrete,
+  mostrarLembretesPaginados 
+} from './handlers';
+
+export function registerLembretesCallbacks(bot: Telegraf) {
+  
+  // ========================================================================
+  // CALLBACKS PRINCIPAIS
+  // ========================================================================
+  bot.action('lembrete_criar', (ctx) => {
+    ctx.answerCbQuery();
+    return handleNovoLembrete(ctx);
+  });
+
+  bot.action('lembrete_listar', (ctx) => {
+    ctx.answerCbQuery();
+    return handleListarLembretes(ctx);
+  });
+
+  // ========================================================================
+  // CALLBACK PARA CONCLUIR LEMBRETE
+  // ========================================================================
+  bot.action(/lembrete_concluir_([0-9a-fA-F-]+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const lembreteId = ctx.match[1];
+      await handleConcluirLembrete(ctx, lembreteId);
+    } catch (error) {
+      console.error('Erro ao concluir lembrete:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACK PARA EXCLUIR LEMBRETE
+  // ========================================================================
+  bot.action(/lembrete_excluir_([0-9a-fA-F-]+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const lembreteId = ctx.match[1];
+
+      // Buscar dados do lembrete para confirmação
+      const { data: lembrete, error } = await adminSupabase
+        .from('lembretes')
+        .select('titulo, data_lembrete')
+        .eq('id', lembreteId)
+        .single();
+
+      if (error || !lembrete) {
+        await ctx.reply('Lembrete não encontrado.');
+        return;
+      }
+
+      await ctx.reply(
+        `⚠️ Tem certeza que deseja excluir este lembrete?\n\n` +
+        `📝 **${lembrete.titulo}**\n` +
+        `📅 ${new Date(lembrete.data_lembrete).toLocaleString('pt-BR')}\n\n` +
+        `Esta ação não pode ser desfeita.`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('✅ Sim, excluir', `confirmar_exclusao_lembrete_${lembreteId}`),
+              Markup.button.callback('❌ Cancelar', 'voltar_lembretes')
+            ]
+          ])
+        }
+      );
+    } catch (error) {
+      console.error('Erro ao processar exclusão:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CONFIRMAR EXCLUSÃO
+  // ========================================================================
+  bot.action(/confirmar_exclusao_lembrete_([0-9a-fA-F-]+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const lembreteId = ctx.match[1];
+      const userId = ctx.state.user?.id;
+
+      if (!userId) {
+        return ctx.reply('Sessão expirada. Por favor, tente novamente.');
+      }
+
+      // Excluir lembrete (ou marcar como cancelado)
+      const { error } = await adminSupabase
+        .from('lembretes')
+        .update({
+          status: 'cancelado',
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', lembreteId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Erro ao excluir lembrete:', error);
+        await ctx.reply('Erro ao excluir lembrete. Por favor, tente novamente.');
+        return;
+      }
+
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      await ctx.reply('🗑️ Lembrete excluído com sucesso!');
+
+      return handleListarLembretes(ctx);
+    } catch (error) {
+      console.error('Erro ao confirmar exclusão:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACK PARA EDITAR LEMBRETE
+  // ========================================================================
+  bot.action(/lembrete_editar_([0-9a-fA-F-]+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const lembreteId = ctx.match[1];
+      const telegramId = ctx.from?.id;
+      const userId = ctx.state.user?.id;
+
+      if (!telegramId || !userId) {
+        return ctx.reply('Não foi possível identificar seu usuário.');
+      }
+
+      // Buscar dados do lembrete
+      const { data: lembrete, error } = await adminSupabase
+        .from('lembretes')
+        .select('*')
+        .eq('id', lembreteId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !lembrete) {
+        console.error('Erro ao buscar lembrete:', error);
+        await ctx.reply('Lembrete não encontrado.');
+        return;
+      }
+
+      // Criar sessão para edição
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('telegram_id', telegramId);
+
+      await adminSupabase
+        .from('sessions')
+        .insert([{
+          telegram_id: telegramId,
+          user_id: userId,
+          command: 'lembretes',
+          step: 'editar_lembrete',
+          data: lembrete,
+          updated_at: new Date().toISOString()
+        }]);
+
+      await ctx.reply(
+        `O que você deseja editar no lembrete "${lembrete.titulo}"?`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('📝 Título', 'lembrete_edit_titulo')],
+          [Markup.button.callback('🎯 Prioridade', 'lembrete_edit_prioridade')],
+          [Markup.button.callback('📅 Data', 'lembrete_edit_data')],
+          [Markup.button.callback('🕐 Hora', 'lembrete_edit_hora')],
+          [Markup.button.callback('💬 Descrição', 'lembrete_edit_descricao')],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      );
+    } catch (error) {
+      console.error('Erro ao iniciar edição:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACKS DE EDIÇÃO ESPECÍFICOS
+  // ========================================================================
+  bot.action('lembrete_edit_titulo', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
+
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'edit_titulo_lembrete',
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+
+      await ctx.editMessageText('Digite o novo título para o lembrete:');
+    } catch (error) {
+      console.error('Erro ao editar título:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  bot.action('lembrete_edit_prioridade', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      await ctx.editMessageText(
+        'Selecione a nova prioridade:',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🔴 Alta - Urgente', 'prioridade_alta')],
+          [Markup.button.callback('🟡 Média - Importante', 'prioridade_media')],
+          [Markup.button.callback('🔵 Baixa - Quando possível', 'prioridade_baixa')],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      );
+    } catch (error) {
+      console.error('Erro ao editar prioridade:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACKS DE PRIORIDADE
+  // ========================================================================
+  bot.action('prioridade_alta', async (ctx) => {
+    await atualizarPrioridadeLembrete(ctx, 'alta');
+  });
+
+  bot.action('prioridade_media', async (ctx) => {
+    await atualizarPrioridadeLembrete(ctx, 'media');
+  });
+
+  bot.action('prioridade_baixa', async (ctx) => {
+    await atualizarPrioridadeLembrete(ctx, 'baixa');
+  });
+
+  // ========================================================================
+  // CALLBACK PARA PAGINAÇÃO
+  // ========================================================================
+  bot.action(/lembrete_pagina_(\d+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const pagina = parseInt(ctx.match[1]);
+      const userId = ctx.state.user?.id;
+
+      if (!userId) {
+        return ctx.reply('Sessão expirada. Por favor, tente novamente.');
+      }
+
+      // Buscar todos os lembretes novamente
+      const { data: lembretes, error } = await adminSupabase
+        .from('lembretes')
+        .select('*')
+        .eq('user_id', userId)
+        .eq('status', 'pendente')
+        .order('data_lembrete', { ascending: true });
+
+      if (error || !lembretes) {
+        return ctx.reply('Erro ao carregar lembretes.');
+      }
+
+      // Mostrar página solicitada
+      await mostrarLembretesPaginados(ctx, lembretes, pagina);
+    } catch (error) {
+      console.error('Erro na paginação:', error);
+      await ctx.reply('Ocorreu um erro ao navegar.');
+    }
+  });
+
+  // ========================================================================
+  // VOLTAR PARA LEMBRETES
+  // ========================================================================
+  bot.action('voltar_lembretes', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+      return handleListarLembretes(ctx);
+    } catch (error) {
+      console.error('Erro ao voltar:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+}
+
+// ============================================================================
+// FUNÇÃO AUXILIAR PARA ATUALIZAR PRIORIDADE
+// ============================================================================
+async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'media' | 'baixa') {
+  try {
+    ctx.answerCbQuery();
+    const telegramId = ctx.from?.id;
+
+    // Buscar sessão atual
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .limit(1);
+
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, tente novamente.');
+    }
+
+    const session = sessions[0];
+
+    // Atualizar prioridade na sessão
+    await adminSupabase
+      .from('sessions')
+      .update({
+        data: { ...session.data, prioridade: novaPrioridade },
+        step: 'confirmar_edicao',
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id);
+
+    // Mostrar confirmação
+    const textoPrioridade = {
+      alta: '🔴 Alta - Urgente',
+      media: '🟡 Média - Importante',
+      baixa: '🔵 Baixa - Quando possível'
+    }[novaPrioridade];
+
+    await ctx.editMessageText(
+      `✅ Prioridade atualizada para: ${textoPrioridade}\n\nDeseja salvar as alterações?`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✅ Salvar', 'lembrete_salvar_edicao'),
+          Markup.button.callback('✏️ Continuar Editando', 'lembrete_continuar_editando')
+        ],
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao atualizar prioridade:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+}
+
+// ========================================================================
+// CALLBACK PARA CONFIRMAR NOVO LEMBRETE
+// ========================================================================
+bot.action('lembrete_confirmar', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .order('updated_at', { ascending: false })
+      .limit(1);
+      
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, inicie o processo novamente.');
+    }
+    
+    const session = sessions[0];
+    
+    // Inserir lembrete no banco
+    const { data: novoLembrete, error: insertError } = await adminSupabase
+      .from('lembretes')
+      .insert({
+        user_id: session.user_id,
+        titulo: session.data.titulo,
+        descricao: session.data.descricao,
+        data_lembrete: session.data.data_lembrete,
+        prioridade: session.data.prioridade,
+        status: 'pendente',
+        updated_at: new Date().toISOString()
+      })
+      .select('id')
+      .single();
+      
+    if (insertError || !novoLembrete) {
+      console.error('Erro ao inserir lembrete:', insertError);
+      await ctx.reply('Ocorreu um erro ao salvar o lembrete. Por favor, tente novamente.');
+      return;
+    }
+    
+    // Limpar sessão
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('id', session.id);
+      
+    // Perguntar sobre notificação
+    await ctx.editMessageText(
+      '⏰ Deseja receber notificação deste lembrete?',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔕 Não notificar', `notif_lembrete_nao_${novoLembrete.id}`)],
+        [
+          Markup.button.callback('⏰ 5 min antes', `notif_lembrete_5m_${novoLembrete.id}`),
+          Markup.button.callback('⏰ 15 min antes', `notif_lembrete_15m_${novoLembrete.id}`)
+        ],
+        [
+          Markup.button.callback('⏰ 30 min antes', `notif_lembrete_30m_${novoLembrete.id}`),
+          Markup.button.callback('⏰ 1h antes', `notif_lembrete_1h_${novoLembrete.id}`)
+        ],
+        [Markup.button.callback('⏰ 24h antes', `notif_lembrete_24h_${novoLembrete.id}`)],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    );
+    
+  } catch (error) {
+    console.error('Erro ao confirmar lembrete:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// ========================================================================
+// CALLBACKS PARA NOTIFICAÇÕES DE LEMBRETES
+// ========================================================================
+bot.action(/notif_lembrete_nao_(.+)/, async (ctx) => {
+  ctx.answerCbQuery();
+  await ctx.editMessageText(
+    '✅ Lembrete criado com sucesso!\n🔕 Nenhuma notificação será enviada.',
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback('🆕 Novo Lembrete', 'lembrete_criar'),
+        Markup.button.callback('📋 Listar Lembretes', 'lembrete_listar')
+      ],
+      [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+    ])
+  );
+});
+
+bot.action(/notif_lembrete_5m_(.+)/, async (ctx) => {
+  await processarNotificacaoLembrete(ctx, '5m', ctx.match[1]);
+});
+
+bot.action(/notif_lembrete_15m_(.+)/, async (ctx) => {
+  await processarNotificacaoLembrete(ctx, '15m', ctx.match[1]);
+});
+
+bot.action(/notif_lembrete_30m_(.+)/, async (ctx) => {
+  await processarNotificacaoLembrete(ctx, '30m', ctx.match[1]);
+});
+
+bot.action(/notif_lembrete_1h_(.+)/, async (ctx) => {
+  await processarNotificacaoLembrete(ctx, '1h', ctx.match[1]);
+});
+
+bot.action(/notif_lembrete_24h_(.+)/, async (ctx) => {
+  await processarNotificacaoLembrete(ctx, '24h', ctx.match[1]);
+});
+
+// ========================================================================
+// CALLBACK PARA SALVAR EDIÇÃO
+// ========================================================================
+bot.action('lembrete_salvar_edicao', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    const telegramId = ctx.from?.id;
+    const { data: sessions } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .limit(1);
+        
+    if (!sessions || sessions.length === 0) {
+      return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+    }
+    
+    const session = sessions[0];
+    const lembreteData = session.data;
+    
+    // Atualizar lembrete no banco
+    const { error: updateError } = await adminSupabase
+      .from('lembretes')
+      .update({
+        titulo: lembreteData.titulo,
+        descricao: lembreteData.descricao || null,
+        data_lembrete: lembreteData.data_lembrete,
+        prioridade: lembreteData.prioridade,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', lembreteData.id)
+      .eq('user_id', session.user_id);
+        
+    if (updateError) {
+      console.error('Erro ao atualizar lembrete:', updateError);
+      await ctx.reply('Erro ao salvar alterações. Por favor, tente novamente.');
+      return;
+    }
+    
+    // Limpar sessão
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('id', session.id);
+    
+    await ctx.editMessageText(
+      `✅ Alterações salvas com sucesso!\n\n📝 ${lembreteData.titulo}`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📋 Listar Lembretes', 'lembrete_listar'),
+          Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+        ]
+      ])
+    );
+    
+  } catch (error) {
+    console.error('Erro ao salvar edição:', error);
+    await ctx.reply('Ocorreu um erro ao salvar as alterações.');
+  }
+});
+
+// ========================================================================
+// FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE LEMBRETE
+// ========================================================================
+async function processarNotificacaoLembrete(ctx: any, tempo: string, lembreteId: string) {
+  try {
+    ctx.answerCbQuery();
+
+    // Buscar dados do lembrete
+    const { data: lembrete, error } = await adminSupabase
+      .from('lembretes')
+      .select('*')
+      .eq('id', lembreteId)
+      .single();
+
+    if (error || !lembrete) {
+      console.error('Erro ao buscar lembrete:', error);
+      await ctx.reply('Erro ao configurar notificação. Lembrete não encontrado.');
+      return;
+    }
+
+    // Calcular tempo de antecedência
+    const minutosAntes = {
+      '5m': 5,
+      '15m': 15,
+      '30m': 30,
+      '1h': 60,
+      '24h': 1440
+    }[tempo] || 15;
+
+    const agoraUTC = new Date();
+    const dataLembreteUTC = new Date(lembrete.data_lembrete);
+    const diferencaMinutos = Math.floor((dataLembreteUTC.getTime() - agoraUTC.getTime()) / (1000 * 60));
+
+    // Validações
+    if (diferencaMinutos <= 0) {
+      await ctx.editMessageText(
+        `⚠️ Este lembrete já passou.\n\n✅ Lembrete registrado sem notificação.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
+    if (diferencaMinutos <= minutosAntes) {
+      await ctx.editMessageText(
+        `⚠️ Este lembrete é muito próximo para notificação de ${minutosAntes} minutos antes.\n\n✅ Lembrete registrado sem notificação.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
+    // Criar notificação usando o sistema existente
+    const { criarNotificacao } = await import('@/lib/telegram/notifications');
+    
+    const dataNotificacao = new Date(dataLembreteUTC.getTime() - (minutosAntes * 60 * 1000));
+    
+    const resultadoNotificacao = await criarNotificacao({
+      user_id: lembrete.user_id,
+      telegram_id: ctx.from!.id,
+      tipo: 'lembrete',
+      titulo: 'Lembrete Agendado',
+      mensagem: `🔔 Lembrete em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
+                `📝 ${lembrete.titulo}\n` +
+                `🎯 Prioridade: ${lembrete.prioridade.charAt(0).toUpperCase() + lembrete.prioridade.slice(1)}\n` +
+                (lembrete.descricao ? `💬 ${lembrete.descricao}` : ''),
+      agendado_para: dataNotificacao
+    });
+
+    if (!resultadoNotificacao.sucesso) {
+      await ctx.editMessageText(
+        `❌ Erro ao agendar notificação.\n\n✅ Lembrete registrado sem notificação.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
+    const tempoTexto = {
+      '5m': '5 minutos',
+      '15m': '15 minutos',
+      '30m': '30 minutos', 
+      '1h': '1 hora',
+      '24h': '24 horas'
+    }[tempo] || '15 minutos';
+
+    await ctx.editMessageText(
+      `✅ Lembrete criado com sucesso!\n⏰ Você receberá uma notificação ${tempoTexto} antes.\n\n📝 ${lembrete.titulo}`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('🆕 Novo Lembrete', 'lembrete_criar'),
+          Markup.button.callback('📋 Listar Lembretes', 'lembrete_listar')
+        ],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    );
+
+  } catch (error) {
+    console.error('Erro ao processar notificação de lembrete:', error);
+    await ctx.reply('Ocorreu um erro ao configurar a notificação.');
+  }
+}
