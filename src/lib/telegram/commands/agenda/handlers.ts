@@ -185,6 +185,8 @@ export async function handleListarCompromissos(ctx: Context) {
       return ctx.reply('Você precisa estar autenticado para usar este comando.');
     }
 
+    const loadingMsg = await ctx.reply('⏳ Buscando seus compromissos...');    
+
     // Buscar compromissos pendentes
     const { data: compromissos, error } = await adminSupabase
       .from('compromissos')
@@ -198,12 +200,13 @@ export async function handleListarCompromissos(ctx: Context) {
       .limit(5);
 
     if (error) {
-      console.error('Erro ao buscar compromissos:', error);
-      return ctx.reply('Ocorreu um erro ao buscar os compromissos.');
+      // ✅ EDITAR mensagem de loading
+      await ctx.editMessageText('❌ Erro ao buscar compromissos. Tente novamente.');
+      return;
     }
 
     if (!compromissos || compromissos.length === 0) {
-      return ctx.reply(
+      return ctx.editMessageText(
         'Você não possui compromissos pendentes.',
         Markup.inlineKeyboard([
           [Markup.button.callback('➕ Adicionar Compromisso', 'agenda_novo')],
@@ -211,6 +214,8 @@ export async function handleListarCompromissos(ctx: Context) {
         ])
       );
     }
+
+    await ctx.deleteMessage(loadingMsg.message_id);    
 
     // Mostrar lista de compromissos
     await ctx.reply('📅 Seus próximos compromissos:');

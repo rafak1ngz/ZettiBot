@@ -548,12 +548,12 @@ async function handleBuscarNomeEmpresa(ctx: BotContext, session: any) {
   const empresaNome = ctx.message.text.trim();
   
   try {
-    const { data: clientes, error } = await adminSupabase
-      .from('clientes')
-      .select('*')
-      .eq('user_id', session.user_id)
-      .ilike('nome_empresa', `%${empresaNome}%`)
-      .limit(5);
+  const { data: clientes, error } = await adminSupabase
+    .from('clientes')
+    .select('id, nome_empresa, contato_nome, contato_telefone, contato_email, cnpj, observacoes')
+    .eq('user_id', session.user_id)
+    .ilike('nome_empresa', `%${empresaNome}%`)
+    .limit(5);
     
     if (error) {
       console.error('Erro na busca de clientes:', error);

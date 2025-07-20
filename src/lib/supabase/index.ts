@@ -8,12 +8,24 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error('Missing Supabase environment variables');
 }
 
-// Cliente normal para operações de usuário
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// ✅ MELHORIA: Adicionar timeout e retry
+const supabaseConfig = {
+  auth: { persistSession: false },
+  global: {
+    headers: {
+      'X-Client-Info': 'zettibot@1.0.0'
+    }
+  },
+  // ✅ Timeout de 10 segundos
+  fetch: (url: RequestInfo | URL, options: RequestInit = {}) => {
+    return fetch(url, {
+      ...options,
+      signal: AbortSignal.timeout(10000) // 10s timeout
+    });
+  }
+};
 
-// Cliente admin com service role para bypass de RLS
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, supabaseConfig);
 export const adminSupabase = supabaseServiceKey 
-  ? createClient(supabaseUrl, supabaseServiceKey, {
-      auth: { persistSession: false }
-    })
+  ? createClient(supabaseUrl, supabaseServiceKey, supabaseConfig)
   : supabase;

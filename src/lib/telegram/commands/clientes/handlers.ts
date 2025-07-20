@@ -75,6 +75,24 @@ export async function handleClientesListar(ctx: Context) {
     return ctx.reply('Você precisa estar autenticado para usar este comando.');
   }
 
+  // ✅ ADICIONAR: Loading state
+  const loadingMsg = await ctx.reply('⏳ Carregando seus clientes...');
+
+  try {
+    const pageSize = 5;
+    const offset = 0;
+    
+    const { count, error: countError } = await adminSupabase
+      .from('clientes')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId);
+      
+    if (countError) {
+      // ✅ EDITAR mensagem de loading em caso de erro
+      await ctx.editMessageText('❌ Erro ao carregar clientes. Tente novamente.');
+      return;
+    }  
+
   // Verificar se há um parâmetro de página
   let page = 0;
   
@@ -104,7 +122,10 @@ export async function handleClientesListar(ctx: Context) {
     return listarClientesPaginados(ctx, userId, page);
   } catch (error) {
     console.error('Erro ao iniciar listagem:', error);
-    return ctx.reply('Ocorreu um erro ao listar clientes. Por favor, tente novamente.');
+    return ctx.editMessageText(response, {
+      parse_mode: 'HTML',
+      ...Markup.inlineKeyboard(buttons)
+    });
   }
 }
 
@@ -131,7 +152,7 @@ export async function listarClientesPaginados(ctx: Context, userId: string, page
     // Buscar clientes da página atual
     const { data: clientes, error } = await adminSupabase
       .from('clientes')
-      .select('*')
+      .select('id, nome_empresa, contato_nome, contato_telefone, contato_email, cnpj')
       .eq('user_id', userId)
       .order('nome_empresa', { ascending: true })
       .range(offset, offset + pageSize - 1);

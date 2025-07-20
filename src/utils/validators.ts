@@ -73,3 +73,54 @@ export const validators = {
     }
   }
 }
+
+// ✅ NOVA: Sanitização de texto
+export const sanitizers = {
+  // Limpar texto de caracteres especiais
+  cleanText: (text: string): string => {
+    return text.trim().replace(/[<>\"']/g, '');
+  },
+  
+  // Limpar apenas números
+  numbersOnly: (text: string): string => {
+    return text.replace(/[^\d]/g, '');
+  },
+  
+  // Limpar telefone mantendo apenas números
+  cleanPhone: (phone: string): string => {
+    const cleaned = phone.replace(/[^\d]/g, '');
+    return cleaned.length >= 10 ? cleaned : '';
+  }
+};
+
+// ✅ MELHORAR: Validação de CNPJ com algoritmo real
+export const validarCNPJ = (cnpj: string): boolean => {
+  if (!cnpj) return true; // Opcional
+  
+  const cleaned = cnpj.replace(/[^\d]/g, '');
+  if (cleaned.length !== 14) return false;
+  if (/^(\d)\1+$/.test(cleaned)) return false; // Todos iguais
+  
+  // ✅ Algoritmo real de validação de CNPJ
+  let soma = 0;
+  let pos = 5;
+  
+  for (let i = 0; i < 12; i++) {
+    soma += parseInt(cleaned.charAt(i)) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  
+  let resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  if (resultado !== parseInt(cleaned.charAt(12))) return false;
+  
+  soma = 0;
+  pos = 6;
+  
+  for (let i = 0; i < 13; i++) {
+    soma += parseInt(cleaned.charAt(i)) * pos--;
+    if (pos < 2) pos = 9;
+  }
+  
+  resultado = soma % 11 < 2 ? 0 : 11 - (soma % 11);
+  return resultado === parseInt(cleaned.charAt(13));
+};
