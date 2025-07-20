@@ -9,8 +9,6 @@ import {
   handleListarCompromissos,
   handleSelecionarCliente 
 } from './handlers';
-
-// IMPORTAÇÕES CORRETAS das funções de notificação
 import { 
   handleConfiguracoesNotificacao, 
   processarNotificacaoCompromisso 
@@ -548,81 +546,129 @@ export function registerAgendaCallbacks(bot: Telegraf) {
     }
   });
 
-// Callback para salvar alterações de compromisso editado
-bot.action('agenda_salvar_edicao', async (ctx) => {
-  try {
-    ctx.answerCbQuery();
-    
-    const telegramId = ctx.from?.id;
-    const { data: sessions } = await adminSupabase
-      .from('sessions')
-      .select('*')
-      .eq('telegram_id', telegramId)
-      .limit(1);
+  // Callback para salvar alterações de compromisso editado
+  bot.action('agenda_salvar_edicao', async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const telegramId = ctx.from?.id;
+      const { data: sessions } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .limit(1);
+          
+      if (!sessions || sessions.length === 0) {
+        return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
+      }
+      
+      const session = sessions[0];
+      const compromissoData = session.data;
+      
+      if (!compromissoData.id) {
+        console.error('ID do compromisso não encontrado na sessão');
+        await ctx.reply('Erro: Compromisso não identificado. Por favor, tente novamente.');
+        return;
+      }
+      
+      // ✅ NOVO: Buscar dados originais para comparar se mudou data/hora
+      const { data: compromissoOriginal, error: fetchError } = await adminSupabase
+        .from('compromissos')
+        .select('data_compromisso')
+        .eq('id', compromissoData.id)
+        .single();
         
-    if (!sessions || sessions.length === 0) {
-      return ctx.reply('Sessão expirada. Por favor, inicie novamente.');
-    }
-    
-    const session = sessions[0];
-    const compromissoData = session.data;
-    
-    // ✅ CORREÇÃO: Verificar se temos o ID do compromisso
-    if (!compromissoData.id) {
-      console.error('ID do compromisso não encontrado na sessão');
-      await ctx.reply('Erro: Compromisso não identificado. Por favor, tente novamente.');
-      return;
-    }
-    
-    // ✅ CORREÇÃO: Atualizar compromisso no banco com dados corretos
-    const { error: updateError } = await adminSupabase
-      .from('compromissos')
-      .update({
-        titulo: compromissoData.titulo,
-        descricao: compromissoData.descricao || null,
-        data_compromisso: compromissoData.data_compromisso,
-        local: compromissoData.local || null,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', compromissoData.id)
-      .eq('user_id', session.user_id); // ✅ Segurança extra
+      if (fetchError) {
+        console.error('Erro ao buscar compromisso original:', fetchError);
+        await ctx.reply('Erro ao verificar compromisso. Por favor, tente novamente.');
+        return;
+      }
+      
+      // ✅ VERIFICAR: Se data/hora foi alterada
+      const dataOriginal = new Date(compromissoOriginal.data_compromisso).getTime();
+      const dataAtualizada = new Date(compromissoData.data_compromisso).getTime();
+      const dataHoraAlterada = dataOriginal !== dataAtualizada;
+      
+      console.log('=== DEBUG EDIÇÃO ===');
+      console.log('Data original:', new Date(dataOriginal).toISOString());
+      console.log('Data atualizada:', new Date(dataAtualizada).toISOString());
+      console.log('Data/hora foi alterada:', dataHoraAlterada);
+      console.log('==================');
+      
+      // ✅ ATUALIZAR: Compromisso no banco
+      const { error: updateError } = await adminSupabase
+        .from('compromissos')
+        .update({
+          titulo: compromissoData.titulo,
+          descricao: compromissoData.descricao || null,
+          data_compromisso: compromissoData.data_compromisso,
+          local: compromissoData.local || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', compromissoData.id)
+        .eq('user_id', session.user_id);
+          
+      if (updateError) {
+        console.error('Erro ao atualizar compromisso:', updateError);
+        await ctx.reply('Erro ao salvar alterações. Por favor, tente novamente.');
+        return;
+      }
+      
+      // ✅ LIMPAR: Sessão atual
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('id', session.id);
+      
+      // ✅ DECISÃO: Se alterou data/hora, perguntar sobre notificação
+      if (dataHoraAlterada) {
+        // ✅ CANCELAR: Notificações antigas deste compromisso
+        await adminSupabase
+          .from('notificacoes')
+          .update({ status: 'cancelado' })
+          .eq('user_id', session.user_id)
+          .eq('tipo', 'agenda')
+          .like('mensagem', `%${compromissoData.titulo}%`)
+          .eq('status', 'pendente');
         
-    if (updateError) {
-      console.error('Erro ao atualizar compromisso:', updateError);
-      await ctx.reply('Erro ao salvar alterações. Por favor, tente novamente.');
-      return;
-    }
-    
-    // ✅ Limpar sessão
-    await adminSupabase
-      .from('sessions')
-      .delete()
-      .eq('id', session.id);
+        // ✅ REDIRECIONAR: Para configuração de notificações
+        const { handleConfiguracoesNotificacao } = await import('./notifications');
         
-    // ✅ Confirmar sucesso com dados atualizados
-    const dataFormatada = format(new Date(compromissoData.data_compromisso), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-    
-    await ctx.editMessageText(
-      `✅ Alterações salvas com sucesso!\n\n` +
-      `📝 ${compromissoData.titulo}\n` +
-      `📅 ${dataFormatada}\n` +
-      (compromissoData.local ? `📍 ${compromissoData.local}\n` : '') +
-      (compromissoData.nome_cliente ? `👥 ${compromissoData.nome_cliente}\n` : '') +
-      (compromissoData.descricao ? `💬 ${compromissoData.descricao}` : ''),
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('📋 Listar Compromissos', 'agenda_listar'),
-          Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-        ]
-      ])
-    );
-    
-  } catch (error) {
-    console.error('Erro ao salvar edição:', error);
-    await ctx.reply('Ocorreu um erro ao salvar as alterações. Por favor, tente novamente.');
-  }
-});
-
+        await ctx.editMessageText(
+          `✅ Alterações salvas com sucesso!\n\n` +
+          `📝 ${compromissoData.titulo}\n` +
+          `📅 ${format(new Date(compromissoData.data_compromisso), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}\n\n` +
+          `⚠️ Como você alterou a data/horário, vamos configurar as notificações novamente.`
+        );
+        
+        // Pequena pausa para o usuário ler
+        setTimeout(async () => {
+          await handleConfiguracoesNotificacao(ctx, compromissoData.id);
+        }, 1500);
+        
+      } else {
+        // ✅ SÓ CONFIRMAR: Sucesso sem perguntar notificação
+        await ctx.editMessageText(
+          `✅ Alterações salvas com sucesso!\n\n` +
+          `📝 ${compromissoData.titulo}\n` +
+          `📅 ${format(new Date(compromissoData.data_compromisso), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}\n` +
+          (compromissoData.local ? `📍 ${compromissoData.local}\n` : '') +
+          (compromissoData.nome_cliente ? `👥 ${compromissoData.nome_cliente}\n` : '') +
+          (compromissoData.descricao ? `💬 ${compromissoData.descricao}` : ''),
+          Markup.inlineKeyboard([
+            [
+              Markup.button.callback('📋 Listar Compromissos', 'agenda_listar'),
+              Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+            ]
+          ])
+        );
+      }
+      
+    } catch (error) {
+      console.error('Erro ao salvar edição:', error);
+      await ctx.reply('Ocorreu um erro ao salvar as alterações. Por favor, tente novamente.');
+    }
+  });
 
   // Callback para continuar editando
   bot.action('agenda_continuar_editando', async (ctx) => {
