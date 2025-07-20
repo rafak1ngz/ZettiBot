@@ -118,7 +118,7 @@ export async function handleListarLembretes(ctx: Context) {
 }
 
 // ============================================================================
-// PAGINAÇÃO DE LEMBRETES
+// PAGINAÇÃO DE LEMBRETES - VERSÃO CORRIGIDA
 // ============================================================================
 async function mostrarLembretesPaginados(ctx: Context, todosLembretes: any[], pagina: number) {
   const lembretesPorPagina = 5;
@@ -137,18 +137,19 @@ async function mostrarLembretesPaginados(ctx: Context, todosLembretes: any[], pa
     const dataBrasil = utcParaBrasil(dataUTC);
     const dataFormatada = format(dataBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
     
-    // Emoji de prioridade
+    // 🔥 CORREÇÃO: Emoji de prioridade com cast de tipo
+    const prioridade = lembrete.prioridade as 'alta' | 'media' | 'baixa';
     const emojiPrioridade = {
       alta: '🔴',
       media: '🟡',
       baixa: '🔵'
-    }[lembrete.prioridade] || '⚪';
+    }[prioridade] || '⚪';
 
     const textoPrioridade = {
       alta: 'Alta',
       media: 'Média', 
       baixa: 'Baixa'
-    }[lembrete.prioridade] || 'Normal';
+    }[prioridade] || 'Normal';
     
     await ctx.reply(
       `${emojiPrioridade} **${lembrete.titulo}**\n` +
