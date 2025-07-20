@@ -1,5 +1,5 @@
 import { NextApiRequest, NextApiResponse } from 'next';
-import { processarNotificacoesPendentes, limparNotificacaoAntigas } from '@/lib/telegram/notifications/sender';
+import { processarNotificacoesPendentes } from '@/lib/telegram/notifications';
 
 export default async function handler(
   req: NextApiRequest,
@@ -8,81 +8,63 @@ export default async function handler(
   // Verificar método HTTP
   if (req.method !== 'POST') {
     return res.status(405).json({ 
-      error: 'Método não permitido',
-      allowed: ['POST'] 
+      erro: 'Método não permitido',
+      metodo_aceito: 'POST' 
     });
   }
 
   try {
-    // Verificar autenticação do cron job
+    // Verificar autenticação (security key)
     const authHeader = req.headers.authorization;
-    const expectedToken = process.env.WEBHOOK_SECURITY_KEY;
-
-    if (!authHeader || authHeader !== `Bearer ${expectedToken}`) {
-      console.warn('Tentativa de acesso não autorizado ao processador de notificações');
-      return res.status(401).json({ error: 'Não autorizado' });
+    const expectedAuth = `Bearer ${process.env.WEBHOOK_SECURITY_KEY}`;
+    
+    if (authHeader !== expectedAuth) {
+      console.log('❌ Tentativa de acesso não autorizada ao endpoint de notificações');
+      return res.status(401).json({ 
+        erro: 'Não autorizado',
+        timestamp: new Date().toISOString()
+      });
     }
 
-    console.log('🚀 Iniciando processamento de notificações via cron job...');
+    console.log('🔄 Endpoint de notificações chamado via cron job');
 
     // Processar notificações pendentes
     const resultado = await processarNotificacoesPendentes();
 
-    // Se foi passado parâmetro para limpeza, executar
-    const limparAntigas = req.query.cleanup === 'true';
-    let resultadoLimpeza = null;
-
-    if (limparAntigas) {
-      console.log('🗑️ Executando limpeza de notificações antigas...');
-      resultadoLimpeza = await limparNotificacaoAntigas(30); // 30 dias
-    }
-
-    // Preparar resposta
-    const resposta = {
+    // Retornar resultado
+    return res.status(200).json({
+      sucesso: true,
       timestamp: new Date().toISOString(),
-      status: 'sucesso',
-      processamento: {
-        notificacoes_processadas: resultado.processadas,
-        notificacoes_enviadas: resultado.enviadas,
-        erros: resultado.erros,
-        detalhes: resultado.detalhes
+      resultado: {
+        processadas: resultado.total_processadas,
+        enviadas: resultado.total_enviadas,
+        erros: resultado.total_erros,
+        tempo_ms: resultado.tempo_processamento
       },
-      ...(resultadoLimpeza && {
-        limpeza: {
-          notificacoes_removidas: resultadoLimpeza.removidas,
-          erro_limpeza: resultadoLimpeza.erro
-        }
-      })
-    };
-
-    // Log do resultado
-    console.log('📊 Resultado do processamento:', resposta);
-
-    // Status HTTP baseado no resultado
-    const statusCode = resultado.erros > 0 ? 206 : 200; // 206 = Partial Content (com erros)
-
-    return res.status(statusCode).json(resposta);
+      detalhes: {
+        notificacoes_enviadas: resultado.detalhes.enviadas,
+        erros_encontrados: resultado.detalhes.erros.map(e => ({
+          id: e.id,
+          erro: e.erro
+        }))
+      }
+    });
 
   } catch (error) {
     console.error('❌ Erro crítico no endpoint de notificações:', error);
-
+    
     return res.status(500).json({
+      sucesso: false,
+      erro: 'Erro interno do servidor',
       timestamp: new Date().toISOString(),
-      status: 'erro',
-      error: 'Erro interno do servidor',
-      details: error instanceof Error ? error.message : 'Erro desconhecido'
+      detalhes: error instanceof Error ? error.message : 'Erro desconhecido'
     });
   }
 }
 
-// Configuração para permitir processamento mais longo (útil para muitas notificações)
+// Configuração para permitir requests sem timeout muito baixo
 export const config = {
   api: {
-    bodyParser: {
-      sizeLimit: '1mb',
-    },
-    responseLimit: '8mb',
+    responseLimit: false,
   },
-  // Timeout de 30 segundos (padrão Vercel é 10s para hobby plan)
-  maxDuration: 30,
 };

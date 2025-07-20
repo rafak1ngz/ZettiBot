@@ -1,329 +1,197 @@
 import { adminSupabase } from '@/lib/supabase';
-import { 
-  ConfigNotificacaoAgenda, 
-  TipoNotificacao, 
-  CanalNotificacao,
-  TipoRecorrencia 
-} from './types';
-import { 
-  calcularHorarioNotificacao, 
-  validarMinutosAntes,
-  gerarIdNotificacao 
-} from './utils';
-import { criarTemplateAgenda } from './templates';
+import { CriarNotificacaoInput } from './types';
+import { validarDataAgendamento, timestampLog } from './utils';
 
-/**
- * Agenda uma notificação para compromisso
- */
-export async function agendarNotificacaoCompromisso(
-  config: ConfigNotificacaoAgenda
-): Promise<{ sucesso: boolean; erro?: string; notificacao_id?: string }> {
+export async function criarNotificacao(input: CriarNotificacaoInput): Promise<{ sucesso: boolean; erro?: string; id?: string }> {
   try {
-    // Validar entrada
-    if (!validarMinutosAntes(config.minutos_antes)) {
-      return { 
-        sucesso: false, 
-        erro: 'Tempo de antecedência inválido' 
-      };
-    }
-
-    // Calcular horário de envio
-    const dataEnvio = calcularHorarioNotificacao(
-      config.data_compromisso, 
-      config.minutos_antes
-    );
-
-    // Verificar se a data de envio não é no passado
-    if (dataEnvio <= new Date()) {
-      return { 
-        sucesso: false, 
-        erro: 'Horário de notificação seria no passado' 
-      };
-    }
-
-    // Criar template da mensagem
-    const template = criarTemplateAgenda({
-      titulo: config.titulo_compromisso,
-      cliente: config.cliente_nome,
-      local: config.local,
-      data: config.data_compromisso,
-      minutosAntes: config.minutos_antes
+    console.log(`${timestampLog()} - Criando notificação:`, {
+      tipo: input.tipo,
+      telegram_id: input.telegram_id,
+      agendado_para: input.agendado_para.toISOString()
     });
 
+    // Validar data de agendamento
+    const validacao = validarDataAgendamento(input.agendado_para);
+    if (!validacao.valida) {
+      return {
+        sucesso: false,
+        erro: validacao.erro
+      };
+    }
+
     // Inserir notificação no banco
-    const { data: notificacao, error } = await adminSupabase
+    const { data, error } = await adminSupabase
       .from('notificacoes')
       .insert({
-        user_id: config.user_id,
-        tipo: 'agenda' as TipoNotificacao,
-        referencia_id: config.compromisso_id,
-        titulo: template.titulo,
-        mensagem: template.mensagem,
-        data_envio: dataEnvio.toISOString(),
-        minutos_antes: config.minutos_antes,
-        canais: ['telegram'] as CanalNotificacao[],
-        recorrencia: 'unica' as TipoRecorrencia,
-        status: 'pendente'
+        user_id: input.user_id,
+        telegram_id: input.telegram_id,
+        tipo: input.tipo,
+        titulo: input.titulo,
+        mensagem: input.mensagem,
+        agendado_para: input.agendado_para.toISOString(),
+        status: 'pendente',
+        tentativas: 0,
+        metadata: input.metadata || {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       })
       .select('id')
       .single();
 
     if (error) {
-      console.error('Erro ao agendar notificação:', error);
-      return { 
-        sucesso: false, 
-        erro: 'Erro ao salvar notificação no banco' 
+      console.error(`${timestampLog()} - Erro ao criar notificação:`, error);
+      return {
+        sucesso: false,
+        erro: `Erro no banco de dados: ${error.message}`
       };
     }
 
-    // Atualizar campo notificacao_minutos no compromisso
-    const { error: updateError } = await adminSupabase
-      .from('compromissos')
-      .update({ notificacao_minutos: config.minutos_antes })
-      .eq('id', config.compromisso_id);
-
-    if (updateError) {
-      console.error('Erro ao atualizar compromisso:', updateError);
-      // Não falhar por isso, pois a notificação foi criada
-    }
-
-    return { 
-      sucesso: true, 
-      notificacao_id: notificacao.id 
+    console.log(`${timestampLog()} - Notificação criada com sucesso:`, data.id);
+    return {
+      sucesso: true,
+      id: data.id
     };
 
   } catch (error) {
-    console.error('Erro inesperado ao agendar notificação:', error);
-    return { 
-      sucesso: false, 
-      erro: 'Erro inesperado no sistema' 
+    console.error(`${timestampLog()} - Erro inesperado ao criar notificação:`, error);
+    return {
+      sucesso: false,
+      erro: `Erro inesperado: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
     };
   }
 }
 
-/**
- * Cancela notificação de compromisso
- */
-export async function cancelarNotificacaoCompromisso(
-  compromisso_id: string,
-  user_id: string
-): Promise<{ sucesso: boolean; erro?: string }> {
+export async function buscarNotificacoesPendentes(): Promise<any[]> {
   try {
-    // Cancelar notificações pendentes do compromisso
+    console.log(`${timestampLog()} - Buscando notificações pendentes...`);
+
+    const agora = new Date().toISOString();
+
+    const { data, error } = await adminSupabase
+      .from('notificacoes')
+      .select('*')
+      .eq('status', 'pendente')
+      .lte('agendado_para', agora)
+      .lt('tentativas', 3) // Máximo 3 tentativas
+      .order('agendado_para', { ascending: true })
+      .limit(50); // Processar no máximo 50 por vez
+
+    if (error) {
+      console.error(`${timestampLog()} - Erro ao buscar notificações:`, error);
+      return [];
+    }
+
+    console.log(`${timestampLog()} - Encontradas ${data?.length || 0} notificações pendentes`);
+    return data || [];
+
+  } catch (error) {
+    console.error(`${timestampLog()} - Erro inesperado ao buscar notificações:`, error);
+    return [];
+  }
+}
+
+export async function marcarNotificacaoComoEnviada(id: string): Promise<boolean> {
+  try {
     const { error } = await adminSupabase
       .from('notificacoes')
-      .update({ 
+      .update({
+        status: 'enviado',
+        enviado_em: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error(`${timestampLog()} - Erro ao marcar notificação como enviada:`, error);
+      return false;
+    }
+
+    return true;
+  } catch (error) {
+    console.error(`${timestampLog()} - Erro inesperado ao marcar como enviada:`, error);
+    return false;
+  }
+}
+
+export async function marcarNotificacaoComoErro(id: string, erroDetalhes: string): Promise<boolean> {
+  try {
+    // Buscar número atual de tentativas
+    const { data: notificacao } = await adminSupabase
+      .from('notificacoes')
+      .select('tentativas')
+      .eq('id', id)
+      .single();
+
+    const novasTentativas = (notificacao?.tentativas || 0) + 1;
+    const novoStatus = novasTentativas >= 3 ? 'erro' : 'pendente';
+
+    const { error } = await adminSupabase
+      .from('notificacoes')
+      .update({
+        status: novoStatus,
+        tentativas: novasTentativas,
+        erro_detalhes: erroDetalhes,
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', id);
+
+    if (error) {
+      console.error(`${timestampLog()} - Erro ao marcar notificação como erro:`, error);
+      return false;
+    }
+
+    console.log(`${timestampLog()} - Notificação ${id} marcada como ${novoStatus} (tentativa ${novasTentativas})`);
+    return true;
+  } catch (error) {
+    console.error(`${timestampLog()} - Erro inesperado ao marcar como erro:`, error);
+    return false;
+  }
+}
+
+export async function cancelarNotificacao(id: string): Promise<boolean> {
+  try {
+    const { error } = await adminSupabase
+      .from('notificacoes')
+      .update({
         status: 'cancelado',
         updated_at: new Date().toISOString()
       })
-      .eq('referencia_id', compromisso_id)
-      .eq('user_id', user_id)
-      .eq('status', 'pendente');
+      .eq('id', id);
 
     if (error) {
-      console.error('Erro ao cancelar notificação:', error);
-      return { 
-        sucesso: false, 
-        erro: 'Erro ao cancelar notificação' 
-      };
+      console.error(`${timestampLog()} - Erro ao cancelar notificação:`, error);
+      return false;
     }
 
-    // Remover campo de notificação do compromisso
-    const { error: updateError } = await adminSupabase
-      .from('compromissos')
-      .update({ notificacao_minutos: null })
-      .eq('id', compromisso_id);
-
-    if (updateError) {
-      console.error('Erro ao atualizar compromisso:', updateError);
-    }
-
-    return { sucesso: true };
-
+    console.log(`${timestampLog()} - Notificação ${id} cancelada`);
+    return true;
   } catch (error) {
-    console.error('Erro inesperado ao cancelar notificação:', error);
-    return { 
-      sucesso: false, 
-      erro: 'Erro inesperado no sistema' 
-    };
+    console.error(`${timestampLog()} - Erro inesperado ao cancelar notificação:`, error);
+    return false;
   }
 }
 
-/**
- * Atualiza notificação quando compromisso é editado
- */
-export async function atualizarNotificacaoCompromisso(
-  compromisso_id: string,
-  user_id: string,
-  novosDados: {
-    titulo?: string;
-    data_compromisso?: Date;
-    cliente_nome?: string;
-    local?: string;
-    minutos_antes?: number;
-  }
-): Promise<{ sucesso: boolean; erro?: string }> {
+export async function limpezaNotificacoesAntigas(): Promise<void> {
   try {
-    // Buscar notificação atual
-    const { data: notificacaoAtual, error: fetchError } = await adminSupabase
+    console.log(`${timestampLog()} - Iniciando limpeza de notificações antigas...`);
+
+    // Remover notificações enviadas há mais de 7 dias
+    const seteDiasAtras = new Date();
+    seteDiasAtras.setDate(seteDiasAtras.getDate() - 7);
+
+    const { error } = await adminSupabase
       .from('notificacoes')
-      .select('*')
-      .eq('referencia_id', compromisso_id)
-      .eq('user_id', user_id)
-      .eq('status', 'pendente')
-      .single();
-
-    if (fetchError && fetchError.code !== 'PGRST116') {
-      console.error('Erro ao buscar notificação:', fetchError);
-      return { 
-        sucesso: false, 
-        erro: 'Erro ao buscar notificação atual' 
-      };
-    }
-
-    // Se não há notificação, não há nada a fazer
-    if (!notificacaoAtual) {
-      return { sucesso: true };
-    }
-
-    // Preparar dados atualizados
-    const dadosAtualizados: any = {
-      updated_at: new Date().toISOString()
-    };
-
-    // Se mudou data ou minutos antes, recalcular data de envio
-    if (novosDados.data_compromisso || novosDados.minutos_antes) {
-      const dataCompromisso = novosDados.data_compromisso || new Date(notificacaoAtual.data_envio);
-      const minutosAntes = novosDados.minutos_antes || notificacaoAtual.minutos_antes;
-      
-      const novaDataEnvio = calcularHorarioNotificacao(dataCompromisso, minutosAntes);
-      
-      // Verificar se nova data não é no passado
-      if (novaDataEnvio <= new Date()) {
-        // Cancelar notificação se seria no passado
-        return await cancelarNotificacaoCompromisso(compromisso_id, user_id);
-      }
-      
-      dadosAtualizados.data_envio = novaDataEnvio.toISOString();
-      dadosAtualizados.minutos_antes = minutosAntes;
-    }
-
-    // Se mudou algum dado do compromisso, recriar template
-    if (novosDados.titulo || novosDados.cliente_nome || novosDados.local || novosDados.data_compromisso) {
-      const template = criarTemplateAgenda({
-        titulo: novosDados.titulo || notificacaoAtual.titulo,
-        cliente: novosDados.cliente_nome,
-        local: novosDados.local,
-        data: novosDados.data_compromisso || new Date(notificacaoAtual.data_envio),
-        minutosAntes: novosDados.minutos_antes || notificacaoAtual.minutos_antes
-      });
-      
-      dadosAtualizados.titulo = template.titulo;
-      dadosAtualizados.mensagem = template.mensagem;
-    }
-
-    // Atualizar notificação
-    const { error: updateError } = await adminSupabase
-      .from('notificacoes')
-      .update(dadosAtualizados)
-      .eq('id', notificacaoAtual.id);
-
-    if (updateError) {
-      console.error('Erro ao atualizar notificação:', updateError);
-      return { 
-        sucesso: false, 
-        erro: 'Erro ao atualizar notificação' 
-      };
-    }
-
-    return { sucesso: true };
-
-  } catch (error) {
-    console.error('Erro inesperado ao atualizar notificação:', error);
-    return { 
-      sucesso: false, 
-      erro: 'Erro inesperado no sistema' 
-    };
-  }
-}
-
-/**
- * Busca notificações pendentes para processamento
- */
-export async function buscarNotificacoesPendentes(limite: number = 50): Promise<{
-  notificacoes: any[];
-  erro?: string;
-}> {
-  try {
-    const agora = new Date();
-    const { data: notificacoes, error } = await adminSupabase
-      .from('notificacoes')
-      .select(`
-        id,
-        user_id,
-        tipo,
-        titulo,
-        mensagem,
-        data_envio,
-        tentativas,
-        users!inner(telegram_id)
-      `)
-      .eq('status', 'pendente')
-      .lte('data_envio', agora.toISOString())
-      .lt('tentativas', 3) // Máximo 3 tentativas
-      .order('data_envio', { ascending: true })
-      .limit(limite);
+      .delete()
+      .eq('status', 'enviado')
+      .lt('enviado_em', seteDiasAtras.toISOString());
 
     if (error) {
-      console.error('Erro ao buscar notificações pendentes:', error);
-      return { 
-        notificacoes: [], 
-        erro: 'Erro ao buscar notificações' 
-      };
+      console.error(`${timestampLog()} - Erro na limpeza:`, error);
+      return;
     }
 
-    return { notificacoes: notificacoes || [] };
-
+    console.log(`${timestampLog()} - Limpeza concluída`);
   } catch (error) {
-    console.error('Erro inesperado ao buscar notificações:', error);
-    return { 
-      notificacoes: [], 
-      erro: 'Erro inesperado no sistema' 
-    };
+    console.error(`${timestampLog()} - Erro inesperado na limpeza:`, error);
   }
-}
-
-/**
- * Marca notificação como enviada
- */
-export async function marcarNotificacaoEnviada(notificacao_id: string): Promise<void> {
-  await adminSupabase
-    .from('notificacoes')
-    .update({
-      status: 'enviado',
-      enviado_em: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', notificacao_id);
-}
-
-/**
- * Marca notificação com erro
- */
-export async function marcarNotificacaoErro(
-  notificacao_id: string, 
-  erro: string,
-  tentativas: number
-): Promise<void> {
-  const status = tentativas >= 3 ? 'erro' : 'pendente';
-  
-  await adminSupabase
-    .from('notificacoes')
-    .update({
-      status,
-      tentativas: tentativas + 1,
-      erro_detalhes: erro,
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', notificacao_id);
 }

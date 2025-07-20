@@ -1,150 +1,93 @@
-import { format, subMinutes, addMinutes, isAfter, isBefore } from 'date-fns';
+import { format, addMinutes, addHours, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-// Timezone padrão brasileiro
-export const DEFAULT_TIMEZONE = 'America/Sao_Paulo';
+// Timezone do Brasil (UTC-3)
+const BRASIL_TIMEZONE_OFFSET = -3;
 
-/**
- * Calcula o horário de envio da notificação
- * @param dataCompromisso Data do compromisso
- * @param minutosAntes Quantos minutos antes notificar
- * @returns Data de envio da notificação
- */
-export function calcularHorarioNotificacao(dataCompromisso: Date, minutosAntes: number): Date {
-  return subMinutes(dataCompromisso, minutosAntes);
+export function agora(): Date {
+  return new Date();
 }
 
-/**
- * Verifica se uma notificação deve ser enviada agora
- * @param dataEnvio Data programada para envio
- * @param toleranciaMinutos Tolerância em minutos (padrão: 1 minuto)
- * @returns true se deve ser enviada
- */
-export function deveEnviarNotificacao(dataEnvio: Date, toleranciaMinutos: number = 1): boolean {
-  const agora = new Date();
-  const limiteInferior = subMinutes(agora, toleranciaMinutos);
-  const limiteSuperior = addMinutes(agora, toleranciaMinutos);
+export function agoraUTC(): Date {
+  const now = new Date();
+  return new Date(now.getTime() + (now.getTimezoneOffset() * 60000));
+}
+
+export function formatarDataHora(data: Date): string {
+  return format(data, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+}
+
+export function formatarTempo(data: Date): string {
+  return format(data, 'HH:mm', { locale: ptBR });
+}
+
+export function formatarData(data: Date): string {
+  return format(data, 'dd/MM/yyyy', { locale: ptBR });
+}
+
+export function adicionarMinutos(data: Date, minutos: number): Date {
+  return addMinutes(data, minutos);
+}
+
+export function adicionarHoras(data: Date, horas: number): Date {
+  return addHours(data, horas);
+}
+
+export function adicionarDias(data: Date, dias: number): Date {
+  return addDays(data, dias);
+}
+
+export function calcularTempoAntes(dataBase: Date, minutosAntes: number): Date {
+  return adicionarMinutos(dataBase, -minutosAntes);
+}
+
+// Converter string ISO para Date considerando timezone brasileiro
+export function parseISOString(isoString: string): Date {
+  return new Date(isoString);
+}
+
+// Verificar se uma data está no passado
+export function estaNoPassado(data: Date): boolean {
+  return data < agora();
+}
+
+// Verificar se uma notificação deve ser processada agora
+export function deveProcessarAgora(agendadoPara: string): boolean {
+  const dataAgendada = parseISOString(agendadoPara);
+  const agora_atual = agora();
   
-  return isAfter(dataEnvio, limiteInferior) && isBefore(dataEnvio, limiteSuperior);
+  // Processar se a data agendada for menor ou igual ao momento atual
+  // com tolerância de 1 minuto para evitar problemas de sincronização
+  return dataAgendada <= adicionarMinutos(agora_atual, 1);
 }
 
-/**
- * Verifica se uma notificação está atrasada
- * @param dataEnvio Data programada para envio
- * @returns true se está atrasada
- */
-export function isNotificacaoAtrasada(dataEnvio: Date): boolean {
-  return isBefore(dataEnvio, new Date());
+// Gerar timestamp para logs
+export function timestampLog(): string {
+  return format(agora(), 'yyyy-MM-dd HH:mm:ss', { locale: ptBR });
 }
 
-/**
- * Formata data para exibição em notificações
- * @param data Data para formatar
- * @param incluirHora Se deve incluir hora
- * @returns String formatada
- */
-export function formatarDataNotificacao(data: Date, incluirHora: boolean = true): string {
-  const pattern = incluirHora ? "dd/MM/yyyy 'às' HH:mm" : "dd/MM/yyyy";
-  return format(data, pattern, { locale: ptBR });
+// Calcular diferença em minutos entre duas datas
+export function diferencaEmMinutos(data1: Date, data2: Date): number {
+  return Math.abs(Math.floor((data1.getTime() - data2.getTime()) / (1000 * 60)));
 }
 
-/**
- * Calcula próximo horário de recorrência
- * @param dataBase Data base para cálculo
- * @param tipoRecorrencia Tipo de recorrência
- * @returns Nova data ou null se não recorrente
- */
-export function calcularProximaRecorrencia(
-  dataBase: Date, 
-  tipoRecorrencia: 'unica' | 'diaria' | 'semanal' | 'mensal'
-): Date | null {
-  const novaData = new Date(dataBase);
-  
-  switch (tipoRecorrencia) {
-    case 'diaria':
-      novaData.setDate(novaData.getDate() + 1);
-      return novaData;
-    
-    case 'semanal':
-      novaData.setDate(novaData.getDate() + 7);
-      return novaData;
-    
-    case 'mensal':
-      novaData.setMonth(novaData.getMonth() + 1);
-      return novaData;
-    
-    default:
-      return null;
-  }
-}
-
-/**
- * Converte string de data para Date object, considerando timezone brasileiro
- * @param dataString String de data
- * @returns Date object
- */
-export function parseDataBrasil(dataString: string): Date {
-  const data = new Date(dataString);
-  
-  // Se não especificar timezone, assumir Brasil
-  if (!dataString.includes('T') || !dataString.includes('Z')) {
-    // Ajustar para timezone brasileiro se necessário
-    const offsetBrasil = -3; // UTC-3
-    const offsetLocal = data.getTimezoneOffset() / 60;
-    const diferenca = offsetBrasil - (-offsetLocal);
-    
-    if (diferenca !== 0) {
-      data.setHours(data.getHours() + diferenca);
-    }
+// Validar se uma data de agendamento é válida (não no passado)
+export function validarDataAgendamento(data: Date): { valida: boolean; erro?: string } {
+  if (estaNoPassado(data)) {
+    return {
+      valida: false,
+      erro: 'A data de agendamento não pode ser no passado'
+    };
   }
   
-  return data;
-}
-
-/**
- * Gera ID único para notificação
- * @returns String UUID-like
- */
-export function gerarIdNotificacao(): string {
-  return `notif_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-}
-
-/**
- * Valida se minutos antes é um valor válido
- * @param minutosAntes Valor a validar
- * @returns true se válido
- */
-export function validarMinutosAntes(minutosAntes: number): boolean {
-  return minutosAntes > 0 && minutosAntes <= 10080; // Máximo 1 semana
-}
-
-/**
- * Converte minutos em texto legível
- * @param minutos Quantidade de minutos
- * @returns Texto formatado
- */
-export function minutosParaTexto(minutos: number): string {
-  if (minutos < 60) {
-    return `${minutos} minuto${minutos !== 1 ? 's' : ''}`;
+  // Verificar se não está muito no futuro (mais de 30 dias)
+  const diasNoFuturo = diferencaEmMinutos(data, agora()) / (60 * 24);
+  if (diasNoFuturo > 30) {
+    return {
+      valida: false,
+      erro: 'A data de agendamento não pode ser mais de 30 dias no futuro'
+    };
   }
   
-  const horas = Math.floor(minutos / 60);
-  const minutosRestantes = minutos % 60;
-  
-  if (horas < 24) {
-    if (minutosRestantes === 0) {
-      return `${horas} hora${horas !== 1 ? 's' : ''}`;
-    } else {
-      return `${horas}h${minutosRestantes}min`;
-    }
-  }
-  
-  const dias = Math.floor(horas / 24);
-  const horasRestantes = horas % 24;
-  
-  if (horasRestantes === 0) {
-    return `${dias} dia${dias !== 1 ? 's' : ''}`;
-  } else {
-    return `${dias}d ${horasRestantes}h`;
-  }
+  return { valida: true };
 }

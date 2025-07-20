@@ -1,28 +1,37 @@
-// Tipos e interfaces
+// Exports principais do módulo de notificações
 export * from './types';
-
-// Utilitários
 export * from './utils';
-
-// Templates de mensagens
 export * from './templates';
+export * from './scheduler';
+export * from './sender';
 
-// Sistema de agendamento
-export {
-  agendarNotificacaoCompromisso,
-  cancelarNotificacaoCompromisso,
-  atualizarNotificacaoCompromisso,
+// Re-exports das funções mais usadas para facilitar importação
+export { 
+  criarNotificacao,
   buscarNotificacoesPendentes,
-  marcarNotificacaoEnviada,
-  marcarNotificacaoErro
+  marcarNotificacaoComoEnviada,
+  marcarNotificacaoComoErro,
+  cancelarNotificacao
 } from './scheduler';
 
-// Sistema de envio
-export {
+export { 
   processarNotificacoesPendentes,
   testarEnvioNotificacao,
-  limparNotificacaoAntigas
+  reprocessarNotificacoesErro
 } from './sender';
 
-// Re-export das constantes mais usadas
-export { OPCOES_TEMPO_NOTIFICACAO, NO_NOTIFICATION } from './types';
+export {
+  gerarMensagemAgenda,
+  gerarMensagemFollowup,
+  gerarMensagemLembrete,
+  gerarMensagemResumo,
+  gerarMensagemPersonalizada
+} from './templates';
+
+export {
+  agora,
+  formatarDataHora,
+  calcularTempoAntes,
+  deveProcessarAgora,
+  validarDataAgendamento
+} from './utils';

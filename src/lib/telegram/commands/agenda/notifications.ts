@@ -1,81 +1,126 @@
-// src/lib/telegram/commands/agenda/notifications.ts
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { 
-  agendarNotificacaoCompromisso,
-  cancelarNotificacaoCompromisso,
-  OPCOES_TEMPO_NOTIFICACAO,
-  NO_NOTIFICATION,
-  criarTemplateConfirmacao,
-  criarTemplateNaoNotificar
-} from '../../notifications';
+import { criarNotificacao } from '@/lib/telegram/notifications';
+import { CompromissoQuery } from '@/types/database';
 
-/**
- * Mostrar opções de notificação após confirmar compromisso
- */
-export async function mostrarOpcoesNotificacao(
-  ctx: Context,
-  compromissoId: string,
-  dadosCompromisso: {
-    titulo: string;
-    data_compromisso: string;
-    cliente_nome?: string;
-    local?: string;
-  }
-): Promise<void> {
+export async function handleConfiguracoesNotificacao(ctx: Context, compromissoId: string) {
   try {
-    // Criar botões de opções de tempo
-    const botoesNotificacao = [];
-    
-    // Primeira linha: Não notificar
-    botoesNotificacao.push([
-      Markup.button.callback(NO_NOTIFICATION.label, `agenda_notify_none_${compromissoId}`)
-    ]);
+    await ctx.editMessageText(
+      '⏰ Deseja receber lembrete deste compromisso?',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🔕 Não notificar', `notif_nao_${compromissoId}`)],
+        [
+          Markup.button.callback('⏰ 15 min antes', `notif_15m_${compromissoId}`),
+          Markup.button.callback('⏰ 30 min antes', `notif_30m_${compromissoId}`)
+        ],
+        [
+          Markup.button.callback('⏰ 1h antes', `notif_1h_${compromissoId}`),
+          Markup.button.callback('⏰ 5h antes', `notif_5h_${compromissoId}`)
+        ],
+        [
+          Markup.button.callback('⏰ 12h antes', `notif_12h_${compromissoId}`),
+          Markup.button.callback('⏰ 24h antes', `notif_24h_${compromissoId}`)
+        ],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao mostrar configurações de notificação:', error);
+    await ctx.reply('Ocorreu um erro ao configurar notificações.');
+  }
+}
 
-    // Adicionar opções de tempo em pares
-    for (let i = 0; i < OPCOES_TEMPO_NOTIFICACAO.length; i += 2) {
-      const linha = [];
-      
-      // Primeiro botão da linha
-      const opcao1 = OPCOES_TEMPO_NOTIFICACAO[i];
-      linha.push(
-        Markup.button.callback(
-          opcao1.label, 
-          `agenda_notify_${opcao1.minutos_antes}_${compromissoId}`
-        )
+export async function processarNotificacaoCompromisso(ctx: Context, tempo: string, compromissoId: string) {
+  try {
+    ctx.answerCbQuery();
+
+    if (tempo === 'nao') {
+      await ctx.editMessageText(
+        '✅ Compromisso registrado com sucesso!\n🔕 Nenhuma notificação será enviada.',
+        Markup.inlineKeyboard([
+          [
+            Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
+            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar')
+          ],
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
       );
-      
-      // Segundo botão da linha (se existir)
-      if (i + 1 < OPCOES_TEMPO_NOTIFICACAO.length) {
-        const opcao2 = OPCOES_TEMPO_NOTIFICACAO[i + 1];
-        linha.push(
-          Markup.button.callback(
-            opcao2.label, 
-            `agenda_notify_${opcao2.minutos_antes}_${compromissoId}`
-          )
-        );
-      }
-      
-      botoesNotificacao.push(linha);
+      return;
     }
 
-    await ctx.editMessageText(
-      `✅ Compromisso registrado com sucesso!\n\n` +
-      `📅 **${dadosCompromisso.titulo}**\n\n` +
-      `⏰ Deseja receber lembrete deste compromisso?`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(botoesNotificacao)
-      }
-    );
+    // Buscar dados do compromisso com cliente
+    const { data: compromisso, error } = await adminSupabase
+      .from('compromissos')
+      .select(`
+        *,
+        clientes (
+          nome_empresa
+        )
+      `)
+      .eq('id', compromissoId)
+      .single() as { data: CompromissoQuery | null, error: any };
 
-  } catch (error) {
-    console.error('Erro ao mostrar opções de notificação:', error);
+    if (error || !compromisso) {
+      console.error('Erro ao buscar compromisso:', error);
+      await ctx.reply('Erro ao configurar notificação. Compromisso não encontrado.');
+      return;
+    }
+
+    // Calcular tempo de antecedência
+    const minutosAntes = {
+      '15m': 15,
+      '30m': 30,
+      '1h': 60,
+      '5h': 300,
+      '12h': 720,
+      '24h': 1440
+    }[tempo] || 30;
+
+    const dataCompromisso = new Date(compromisso.data_compromisso);
+    const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
+
+    // Verificar se a data de notificação não está no passado
+    if (dataNotificacao <= new Date()) {
+      await ctx.editMessageText(
+        '⚠️ Este compromisso é muito próximo para enviar notificação.\n✅ Compromisso registrado sem notificação.',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
+    // CORREÇÃO: Acesso seguro aos dados do cliente
+    const nomeCliente = compromisso.clientes?.nome_empresa || 'Cliente não especificado';
     
-    // Fallback: mostrar menu básico
+    // Criar notificação usando o sistema centralizado
+    await criarNotificacao({
+      user_id: compromisso.user_id,
+      telegram_id: ctx.from!.id,
+      tipo: 'agenda',
+      titulo: 'Lembrete de Compromisso',
+      mensagem: `📅 Compromisso em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
+                `🏢 ${nomeCliente}\n` +
+                `📝 ${compromisso.titulo}\n` +
+                `⏰ ${dataCompromisso.toLocaleString('pt-BR')}\n` +
+                (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
+                (compromisso.descricao ? `💬 ${compromisso.descricao}` : ''),
+      agendado_para: dataNotificacao
+    });
+
+    // Confirmar criação da notificação
+    const tempoTexto = {
+      '15m': '15 minutos',
+      '30m': '30 minutos', 
+      '1h': '1 hora',
+      '5h': '5 horas',
+      '12h': '12 horas',
+      '24h': '24 horas'
+    }[tempo] || '30 minutos';
+
     await ctx.editMessageText(
-      '✅ Compromisso registrado com sucesso!\n\n' +
-      'O que deseja fazer agora?',
+      `✅ Compromisso registrado com sucesso!\n⏰ Você receberá um lembrete ${tempoTexto} antes.\n\n` +
+      `📅 ${compromisso.titulo}\n🏢 ${nomeCliente}`,
       Markup.inlineKeyboard([
         [
           Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
@@ -84,127 +129,9 @@ export async function mostrarOpcoesNotificacao(
         [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
       ])
     );
-  }
-}
-
-/**
- * Processar seleção de notificação
- */
-export async function processarSelecaoNotificacao(
-  ctx: Context,
-  minutosAntes: number | null,
-  compromissoId: string
-): Promise<void> {
-  try {
-    const userId = ctx.state.user?.id;
-    if (!userId) {
-      await ctx.editMessageText('Erro: Usuário não identificado.');
-      return;
-    }
-
-    // Se não quer notificação
-    if (minutosAntes === null) {
-      const mensagem = criarTemplateNaoNotificar();
-      
-      await ctx.editMessageText(
-        mensagem,
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
-            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar')
-          ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      );
-      return;
-    }
-
-    // Buscar dados do compromisso
-    const { data: compromisso, error } = await adminSupabase
-      .from('compromissos')
-      .select(`
-        id,
-        titulo,
-        data_compromisso,
-        local,
-        clientes (nome_empresa)
-      `)
-      .eq('id', compromissoId)
-      .eq('user_id', userId)
-      .single();
-
-    if (error || !compromisso) {
-      console.error('Erro ao buscar compromisso:', error);
-      await ctx.editMessageText('Erro: Compromisso não encontrado.');
-      return;
-    }
-
-    // Agendar notificação
-    const resultado = await agendarNotificacaoCompromisso({
-      compromisso_id: compromissoId,
-      user_id: userId,
-      minutos_antes: minutosAntes,
-      data_compromisso: new Date(compromisso.data_compromisso),
-      titulo_compromisso: compromisso.titulo,
-      cliente_nome: compromisso.clientes?.nome_empresa,
-      local: compromisso.local
-    });
-
-    if (!resultado.sucesso) {
-      console.error('Erro ao agendar notificação:', resultado.erro);
-      await ctx.editMessageText(
-        `❌ Erro ao agendar notificação: ${resultado.erro}\n\n` +
-        'Compromisso foi salvo, mas sem notificação.',
-        Markup.inlineKeyboard([
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      );
-      return;
-    }
-
-    // Sucesso - mostrar confirmação
-    const mensagemConfirmacao = criarTemplateConfirmacao(
-      minutosAntes,
-      compromisso.titulo
-    );
-
-    await ctx.editMessageText(
-      mensagemConfirmacao,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
-            Markup.button.callback('📋 Listar Compromissos', 'agenda_listar')
-          ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      }
-    );
 
   } catch (error) {
-    console.error('Erro ao processar seleção de notificação:', error);
-    await ctx.editMessageText(
-      '❌ Erro inesperado ao configurar notificação.\n\n' +
-      'Compromisso foi salvo, mas sem notificação.',
-      Markup.inlineKeyboard([
-        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-      ])
-    );
-  }
-}
-
-/**
- * Função auxiliar para cancelar notificações ao excluir compromisso
- */
-export async function cancelarNotificacoesCompromisso(
-  compromissoId: string,
-  userId: string
-): Promise<void> {
-  try {
-    await cancelarNotificacaoCompromisso(compromissoId, userId);
-  } catch (error) {
-    console.error('Erro ao cancelar notificações do compromisso:', error);
-    // Não falhar por isso, pois o compromisso já foi excluído
+    console.error('Erro ao processar notificação:', error);
+    await ctx.reply('Ocorreu um erro ao configurar a notificação.');
   }
 }

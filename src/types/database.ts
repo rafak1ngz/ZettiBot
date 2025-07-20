@@ -35,3 +35,41 @@ export interface Compromisso {
   created_at: string;
   updated_at: string;
 }
+
+// NOVAS INTERFACES PARA CORRIGIR O ERRO
+export interface CompromissoComCliente extends Compromisso {
+  clientes?: Cliente | null;
+}
+
+export interface CompromissoQuery {
+  id: string;
+  user_id: string;
+  cliente_id?: string;
+  titulo: string;
+  descricao?: string;
+  data_compromisso: string;
+  local?: string;
+  status: 'pendente' | 'concluido' | 'cancelado';
+  created_at: string;
+  updated_at: string;
+  clientes?: {
+    nome_empresa: string;
+  } | null;
+}
+
+// INTERFACE PARA NOTIFICAÇÕES
+export interface Notificacao {
+  id: string;
+  user_id: string;
+  telegram_id: number;
+  tipo: 'agenda' | 'followup' | 'lembrete';
+  titulo: string;
+  mensagem: string;
+  agendado_para: string;
+  status: 'pendente' | 'enviado' | 'erro';
+  tentativas: number;
+  erro_detalhes?: string;
+  enviado_em?: string;
+  created_at: string;
+  updated_at: string;
+}

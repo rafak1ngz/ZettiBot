@@ -1,240 +1,210 @@
-import { adminSupabase } from '@/lib/supabase';
+import axios from 'axios';
 import { 
-  buscarNotificacoesPendentes,
-  marcarNotificacaoEnviada,
-  marcarNotificacaoErro 
+  buscarNotificacoesPendentes, 
+  marcarNotificacaoComoEnviada, 
+  marcarNotificacaoComoErro,
+  limpezaNotificacoesAntigas 
 } from './scheduler';
+import { ResultadoProcessamento, NotificacaoProcessamento } from './types';
+import { timestampLog } from './utils';
 
-/**
- * Envia notificação via Telegram
- */
-async function enviarTelegram(
-  telegramId: number, 
-  titulo: string, 
-  mensagem: string
-): Promise<{ sucesso: boolean; erro?: string }> {
+const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
+const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
+
+async function enviarMensagemTelegram(telegramId: number, mensagem: string): Promise<boolean> {
   try {
-    const token = process.env.TELEGRAM_BOT_TOKEN;
-    
-    if (!token) {
-      throw new Error('Token do Telegram não configurado');
-    }
-
-    // Formatar mensagem
-    const textoCompleto = `*${titulo}*\n\n${mensagem}`;
-    
-    // Enviar via API do Telegram
-    const response = await fetch(`https://api.telegram.org/bot${token}/sendMessage`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        chat_id: telegramId,
-        text: textoCompleto,
-        parse_mode: 'Markdown',
-        disable_web_page_preview: true
-      }),
+    const response = await axios.post(`${TELEGRAM_API_URL}/sendMessage`, {
+      chat_id: telegramId,
+      text: mensagem,
+      parse_mode: 'HTML',
+      disable_web_page_preview: true
     });
 
-    const resultado = await response.json();
-
-    if (!response.ok || !resultado.ok) {
-      throw new Error(resultado.description || 'Erro desconhecido do Telegram');
-    }
-
-    return { sucesso: true };
-
+    return response.status === 200;
   } catch (error) {
-    console.error('Erro ao enviar Telegram:', error);
-    return { 
-      sucesso: false, 
-      erro: error instanceof Error ? error.message : 'Erro desconhecido' 
-    };
+    console.error(`${timestampLog()} - Erro ao enviar mensagem Telegram:`, error);
+    return false;
   }
 }
 
-/**
- * Envia notificação via Email (placeholder para implementação futura)
- */
-async function enviarEmail(
-  email: string, 
-  titulo: string, 
-  mensagem: string
-): Promise<{ sucesso: boolean; erro?: string }> {
-  // TODO: Implementar envio por email
-  console.log(`Email placeholder - Para: ${email}, Título: ${titulo}`);
-  
-  return { 
-    sucesso: false, 
-    erro: 'Envio por email ainda não implementado' 
-  };
-}
-
-/**
- * Processa uma notificação individual
- */
-async function processarNotificacao(notificacao: any): Promise<void> {
-  try {
-    console.log(`Processando notificação ${notificacao.id} para usuário ${notificacao.user_id}`);
-
-    const telegramId = notificacao.users?.telegram_id;
-    
-    if (!telegramId) {
-      throw new Error('Telegram ID não encontrado para o usuário');
-    }
-
-    // Enviar via Telegram
-    const resultado = await enviarTelegram(
-      telegramId,
-      notificacao.titulo,
-      notificacao.mensagem
-    );
-
-    if (resultado.sucesso) {
-      await marcarNotificacaoEnviada(notificacao.id);
-      console.log(`✅ Notificação ${notificacao.id} enviada com sucesso`);
-    } else {
-      await marcarNotificacaoErro(
-        notificacao.id, 
-        resultado.erro || 'Erro desconhecido',
-        notificacao.tentativas
-      );
-      console.log(`❌ Erro ao enviar notificação ${notificacao.id}: ${resultado.erro}`);
-    }
-
-  } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : 'Erro inesperado';
-    
-    await marcarNotificacaoErro(
-      notificacao.id,
-      errorMessage,
-      notificacao.tentativas
-    );
-    
-    console.error(`❌ Erro ao processar notificação ${notificacao.id}:`, error);
-  }
-}
-
-/**
- * Processa todas as notificações pendentes
- * Esta função é chamada pelo cron job
- */
-export async function processarNotificacoesPendentes(): Promise<{
-  processadas: number;
-  enviadas: number;
-  erros: number;
-  detalhes?: string;
-}> {
+export async function processarNotificacoesPendentes(): Promise<ResultadoProcessamento> {
   const inicioProcessamento = Date.now();
-  let processadas = 0;
-  let enviadas = 0;
-  let erros = 0;
+  
+  console.log(`${timestampLog()} - 🔄 Iniciando processamento de notificações...`);
+
+  const resultado: ResultadoProcessamento = {
+    total_processadas: 0,
+    total_enviadas: 0,
+    total_erros: 0,
+    tempo_processamento: 0,
+    detalhes: {
+      enviadas: [],
+      erros: []
+    }
+  };
 
   try {
-    console.log('🔄 Iniciando processamento de notificações...');
-
     // Buscar notificações pendentes
-    const { notificacoes, erro } = await buscarNotificacoesPendentes(50);
-
-    if (erro) {
-      return {
-        processadas: 0,
-        enviadas: 0,
-        erros: 1,
-        detalhes: `Erro ao buscar notificações: ${erro}`
-      };
-    }
+    const notificacoes = await buscarNotificacoesPendentes();
+    resultado.total_processadas = notificacoes.length;
 
     if (notificacoes.length === 0) {
-      console.log('ℹ️ Nenhuma notificação pendente encontrada');
-      return { processadas: 0, enviadas: 0, erros: 0 };
+      console.log(`${timestampLog()} - ℹ️ Nenhuma notificação pendente encontrada`);
+      resultado.tempo_processamento = Date.now() - inicioProcessamento;
+      return resultado;
     }
 
-    console.log(`📬 Encontradas ${notificacoes.length} notificações pendentes`);
+    console.log(`${timestampLog()} - 📬 Encontradas ${notificacoes.length} notificações pendentes`);
 
     // Processar cada notificação
     for (const notificacao of notificacoes) {
-      processadas++;
-      
       try {
-        await processarNotificacao(notificacao);
-        enviadas++;
+        console.log(`${timestampLog()} - 📤 Processando notificação ${notificacao.id}...`);
+
+        // Enviar mensagem via Telegram
+        const enviado = await enviarMensagemTelegram(
+          notificacao.telegram_id,
+          notificacao.mensagem
+        );
+
+        if (enviado) {
+          // Marcar como enviada
+          const marcada = await marcarNotificacaoComoEnviada(notificacao.id);
+          
+          if (marcada) {
+            resultado.total_enviadas++;
+            resultado.detalhes.enviadas.push(notificacao.id);
+            console.log(`${timestampLog()} - ✅ Notificação ${notificacao.id} enviada com sucesso`);
+          } else {
+            throw new Error('Falha ao marcar como enviada no banco');
+          }
+        } else {
+          throw new Error('Falha no envio via Telegram');
+        }
+
       } catch (error) {
-        erros++;
-        console.error(`Erro ao processar notificação ${notificacao.id}:`, error);
+        const mensagemErro = error instanceof Error ? error.message : 'Erro desconhecido';
+        
+        resultado.total_erros++;
+        resultado.detalhes.erros.push({
+          id: notificacao.id,
+          erro: mensagemErro
+        });
+
+        // Marcar como erro e incrementar tentativas
+        await marcarNotificacaoComoErro(notificacao.id, mensagemErro);
+        
+        console.error(`${timestampLog()} - ❌ Erro ao processar notificação ${notificacao.id}:`, mensagemErro);
       }
 
-      // Pequena pausa entre envios para não sobrecarregar
+      // Pequena pausa entre envios para evitar rate limiting
       await new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    const tempoProcessamento = Date.now() - inicioProcessamento;
-    
-    console.log(`✅ Processamento concluído em ${tempoProcessamento}ms:`);
-    console.log(`   📬 Processadas: ${processadas}`);
-    console.log(`   ✅ Enviadas: ${enviadas}`);
-    console.log(`   ❌ Erros: ${erros}`);
-
-    return { processadas, enviadas, erros };
-
-  } catch (error) {
-    console.error('❌ Erro crítico no processamento de notificações:', error);
-    
-    return {
-      processadas,
-      enviadas,
-      erros: erros + 1,
-      detalhes: `Erro crítico: ${error instanceof Error ? error.message : 'Erro desconhecido'}`
-    };
-  }
-}
-
-/**
- * Função de teste para envio individual
- */
-export async function testarEnvioNotificacao(
-  telegramId: number,
-  titulo: string = 'Teste ZettiBot',
-  mensagem: string = 'Esta é uma mensagem de teste do sistema de notificações.'
-): Promise<{ sucesso: boolean; erro?: string }> {
-  return await enviarTelegram(telegramId, titulo, mensagem);
-}
-
-/**
- * Limpar notificações antigas (manutenção)
- */
-export async function limparNotificacaoAntigas(diasAntigos: number = 30): Promise<{
-  removidas: number;
-  erro?: string;
-}> {
-  try {
-    const dataLimite = new Date();
-    dataLimite.setDate(dataLimite.getDate() - diasAntigos);
-
-    const { count, error } = await adminSupabase
-      .from('notificacoes')
-      .delete()
-      .in('status', ['enviado', 'erro', 'cancelado'])
-      .lt('created_at', dataLimite.toISOString());
-
-    if (error) {
-      console.error('Erro ao limpar notificações antigas:', error);
-      return { 
-        removidas: 0, 
-        erro: 'Erro ao limpar notificações antigas' 
-      };
+    // Executar limpeza de notificações antigas (uma vez por dia)
+    const agora = new Date();
+    if (agora.getHours() === 2 && agora.getMinutes() < 5) { // Entre 02:00 e 02:05
+      console.log(`${timestampLog()} - 🧹 Executando limpeza de notificações antigas...`);
+      await limpezaNotificacoesAntigas();
     }
 
-    console.log(`🗑️ Removidas ${count || 0} notificações antigas`);
+  } catch (error) {
+    console.error(`${timestampLog()} - ❌ Erro crítico no processamento:`, error);
+    resultado.total_erros = resultado.total_processadas;
+  }
+
+  resultado.tempo_processamento = Date.now() - inicioProcessamento;
+
+  // Log do resultado final
+  console.log(`${timestampLog()} - ✅ Processamento concluído em ${resultado.tempo_processamento}ms:`);
+  console.log(`   📬 Processadas: ${resultado.total_processadas}`);
+  console.log(`   ✅ Enviadas: ${resultado.total_enviadas}`);
+  console.log(`   ❌ Erros: ${resultado.total_erros}`);
+
+  return resultado;
+}
+
+export async function testarEnvioNotificacao(telegramId: number, mensagem: string): Promise<boolean> {
+  try {
+    console.log(`${timestampLog()} - 🧪 Testando envio para Telegram ID: ${telegramId}`);
     
-    return { removidas: count || 0 };
+    const enviado = await enviarMensagemTelegram(telegramId, mensagem);
+    
+    if (enviado) {
+      console.log(`${timestampLog()} - ✅ Teste de envio realizado com sucesso`);
+    } else {
+      console.log(`${timestampLog()} - ❌ Falha no teste de envio`);
+    }
+    
+    return enviado;
+  } catch (error) {
+    console.error(`${timestampLog()} - ❌ Erro no teste de envio:`, error);
+    return false;
+  }
+}
+
+// Função para reprocessar notificações com erro
+export async function reprocessarNotificacoesErro(): Promise<ResultadoProcessamento> {
+  const inicioProcessamento = Date.now();
+  
+  console.log(`${timestampLog()} - 🔄 Reprocessando notificações com erro...`);
+
+  const resultado: ResultadoProcessamento = {
+    total_processadas: 0,
+    total_enviadas: 0,
+    total_erros: 0,
+    tempo_processamento: 0,
+    detalhes: {
+      enviadas: [],
+      erros: []
+    }
+  };
+
+  try {
+    // Buscar notificações com status 'erro' e menos de 3 tentativas
+    const { data: notificacoes } = await adminSupabase
+      .from('notificacoes')
+      .select('*')
+      .eq('status', 'erro')
+      .lt('tentativas', 3)
+      .order('updated_at', { ascending: true })
+      .limit(10); // Processar no máximo 10 por vez
+
+    if (!notificacoes || notificacoes.length === 0) {
+      console.log(`${timestampLog()} - ℹ️ Nenhuma notificação para reprocessar`);
+      resultado.tempo_processamento = Date.now() - inicioProcessamento;
+      return resultado;
+    }
+
+    resultado.total_processadas = notificacoes.length;
+    console.log(`${timestampLog()} - 🔄 Reprocessando ${notificacoes.length} notificações`);
+
+    for (const notificacao of notificacoes) {
+      try {
+        // Resetar status para pendente e tentar novamente
+        await adminSupabase
+          .from('notificacoes')
+          .update({ status: 'pendente' })
+          .eq('id', notificacao.id);
+
+        resultado.total_enviadas++;
+        resultado.detalhes.enviadas.push(notificacao.id);
+        
+        console.log(`${timestampLog()} - ✅ Notificação ${notificacao.id} marcada para reprocessamento`);
+      } catch (error) {
+        const mensagemErro = error instanceof Error ? error.message : 'Erro desconhecido';
+        resultado.total_erros++;
+        resultado.detalhes.erros.push({
+          id: notificacao.id,
+          erro: mensagemErro
+        });
+      }
+    }
 
   } catch (error) {
-    console.error('Erro inesperado ao limpar notificações:', error);
-    return { 
-      removidas: 0, 
-      erro: 'Erro inesperado no sistema' 
-    };
+    console.error(`${timestampLog()} - ❌ Erro no reprocessamento:`, error);
   }
+
+  resultado.tempo_processamento = Date.now() - inicioProcessamento;
+  return resultado;
 }
