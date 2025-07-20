@@ -659,17 +659,32 @@ async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'm
 
     const session = sessions[0];
 
-    // Atualizar prioridade na sessão
+    // ✅ DEBUG: Verificar dados antes da atualização
+    console.log('=== DEBUG PRIORIDADE ===');
+    console.log('Session data antes:', session.data);
+    console.log('ID do lembrete:', session.data?.id);
+    console.log('Nova prioridade:', novaPrioridade);
+
+    // ✅ PRESERVAR todos os dados existentes + nova prioridade
+    const dadosAtualizados = {
+      ...session.data,  // Preserva tudo que já tinha
+      prioridade: novaPrioridade  // Atualiza só a prioridade
+    };
+
+    console.log('Session data depois:', dadosAtualizados);
+    console.log('=======================');
+
+    // Atualizar prioridade na sessão preservando tudo
     await adminSupabase
       .from('sessions')
       .update({
-        data: { ...session.data, prioridade: novaPrioridade },
+        data: dadosAtualizados,
         step: 'confirmar_edicao',
         updated_at: new Date().toISOString()
       })
       .eq('id', session.id);
 
-    // Mostrar confirmação
+    // Restante do código permanece igual...
     const textoPrioridade = {
       alta: '🔴 Alta - Urgente',
       media: '🟡 Média - Importante',
@@ -691,6 +706,7 @@ async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'm
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }
+
 
 // ============================================================================
 // FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE LEMBRETE
