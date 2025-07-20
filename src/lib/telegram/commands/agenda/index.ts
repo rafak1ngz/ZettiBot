@@ -13,7 +13,7 @@ import { registerAgendaCallbacks } from './callbacks';
 import { 
   handleConfiguracoesNotificacao, 
   processarNotificacaoCompromisso 
-} from './agenda/notifications';
+} from './notifications';
 
 // ============================================================================
 // REGISTRAR TODOS OS COMANDOS E CALLBACKS DE AGENDA

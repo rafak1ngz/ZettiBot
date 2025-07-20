@@ -1,4 +1,6 @@
+
 import axios from 'axios';
+import { adminSupabase } from '@/lib/supabase';
 import { 
   buscarNotificacoesPendentes, 
   marcarNotificacaoComoEnviada, 
