@@ -45,6 +45,19 @@ export function gerarMensagemAgenda(dados: TemplateAgenda): string {
   // ✅ CORREÇÃO: Converter UTC para Brasil antes de formatar
   const dataCompromissoBrasil = new Date(data_compromisso.getTime() - (3 * 60 * 60 * 1000));
   mensagem += `📅 <b>Horário:</b> ${formatarDataHora(dataCompromissoBrasil)}\n`;
+  
+  if (local) {
+    mensagem += `📍 <b>Local:</b> ${local}\n`;
+  }
+  
+  if (descricao) {
+    mensagem += `💬 <b>Observações:</b> ${descricao}\n`;
+  }
+  
+  mensagem += `\n🚀 <b>Boa sorte no seu compromisso!</b>`;
+  
+  return mensagem;
+}
 
 export function gerarMensagemFollowup(dados: TemplateFollowup): string {
   const { cliente_nome, dias_sem_contato, ultimo_contato } = dados;
