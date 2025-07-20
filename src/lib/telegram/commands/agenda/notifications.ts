@@ -122,7 +122,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
     const dataNotificacao = new Date(dataCompromissoUTC.getTime() - (minutosAntes * 60 * 1000));
     
     console.log('Data da notificação:', dataNotificacao.toLocaleString('pt-BR'));
-    console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
+    console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agoraUTC.getTime()) / (1000 * 60)));
     console.log('================================');
 
     // CORREÇÃO: Acesso seguro aos dados do cliente
