@@ -1,7 +1,11 @@
 {
   "name": "zettibot",
-  "version": "0.1.0",
+  "version": "1.0.0",
+  "description": "Assistente Digital de Vendas para Telegram - Gestão completa de clientes, agenda e notificações",
   "private": true,
+  "keywords": ["telegram", "bot", "vendas", "crm", "agenda", "notificações"],
+  "author": "Rafael Dantas <contato@zettibot.com>",
+  "license": "MIT",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
