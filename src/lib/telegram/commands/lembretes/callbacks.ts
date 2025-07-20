@@ -483,8 +483,27 @@ export function registerLembretesCallbacks(bot: Telegraf) {
       
       const session = sessions[0];
       const lembreteData = session.data;
+
+      // ✅ VALIDAÇÕES DE SEGURANÇA
+      if (!lembreteData.id || lembreteData.id === 'undefined') {
+        console.error('ID do lembrete inválido:', lembreteData.id);
+        await ctx.reply('Erro: Lembrete não identificado. Por favor, tente novamente.');
+        return;
+      }
       
-      // Atualizar lembrete no banco
+      if (!session.user_id || session.user_id === 'undefined') {
+        console.error('User ID inválido:', session.user_id);
+        await ctx.reply('Erro: Usuário não identificado. Por favor, faça login novamente.');
+        return;
+      }
+      
+      console.log('=== DEBUG LEMBRETE SAVE ===');
+      console.log('Lembrete ID:', lembreteData.id);
+      console.log('User ID:', session.user_id);
+      console.log('Dados:', lembreteData);
+      console.log('===========================');      
+      
+      // ATUALIZAR com IDs validados
       const { error: updateError } = await adminSupabase
         .from('lembretes')
         .update({
@@ -524,6 +543,7 @@ export function registerLembretesCallbacks(bot: Telegraf) {
     }
   });
 
+  
   bot.action('lembrete_continuar_editando', async (ctx) => {
     try {
       ctx.answerCbQuery();
