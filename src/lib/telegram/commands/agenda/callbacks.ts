@@ -1,18 +1,20 @@
 import { Context, Markup, Telegraf } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   handleNovoCompromisso, 
   handleVincularCliente,
   handleSemCliente,
   handleListarCompromissos,
-  handleSelecionarCliente 
+  handleSelecionarCliente,
+  mostrarCompromissosPaginados   
 } from './handlers';
 import { 
   handleConfiguracoesNotificacao, 
   processarNotificacaoCompromisso 
 } from './notifications';
+
 
 export function registerAgendaCallbacks(bot: Telegraf) {
   // Callbacks para o menu da agenda
@@ -760,5 +762,46 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   });  
+
+  // ✅ NOVO: Callback para paginação de compromissos
+  bot.action(/agenda_pagina_(\d+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      
+      const pagina = parseInt(ctx.match[1]);
+      const userId = ctx.state.user?.id;
+      
+      if (!userId) {
+        return ctx.reply('Sessão expirada. Por favor, tente novamente.');
+      }
+
+      // Buscar todos os compromissos novamente
+      const { data: compromissos, error } = await adminSupabase
+        .from('compromissos')
+        .select(`
+          id,
+          titulo,
+          descricao,
+          data_compromisso,
+          local,
+          status,
+          clientes (nome_empresa)
+        `)
+        .eq('user_id', userId)
+        .eq('status', 'pendente')
+        .order('data_compromisso', { ascending: true });
+
+      if (error || !compromissos) {
+        return ctx.reply('Erro ao carregar compromissos.');
+      }
+
+      // Mostrar página solicitada
+      await mostrarCompromissosPaginados(ctx, compromissos, pagina);
+      
+    } catch (error) {
+      console.error('Erro na paginação de compromissos:', error);
+      await ctx.reply('Ocorreu um erro ao navegar.');
+    }
+  });
 
 }

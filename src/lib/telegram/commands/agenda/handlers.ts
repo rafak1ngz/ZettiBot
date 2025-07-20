@@ -185,22 +185,27 @@ export async function handleListarCompromissos(ctx: Context) {
       return ctx.reply('Você precisa estar autenticado para usar este comando.');
     }
 
-    const loadingMsg = await ctx.reply('⏳ Buscando seus compromissos...');    
+    // ✅ LOADING STATE
+    const loadingMsg = await ctx.reply('⏳ Buscando seus compromissos...');
 
-    // Buscar compromissos pendentes
+    // ✅ CORREÇÃO: Buscar TODOS os compromissos pendentes (sem limit)
     const { data: compromissos, error } = await adminSupabase
       .from('compromissos')
       .select(`
-        *,
+        id,
+        titulo,
+        descricao,
+        data_compromisso,
+        local,
+        status,
         clientes (nome_empresa)
       `)
       .eq('user_id', userId)
       .eq('status', 'pendente')
-      .order('data_compromisso', { ascending: true })
-      .limit(5);
+      .order('data_compromisso', { ascending: true });
+      // ✅ REMOVIDO: .limit(5)
 
     if (error) {
-      // ✅ EDITAR mensagem de loading
       await ctx.editMessageText('❌ Erro ao buscar compromissos. Tente novamente.');
       return;
     }
@@ -215,47 +220,82 @@ export async function handleListarCompromissos(ctx: Context) {
       );
     }
 
-    await ctx.deleteMessage(loadingMsg.message_id);    
+    // ✅ DELETAR mensagem de loading
+    await ctx.deleteMessage(loadingMsg.message_id);
 
-    // Mostrar lista de compromissos
-    await ctx.reply('📅 Seus próximos compromissos:');
+    // ✅ CORREÇÃO: Mostrar com paginação se tiver mais de 5
+    await mostrarCompromissosPaginados(ctx, compromissos, 0);
 
-    for (const compromisso of compromissos) {
-      const data = new Date(compromisso.data_compromisso);
-      const dataFormatada = format(data, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-      
-      const clienteNome = compromisso.clientes ? compromisso.clientes.nome_empresa : 'Sem cliente';
-      
-      await ctx.reply(
-        `📌 ${compromisso.titulo}\n` +
-        `📆 ${dataFormatada}\n` +
-        `👥 ${clienteNome}\n` +
-        (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
-        (compromisso.descricao ? `📝 ${compromisso.descricao}` : ''),
-        Markup.inlineKeyboard([
-          [
-            Markup.button.callback('✏️ Editar', `agenda_editar_${compromisso.id}`),
-            Markup.button.callback('✅ Concluído', `agenda_concluir_${compromisso.id}`),
-            Markup.button.callback('❌ Cancelar', `agenda_cancelar_${compromisso.id}`)
-          ]
-        ])
-      );
-    }
-
-    await ctx.reply(
-      'O que deseja fazer?',
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
-          Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-        ]
-      ])
-    );
   } catch (error) {
     console.error('Erro ao listar compromissos:', error);
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 }
+
+// ✅ NOVA FUNÇÃO: Paginação de compromissos
+async function mostrarCompromissosPaginados(ctx: Context, todosCompromissos: any[], pagina: number) {
+  const compromissosPorPagina = 5;
+  const inicio = pagina * compromissosPorPagina;
+  const fim = inicio + compromissosPorPagina;
+  const compromissosPagina = todosCompromissos.slice(inicio, fim);
+  const totalPaginas = Math.ceil(todosCompromissos.length / compromissosPorPagina);
+
+  // ✅ CABEÇALHO com contador
+  await ctx.reply(`📅 Seus compromissos (${pagina + 1}/${totalPaginas}) - Total: ${todosCompromissos.length}`);
+
+  // ✅ MOSTRAR compromissos da página atual
+  for (const compromisso of compromissosPagina) {
+    // ✅ CORREÇÃO: Converter UTC para Brasil na exibição
+    const dataUTC = new Date(compromisso.data_compromisso);
+    const dataBrasil = new Date(dataUTC.getTime() - (3 * 60 * 60 * 1000));
+    const dataFormatada = format(dataBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    
+    const clienteNome = compromisso.clientes ? compromisso.clientes.nome_empresa : 'Sem cliente';
+    
+    await ctx.reply(
+      `📌 ${compromisso.titulo}\n` +
+      `📆 ${dataFormatada}\n` +
+      `👥 ${clienteNome}\n` +
+      (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
+      (compromisso.descricao ? `📝 ${compromisso.descricao}` : ''),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('✏️ Editar', `agenda_editar_${compromisso.id}`),
+          Markup.button.callback('✅ Concluído', `agenda_concluir_${compromisso.id}`),
+          Markup.button.callback('❌ Cancelar', `agenda_cancelar_${compromisso.id}`)
+        ]
+      ])
+    );
+  }
+
+  // ✅ BOTÕES de navegação
+  const botoesNavegacao = [];
+  
+  // Botões de paginação
+  const botoesPaginacao = [];
+  if (pagina > 0) {
+    botoesPaginacao.push(Markup.button.callback('⬅️ Anterior', `agenda_pagina_${pagina - 1}`));
+  }
+  if (pagina < totalPaginas - 1) {
+    botoesPaginacao.push(Markup.button.callback('➡️ Próxima', `agenda_pagina_${pagina + 1}`));
+  }
+  
+  if (botoesPaginacao.length > 0) {
+    botoesNavegacao.push(botoesPaginacao);
+  }
+
+  // Botões de ação
+  botoesNavegacao.push([
+    Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
+    Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+  ]);
+
+  await ctx.reply(
+    'O que deseja fazer?',
+    Markup.inlineKeyboard(botoesNavegacao)
+  );
+}
+
 
 // ============================================================================
 // EDITAR COMPROMISSO EXISTENTE
@@ -360,3 +400,5 @@ export async function mostrarConfirmacaoEdicao(ctx: Context, compromissoData: an
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }
+
+export { mostrarCompromissosPaginados };
