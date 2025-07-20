@@ -308,21 +308,41 @@ async function handleEditData(ctx: Context, session: any, dataTexto: string): Pr
     return true;
   }
 
-  // Manter a hora atual
-  const dataAtual = new Date(session.data.data_compromisso);
-  const novaData = new Date(data);
-  novaData.setHours(dataAtual.getHours(), dataAtual.getMinutes(), 0, 0);
+  // ✅ CORREÇÃO: Manter hora atual mas converter para UTC corretamente
+  const dataAtualUTC = new Date(session.data.data_compromisso);
+  
+  // Converter data atual UTC para Brasil para pegar hora
+  const dataAtualBrasil = new Date(dataAtualUTC.getTime() - (3 * 60 * 60 * 1000));
+  
+  // Criar nova data brasileira com nova data mas mesma hora
+  const novaDataBrasil = new Date(
+    data.getFullYear(),
+    data.getMonth(),
+    data.getDate(),
+    dataAtualBrasil.getHours(),
+    dataAtualBrasil.getMinutes(),
+    0,
+    0
+  );
+  
+  // ✅ Converter para UTC (adicionar 3h)
+  const novaDataUTC = new Date(novaDataBrasil.getTime() + (3 * 60 * 60 * 1000));
+
+  console.log('=== DEBUG EDIT DATA ===');
+  console.log('Nova data Brasil:', novaDataBrasil.toLocaleString('pt-BR'));
+  console.log('Nova data UTC:', novaDataUTC.toISOString());
+  console.log('=====================');
 
   await adminSupabase
     .from('sessions')
     .update({
-      data: { ...session.data, data_compromisso: novaData.toISOString() },
+      data: { ...session.data, data_compromisso: novaDataUTC.toISOString() },
       step: 'confirmar_edicao',
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
-  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaData.toISOString() });
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaDataUTC.toISOString() });
   return true;
 }
 
@@ -334,20 +354,42 @@ async function handleEditHora(ctx: Context, session: any, horaTexto: string): Pr
     return true;
   }
 
-  const dataAtual = new Date(session.data.data_compromisso);
-  const novaData = new Date(dataAtual);
-  novaData.setHours(horaData.horas, horaData.minutos, 0, 0);
+  // ✅ CORREÇÃO: Usar processo correto de conversão UTC
+  const dataAtualUTC = new Date(session.data.data_compromisso);
+  
+  // Converter para Brasil para pegar a data
+  const dataAtualBrasil = new Date(dataAtualUTC.getTime() - (3 * 60 * 60 * 1000));
+  
+  // Criar nova data brasileira com nova hora
+  const novaDataBrasil = new Date(
+    dataAtualBrasil.getFullYear(),
+    dataAtualBrasil.getMonth(),
+    dataAtualBrasil.getDate(),
+    horaData.horas,
+    horaData.minutos,
+    0,
+    0
+  );
+  
+  // ✅ Converter para UTC (adicionar 3h)
+  const novaDataUTC = new Date(novaDataBrasil.getTime() + (3 * 60 * 60 * 1000));
+
+  console.log('=== DEBUG EDIT HORA ===');
+  console.log('Hora digitada:', horaTexto);
+  console.log('Nova data Brasil:', novaDataBrasil.toLocaleString('pt-BR'));
+  console.log('Nova data UTC:', novaDataUTC.toISOString());
+  console.log('======================');
 
   await adminSupabase
     .from('sessions')
     .update({
-      data: { ...session.data, data_compromisso: novaData.toISOString() },
+      data: { ...session.data, data_compromisso: novaDataUTC.toISOString() },
       step: 'confirmar_edicao',
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
-  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaData.toISOString() });
+  await mostrarConfirmacaoEdicao(ctx, { ...session.data, data_compromisso: novaDataUTC.toISOString() });
   return true;
 }
 
@@ -406,8 +448,10 @@ function parseHoraTexto(horaTexto: string): { horas: number; minutos: number } |
 
 async function mostrarConfirmacaoEdicao(ctx: Context, dados: any): Promise<void> {
   try {
-    const dataHora = new Date(dados.data_compromisso);
-    const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    // ✅ CORREÇÃO: Converter UTC para Brasil para exibição
+    const dataHoraUTC = new Date(dados.data_compromisso);
+    const dataHoraBrasil = new Date(dataHoraUTC.getTime() - (3 * 60 * 60 * 1000));
+    const dataFormatada = format(dataHoraBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
     const clienteInfo = dados.nome_cliente 
       ? `👥 Cliente: ${dados.nome_cliente}\n`
       : '';
