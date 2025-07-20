@@ -76,25 +76,22 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       '24h': 1440
     }[tempo] || 30;
 
-    // ✅ CORREÇÃO DEFINITIVA: Tudo em UTC
-    const agoraUTC = new Date(); // Já está em UTC no servidor
-    const dataCompromissoUTC = new Date(compromisso.data_compromisso); // Vem do banco em UTC
+    // ✅ VERSÃO LIMPA: Trabalhar apenas com datas locais
+    const agora = new Date();
+    const dataCompromisso = new Date(compromisso.data_compromisso);
 
-    // ✅ DEBUG: Logs para verificar
-    console.log('=== DEBUG NOTIFICAÇÃO UTC ===');
-    console.log('Agora UTC (servidor):', agoraUTC.toISOString());
-    console.log('Compromisso UTC (banco):', dataCompromissoUTC.toISOString());
-    console.log('Agora Brasil:', new Date(agoraUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR'));
-    console.log('Compromisso Brasil:', new Date(dataCompromissoUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR'));
-    console.log('Minutos antes:', minutosAntes);
+    console.log('=== DEBUG NOTIFICAÇÃO LIMPA ===');
+    console.log('Agora (local):', agora.toLocaleString('pt-BR'));
+    console.log('Compromisso (do banco):', dataCompromisso.toLocaleString('pt-BR'));
+    console.log('Minutos antes solicitados:', minutosAntes);
 
-    // ✅ CÁLCULO: Diferença de tempo em UTC
-    const diferencaMinutos = Math.floor((dataCompromissoUTC.getTime() - agoraUTC.getTime()) / (1000 * 60));
+    // ✅ CÁLCULO: Diferença de tempo em minutos
+    const diferencaMinutos = Math.floor((dataCompromisso.getTime() - agora.getTime()) / (1000 * 60));
     console.log('Diferença até compromisso (minutos):', diferencaMinutos);
-    console.log('============================');
 
-    // ✅ CORREÇÃO: Verificar se o compromisso não está no passado
+    // ✅ VALIDAÇÃO 1: Verificar se o compromisso não está no passado
     if (diferencaMinutos <= 0) {
+      console.log('❌ Compromisso no passado ou acontecendo agora');
       await ctx.editMessageText(
         `⚠️ Este compromisso já passou ou está acontecendo agora.\n\n` +
         `✅ Compromisso registrado sem notificação.`,
@@ -105,8 +102,9 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       return;
     }
     
-    // ✅ CORREÇÃO: Verificar se há tempo suficiente para a notificação
+    // ✅ VALIDAÇÃO 2: Verificar se há tempo suficiente para a notificação
     if (diferencaMinutos <= minutosAntes) {
+      console.log('❌ Muito próximo para notificação');
       await ctx.editMessageText(
         `⚠️ Este compromisso é muito próximo para enviar notificação de ${minutosAntes} minutos antes.\n\n` +
         `⏰ Restam apenas ${diferencaMinutos} minutos até o compromisso.\n\n` +
@@ -118,17 +116,18 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       return;
     }
 
-    // ✅ CORREÇÃO: Calcular data de notificação corretamente
-    const dataNotificacao = new Date(dataCompromissoUTC.getTime() - (minutosAntes * 60 * 1000));
+    // ✅ CÁLCULO: Data da notificação
+    const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
     
     console.log('Data da notificação:', dataNotificacao.toLocaleString('pt-BR'));
-    console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agoraUTC.getTime()) / (1000 * 60)));
-    console.log('================================');
+    console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
+    console.log('✅ Tudo OK para criar notificação');
+    console.log('===============================');
 
-    // CORREÇÃO: Acesso seguro aos dados do cliente
+    // ✅ DADOS: Nome do cliente
     const nomeCliente = compromisso.clientes?.nome_empresa || 'Cliente não especificado';
     
-    // Criar notificação usando o sistema centralizado
+    // ✅ CRIAR: Notificação no sistema
     const resultadoNotificacao = await criarNotificacao({
       user_id: compromisso.user_id,
       telegram_id: ctx.from!.id,
@@ -137,13 +136,13 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       mensagem: `📅 Compromisso em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
                 `🏢 ${nomeCliente}\n` +
                 `📝 ${compromisso.titulo}\n` +
-                `⏰ ${new Date(dataCompromissoUTC.getTime() - 3 * 60 * 60 * 1000).toLocaleString('pt-BR')}\n` +
+                `⏰ ${dataCompromisso.toLocaleString('pt-BR')}\n` +
                 (compromisso.local ? `📍 ${compromisso.local}\n` : '') +
                 (compromisso.descricao ? `💬 ${compromisso.descricao}` : ''),
       agendado_para: dataNotificacao
     });
 
-    // ✅ VERIFICAR se a notificação foi criada com sucesso
+    // ✅ VERIFICAR: Se a notificação foi criada com sucesso
     if (!resultadoNotificacao.sucesso) {
       console.error('Erro ao criar notificação:', resultadoNotificacao.erro);
       await ctx.editMessageText(
@@ -155,7 +154,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       return;
     }
 
-    // Confirmar criação da notificação
+    // ✅ SUCESSO: Confirmar criação da notificação
     const tempoTexto = {
       '15m': '15 minutos',
       '30m': '30 minutos', 

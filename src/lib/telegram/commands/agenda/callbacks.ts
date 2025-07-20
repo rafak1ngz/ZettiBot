@@ -641,10 +641,13 @@ export function registerAgendaCallbacks(bot: Telegraf) {
           `⚠️ Como você alterou a data/horário, vamos configurar as notificações novamente.`
         );
         
-        // Pequena pausa para o usuário ler
-        setTimeout(async () => {
+        try {
+          const { handleConfiguracoesNotificacao } = await import('./notifications');
           await handleConfiguracoesNotificacao(ctx, compromissoData.id);
-        }, 1500);
+        } catch (error) {
+          console.error('Erro ao mostrar configurações de notificação:', error);
+          await ctx.reply('Erro ao configurar notificações. Por favor, tente novamente.');
+        }
         
       } else {
         // ✅ SÓ CONFIRMAR: Sucesso sem perguntar notificação
