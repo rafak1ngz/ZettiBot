@@ -94,8 +94,7 @@ export function registerLembretesCallbacks(bot: Telegraf) {
       const { error } = await adminSupabase
         .from('lembretes')
         .update({
-          status: 'cancelado',
-          updated_at: new Date().toISOString()
+          status: 'cancelado'
         })
         .eq('id', lembreteId)
         .eq('user_id', userId);
@@ -492,8 +491,7 @@ export function registerLembretesCallbacks(bot: Telegraf) {
           titulo: lembreteData.titulo,
           descricao: lembreteData.descricao || null,
           data_lembrete: lembreteData.data_lembrete,
-          prioridade: lembreteData.prioridade,
-          updated_at: new Date().toISOString()
+          prioridade: lembreteData.prioridade
         })
         .eq('id', lembreteData.id)
         .eq('user_id', session.user_id);

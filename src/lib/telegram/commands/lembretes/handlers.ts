@@ -212,7 +212,6 @@ export async function handleConcluirLembrete(ctx: Context, lembreteId: string) {
       .from('lembretes')
       .update({
         status: 'concluido',
-        updated_at: new Date().toISOString()
       })
       .eq('id', lembreteId)
       .eq('user_id', userId);
