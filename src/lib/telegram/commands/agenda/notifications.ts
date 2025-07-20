@@ -78,11 +78,27 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
 
     const dataCompromisso = new Date(compromisso.data_compromisso);
     const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
+    const agora = new Date();
 
-    // Verificar se a data de notificação não está no passado
-    if (dataNotificacao <= new Date()) {
+    // ✅ DEBUG: Adicionar logs para entender o problema
+    console.log('=== DEBUG NOTIFICAÇÃO ===');
+    console.log('Data do compromisso:', dataCompromisso.toISOString());
+    console.log('Minutos antes:', minutosAntes);
+    console.log('Data da notificação:', dataNotificacao.toISOString());
+    console.log('Data atual:', agora.toISOString());
+    console.log('Diferença em minutos:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
+    console.log('========================');
+
+    // ✅ CORREÇÃO: Adicionar margem de segurança de 2 minutos
+    const tempoMinimoSeguranca = new Date(agora.getTime() + (2 * 60 * 1000)); // 2 minutos no futuro
+
+    if (dataNotificacao <= tempoMinimoSeguranca) {
+      const minutosRestantes = Math.floor((dataCompromisso.getTime() - agora.getTime()) / (1000 * 60));
+      
       await ctx.editMessageText(
-        '⚠️ Este compromisso é muito próximo para enviar notificação.\n✅ Compromisso registrado sem notificação.',
+        `⚠️ Este compromisso é muito próximo para enviar notificação de ${minutosAntes} minutos antes.\n\n` +
+        `⏰ Restam apenas ${minutosRestantes} minutos até o compromisso.\n\n` +
+        `✅ Compromisso registrado sem notificação.`,
         Markup.inlineKeyboard([
           [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
         ])
@@ -94,7 +110,7 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
     const nomeCliente = compromisso.clientes?.nome_empresa || 'Cliente não especificado';
     
     // Criar notificação usando o sistema centralizado
-    await criarNotificacao({
+    const resultadoNotificacao = await criarNotificacao({
       user_id: compromisso.user_id,
       telegram_id: ctx.from!.id,
       tipo: 'agenda',
@@ -108,6 +124,18 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       agendado_para: dataNotificacao
     });
 
+    // ✅ VERIFICAR se a notificação foi criada com sucesso
+    if (!resultadoNotificacao.sucesso) {
+      console.error('Erro ao criar notificação:', resultadoNotificacao.erro);
+      await ctx.editMessageText(
+        `❌ Erro ao agendar notificação: ${resultadoNotificacao.erro}\n\n✅ Compromisso registrado sem notificação.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
     // Confirmar criação da notificação
     const tempoTexto = {
       '15m': '15 minutos',
@@ -120,7 +148,8 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
 
     await ctx.editMessageText(
       `✅ Compromisso registrado com sucesso!\n⏰ Você receberá um lembrete ${tempoTexto} antes.\n\n` +
-      `📅 ${compromisso.titulo}\n🏢 ${nomeCliente}`,
+      `📅 ${compromisso.titulo}\n🏢 ${nomeCliente}\n\n` +
+      `🔔 Notificação agendada para: ${dataNotificacao.toLocaleString('pt-BR')}`,
       Markup.inlineKeyboard([
         [
           Markup.button.callback('➕ Novo Compromisso', 'agenda_novo'),
