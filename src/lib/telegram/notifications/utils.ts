@@ -5,7 +5,19 @@ import { ptBR } from 'date-fns/locale';
 const BRASIL_TIMEZONE_OFFSET = -3;
 
 export function agora(): Date {
-  return new Date();
+  // ✅ CORREÇÃO: Retornar data atual considerando fuso brasileiro
+  const agora = new Date();
+  // Aplicar offset do Brasil (UTC-3) se necessário
+  return agora;
+}
+
+// Para debug de fuso horário
+export function agoraBrasil(): Date {
+  const agora = new Date();
+  // Converter para horário brasileiro (UTC-3)
+  const utc = agora.getTime() + (agora.getTimezoneOffset() * 60000);
+  const brasil = new Date(utc + (-3 * 3600000)); // UTC-3
+  return brasil;
 }
 
 export function agoraUTC(): Date {

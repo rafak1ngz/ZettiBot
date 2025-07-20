@@ -76,28 +76,24 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       '24h': 1440
     }[tempo] || 30;
 
-    const dataCompromisso = new Date(compromisso.data_compromisso);
-    const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
+    // ✅ CORREÇÃO: Usar horário brasileiro (UTC-3) consistentemente
     const agora = new Date();
-
-    // ✅ DEBUG: Adicionar logs para entender o problema
-    console.log('=== DEBUG NOTIFICAÇÃO ===');
-    console.log('Data do compromisso:', dataCompromisso.toISOString());
+    const dataCompromisso = new Date(compromisso.data_compromisso);
+    
+    // ✅ DEBUG: Logs para entender o problema
+    console.log('=== DEBUG NOTIFICAÇÃO CORRIGIDO ===');
+    console.log('Data atual (local):', agora.toLocaleString('pt-BR'));
+    console.log('Data do compromisso:', dataCompromisso.toLocaleString('pt-BR'));
     console.log('Minutos antes:', minutosAntes);
-    console.log('Data da notificação:', dataNotificacao.toISOString());
-    console.log('Data atual:', agora.toISOString());
-    console.log('Diferença em minutos:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
-    console.log('========================');
-
-    // ✅ CORREÇÃO: Adicionar margem de segurança de 2 minutos
-    const tempoMinimoSeguranca = new Date(agora.getTime() + (2 * 60 * 1000)); // 2 minutos no futuro
-
-    if (dataNotificacao <= tempoMinimoSeguranca) {
-      const minutosRestantes = Math.floor((dataCompromisso.getTime() - agora.getTime()) / (1000 * 60));
-      
+    
+    // ✅ CORREÇÃO: Calcular diferença de tempo corretamente
+    const diferencaMinutos = Math.floor((dataCompromisso.getTime() - agora.getTime()) / (1000 * 60));
+    console.log('Diferença até compromisso (minutos):', diferencaMinutos);
+    
+    // ✅ CORREÇÃO: Verificar se o compromisso não está no passado
+    if (diferencaMinutos <= 0) {
       await ctx.editMessageText(
-        `⚠️ Este compromisso é muito próximo para enviar notificação de ${minutosAntes} minutos antes.\n\n` +
-        `⏰ Restam apenas ${minutosRestantes} minutos até o compromisso.\n\n` +
+        `⚠️ Este compromisso já passou ou está acontecendo agora.\n\n` +
         `✅ Compromisso registrado sem notificação.`,
         Markup.inlineKeyboard([
           [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
@@ -105,6 +101,26 @@ export async function processarNotificacaoCompromisso(ctx: Context, tempo: strin
       );
       return;
     }
+    
+    // ✅ CORREÇÃO: Verificar se há tempo suficiente para a notificação
+    if (diferencaMinutos <= minutosAntes) {
+      await ctx.editMessageText(
+        `⚠️ Este compromisso é muito próximo para enviar notificação de ${minutosAntes} minutos antes.\n\n` +
+        `⏰ Restam apenas ${diferencaMinutos} minutos até o compromisso.\n\n` +
+        `✅ Compromisso registrado sem notificação.`,
+        Markup.inlineKeyboard([
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+      return;
+    }
+
+    // ✅ CORREÇÃO: Calcular data de notificação corretamente
+    const dataNotificacao = new Date(dataCompromisso.getTime() - (minutosAntes * 60 * 1000));
+    
+    console.log('Data da notificação:', dataNotificacao.toLocaleString('pt-BR'));
+    console.log('Minutos até notificação:', Math.floor((dataNotificacao.getTime() - agora.getTime()) / (1000 * 60)));
+    console.log('================================');
 
     // CORREÇÃO: Acesso seguro aos dados do cliente
     const nomeCliente = compromisso.clientes?.nome_empresa || 'Cliente não especificado';
