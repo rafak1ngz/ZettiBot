@@ -563,6 +563,7 @@ export function registerLembretesCallbacks(bot: Telegraf) {
     }
   });
 
+  // 🔥 VERSÃO CORRIGIDA - SEM ERRO DE TYPESCRIPT
   bot.action('lembrete_finalizar_edicao', async (ctx) => {
     try {
       ctx.answerCbQuery();
@@ -586,11 +587,13 @@ export function registerLembretesCallbacks(bot: Telegraf) {
       const dataLembreteBrasil = new Date(dataLembreteUTC.getTime() - (3 * 60 * 60 * 1000));
       const dataFormatada = dataLembreteBrasil.toLocaleString('pt-BR');
       
+      // 🔥 CORREÇÃO: Garantir tipo correto para evitar erro TypeScript
+      const prioridade = lembreteData.prioridade as 'alta' | 'media' | 'baixa';
       const textoPrioridade = {
         alta: '🔴 Alta - Urgente',
         media: '🟡 Média - Importante',
         baixa: '🔵 Baixa - Quando possível'
-      }[lembreteData.prioridade] || '⚪ Normal';
+      }[prioridade] || '⚪ Normal';
         
       await ctx.editMessageText(
         `📋 Confirme as alterações do lembrete:\n\n` +
@@ -730,6 +733,10 @@ async function processarNotificacaoLembrete(ctx: any, tempo: string, lembreteId:
     
     const dataNotificacao = new Date(dataLembreteUTC.getTime() - (minutosAntes * 60 * 1000));
     
+    // 🔥 CORREÇÃO: Garantir tipo correto para prioridade
+    const prioridade = lembrete.prioridade as 'alta' | 'media' | 'baixa';
+    const prioridadeTexto = prioridade.charAt(0).toUpperCase() + prioridade.slice(1);
+    
     const resultadoNotificacao = await criarNotificacao({
       user_id: lembrete.user_id,
       telegram_id: ctx.from!.id,
@@ -737,7 +744,7 @@ async function processarNotificacaoLembrete(ctx: any, tempo: string, lembreteId:
       titulo: 'Lembrete Agendado',
       mensagem: `🔔 Lembrete em ${minutosAntes < 60 ? minutosAntes + ' minutos' : minutosAntes/60 + ' hora(s)'}!\n\n` +
                 `📝 ${lembrete.titulo}\n` +
-                `🎯 Prioridade: ${lembrete.prioridade.charAt(0).toUpperCase() + lembrete.prioridade.slice(1)}\n` +
+                `🎯 Prioridade: ${prioridadeTexto}\n` +
                 (lembrete.descricao ? `💬 ${lembrete.descricao}` : ''),
       agendado_para: dataNotificacao
     });
