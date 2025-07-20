@@ -143,6 +143,12 @@ export function registerLembretesCallbacks(bot: Telegraf) {
         return;
       }
 
+      console.log('=== DEBUG INÍCIO EDIÇÃO ===');
+      console.log('Lembrete encontrado:', lembrete);
+      console.log('ID do lembrete:', lembrete.id);
+      console.log('Tipo do ID:', typeof lembrete.id);
+      console.log('===============================');      
+
       // Criar sessão para edição
       await adminSupabase
         .from('sessions')
@@ -497,11 +503,16 @@ export function registerLembretesCallbacks(bot: Telegraf) {
         return;
       }
       
-      console.log('=== DEBUG LEMBRETE SAVE ===');
-      console.log('Lembrete ID:', lembreteData.id);
-      console.log('User ID:', session.user_id);
-      console.log('Dados:', lembreteData);
-      console.log('===========================');      
+      console.log('=== DEBUG SESSÃO COMPLETA ===');
+      console.log('Session completa:', JSON.stringify(session, null, 2));
+      console.log('Session.data:', session.data);
+      console.log('LembreteData:', lembreteData);
+      console.log('LembreteData.id:', lembreteData?.id);
+      console.log('Tipo do lembreteData.id:', typeof lembreteData?.id);
+      console.log('LembreteData é null?', lembreteData === null);
+      console.log('LembreteData é undefined?', lembreteData === undefined);
+      console.log('Keys do lembreteData:', lembreteData ? Object.keys(lembreteData) : 'N/A');
+      console.log('==============================='); 
       
       // ATUALIZAR com IDs validados
       const { error: updateError } = await adminSupabase
