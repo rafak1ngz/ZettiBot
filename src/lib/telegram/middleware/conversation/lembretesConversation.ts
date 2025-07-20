@@ -128,7 +128,7 @@ async function handleHoraLembrete(ctx: Context, session: any, horaTexto: string)
   await adminSupabase
     .from('sessions')
     .update({
-      step: 'prioridade_botoes', // Novo step para mostrar botões de prioridade
+      step: 'descricao_lembrete', // ✅ NOVO: Ir para descrição primeiro
       data: { 
         ...session.data, 
         hora_texto: horaTexto,
@@ -138,15 +138,8 @@ async function handleHoraLembrete(ctx: Context, session: any, horaTexto: string)
     })
     .eq('id', session.id);
 
-  // Mostrar botões de prioridade
-  await ctx.reply(
-    'Qual a prioridade deste lembrete?',
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔴 Alta - Urgente', 'prioridade_alta')],
-      [Markup.button.callback('🟡 Média - Importante', 'prioridade_media')],
-      [Markup.button.callback('🔵 Baixa - Quando possível', 'prioridade_baixa')]
-    ])
-  );
+  // ✅ NOVO: Pedir descrição antes da prioridade
+  await ctx.reply('Digite uma descrição para o lembrete (opcional, digite "pular" para continuar):');
   return true;
 }
 
@@ -156,35 +149,19 @@ async function handleDescricaoLembrete(ctx: Context, session: any, descricao: st
   await adminSupabase
     .from('sessions')
     .update({
-      step: 'confirmar_lembrete',
+      step: 'prioridade_botoes', // ✅ AGORA vai para prioridade
       data: { ...session.data, descricao: descricaoValue },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
-  // Mostrar resumo para confirmação
-  const dataLembreteUTC = new Date(session.data.data_lembrete);
-  const dataLembreteBrasil = new Date(dataLembreteUTC.getTime() - (3 * 60 * 60 * 1000));
-  const dataFormatada = format(dataLembreteBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-  
-  // 🔥 CORREÇÃO: Cast de tipo para prioridade
-  const prioridade = session.data.prioridade as 'alta' | 'media' | 'baixa';
-  const textoPrioridade = {
-    alta: '🔴 Alta - Urgente',
-    media: '🟡 Média - Importante',
-    baixa: '🔵 Baixa - Quando possível'
-  }[prioridade] || '⚪ Normal';
-
+  // ✅ AGORA mostrar botões de prioridade
   await ctx.reply(
-    `📋 Confirme os dados do lembrete:\n\n` +
-    `📝 Título: ${session.data.titulo}\n` +
-    `🎯 Prioridade: ${textoPrioridade}\n` +
-    `📅 Data: ${dataFormatada}\n` +
-    (descricaoValue ? `💬 Descrição: ${descricaoValue}\n` : '') +
-    `\nOs dados estão corretos?`,
+    'Qual a prioridade deste lembrete?',
     Markup.inlineKeyboard([
-      [Markup.button.callback('✅ Confirmar', 'lembrete_confirmar')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      [Markup.button.callback('🔴 Alta - Urgente', 'prioridade_alta')],
+      [Markup.button.callback('🟡 Média - Importante', 'prioridade_media')],
+      [Markup.button.callback('🔵 Baixa - Quando possível', 'prioridade_baixa')]
     ])
   );
   return true;

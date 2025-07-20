@@ -6,6 +6,8 @@ import {
   handleConcluirLembrete,
   mostrarLembretesPaginados 
 } from './handlers';
+import { format } from 'date-fns';
+import { ptBR } from 'date-fns/locale';
 
 export function registerLembretesCallbacks(bot: Telegraf) {
   
@@ -708,8 +710,17 @@ async function atualizarPrioridadeLembrete(ctx: any, novaPrioridade: 'alta' | 'm
       );
     } else {
       // É uma CRIAÇÃO de novo lembrete
+      const dataLembreteUTC = new Date(dadosAtualizados.data_lembrete);
+      const dataLembreteBrasil = new Date(dataLembreteUTC.getTime() - (3 * 60 * 60 * 1000));
+      const dataFormatada = format(dataLembreteBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+      
       await ctx.editMessageText(
-        `✅ Prioridade selecionada: ${textoPrioridade}\n\nDeseja finalizar a criação do lembrete?`,
+        `📋 Confirme os dados do lembrete:\n\n` +
+        `📝 Título: ${dadosAtualizados.titulo}\n` +
+        `🎯 Prioridade: ${textoPrioridade}\n` +
+        `📅 Data: ${dataFormatada}\n` +
+        (dadosAtualizados.descricao ? `💬 Descrição: ${dadosAtualizados.descricao}\n` : '') +
+        `\nOs dados estão corretos?`,
         Markup.inlineKeyboard([
           [Markup.button.callback('✅ Confirmar e Criar', 'lembrete_confirmar')],
           [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
