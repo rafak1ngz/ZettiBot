@@ -9,7 +9,7 @@
 ![Supabase](https://img.shields.io/badge/Supabase-Latest-green?style=flat-square&logo=supabase)
 ![Telegram](https://img.shields.io/badge/Telegram-Bot_API-blue?style=flat-square&logo=telegram)
 ![Vercel](https://img.shields.io/badge/Vercel-Deployed-black?style=flat-square&logo=vercel)
-![Version](https://img.shields.io/badge/Version-1.0.0-green?style=flat-square)
+![Version](https://img.shields.io/badge/Version-1.1.0-green?style=flat-square)
 ![Status](https://img.shields.io/badge/Status-Production_Ready-brightgreen?style=flat-square)
 ![Uptime](https://img.shields.io/badge/Uptime-99.9%25-brightgreen?style=flat-square)
 
@@ -17,14 +17,15 @@
 
 ## 📋 Sobre o Projeto
 
-ZettiBot é um assistente digital inovador desenvolvido especificamente para vendedores externos. Através do Telegram, oferece uma suite completa de ferramentas para gestão de clientes, agenda e sistema de notificações automáticas.
+ZettiBot é um assistente digital inovador desenvolvido especificamente para vendedores externos. Através do Telegram, oferece uma suite completa de ferramentas para gestão de clientes, agenda e sistema de lembretes automáticos.
 
-### 🎯 **Funcionalidades Implementadas (v1.0.0)**
+### 🎯 **Funcionalidades Implementadas (v1.1.0)**
 
 - 👥 **Gestão Completa de Clientes** - CRUD com validações robustas e busca avançada
 - 📅 **Agenda Inteligente** - Compromissos com paginação e edição completa
-- 🔔 **Sistema de Notificações** - Lembretes automáticos de 15min a 24h antes
-- ⏰ **Fuso Horário Brasileiro** - Gestão correta de horários UTC-3
+- 🔔 **Sistema de Lembretes** - Criação, edição e notificações automáticas
+- ⏰ **Notificações Automáticas** - Lembretes de 5min a 24h antes (agenda e lembretes)
+- 🕐 **Fuso Horário Brasileiro** - Gestão correta de horários UTC-3
 - 🔍 **Busca Avançada** - Por nome, CNPJ ou contato
 - 📱 **Interface Conversacional** - Interação natural via Telegram
 
@@ -39,7 +40,7 @@ ZettiBot é um assistente digital inovador desenvolvido especificamente para ven
 
 ---
 
-## 🎯 **STATUS ATUAL (v1.0.0)**
+## 🎯 **STATUS ATUAL (v1.1.0)**
 
 ### ✅ **FUNCIONALIDADES COMPLETAS (100%)**
 
@@ -66,8 +67,18 @@ ZettiBot é um assistente digital inovador desenvolvido especificamente para ven
 - ✅ Busca e vinculação de clientes
 - ✅ Validação de datas/horários futuro
 
-#### **🔔 Sistema de Notificações**
-- ✅ Lembretes personalizáveis (15min, 30min, 1h, 5h, 12h, 24h)
+#### **🔔 Sistema de Lembretes** 🆕
+- ✅ Criar lembretes personalizados (título, descrição, data/hora)
+- ✅ Sistema de prioridades (Alta 🔴, Média 🟡, Baixa 🔵)
+- ✅ Listar lembretes pendentes com paginação
+- ✅ Editar lembretes existentes (todos os campos)
+- ✅ Concluir/excluir lembretes
+- ✅ Botões de atalho "Hoje/Amanhã"
+- ✅ Notificações automáticas (5min a 24h antes)
+
+#### **⚡ Sistema de Notificações**
+- ✅ Lembretes de agenda personalizáveis (15min, 30min, 1h, 5h, 12h, 24h)
+- ✅ Lembretes de tarefas personalizáveis (5min, 15min, 30min, 1h, 24h)
 - ✅ Processamento automático via cron-job externo
 - ✅ Retry automático com até 3 tentativas
 - ✅ Limpeza automática de notificações antigas
@@ -82,7 +93,6 @@ ZettiBot é um assistente digital inovador desenvolvido especificamente para ven
 
 ### 🚧 **PLANEJADO PARA PRÓXIMAS VERSÕES**
 - 🔄 **Follow-up de Leads** - Sistema de acompanhamento de negociações
-- 📝 **Lembretes Customizados** - Além de compromissos de agenda
 - 📊 **Relatórios e Analytics** - Métricas de vendas e performance
 - 🗺️ **Rotas Otimizadas** - Planejamento inteligente de visitas
 - 🌐 **Dashboard Web** - Interface administrativa
@@ -188,9 +198,9 @@ curl -X POST "https://api.telegram.org/bot{SEU_TOKEN}/setWebhook" \
 | `/ajuda` | Lista todos os comandos | ✅ |
 | `/clientes` | Gerenciar base de clientes | ✅ |
 | `/agenda` | Organizar compromissos | ✅ |
+| `/lembretes` | Criar e gerenciar lembretes | ✅ 🆕 |
 | `/cancelar` | Cancelar operação atual | ✅ |
 | `/followup` | Acompanhar leads | 🔄 |
-| `/lembrete` | Criar alertas | 🔄 |
 
 ### 🔄 **Fluxos Principais**
 
@@ -206,8 +216,14 @@ curl -X POST "https://api.telegram.org/bot{SEU_TOKEN}/setWebhook" \
 4. Configure notificação (15min a 24h antes)
 5. Confirme o agendamento
 
+**Criar Lembrete:** 🆕
+1. `/lembretes` → "Criar Lembrete"
+2. Defina: Título → Data → Hora → Descrição → Prioridade
+3. Configure notificação (5min a 24h antes)
+4. Confirme a criação
+
 **Gerenciar Notificações:**
-- Criadas automaticamente ao agendar compromissos
+- Criadas automaticamente ao agendar compromissos/lembretes
 - Processadas via cron-job a cada minuto
 - Retry automático em caso de falha
 
@@ -229,6 +245,7 @@ src/
 │   │   ├── menu/              # Navegação principal
 │   │   ├── clientes/          # CRUD de clientes
 │   │   ├── agenda/            # Gestão de compromissos
+│   │   ├── lembretes/         # Sistema de lembretes 🆕
 │   │   └── shared/            # Utilitários compartilhados
 │   └── notifications/          # Sistema de notificações
 │       ├── scheduler.ts        # Agendamento
@@ -314,6 +331,9 @@ clientes (id, user_id, nome_empresa, cnpj, contato_nome, contato_telefone, conta
 -- Compromissos agendados
 compromissos (id, user_id, cliente_id, titulo, descricao, data_compromisso, local, status)
 
+-- Lembretes pessoais 🆕
+lembretes (id, user_id, titulo, descricao, data_lembrete, prioridade, status, created_at, updated_at)
+
 -- Notificações automáticas
 notificacoes (id, user_id, telegram_id, tipo, titulo, mensagem, agendado_para, status, tentativas)
 
@@ -364,6 +384,13 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para de
 
 ## 🎯 Roadmap
 
+### ✅ **v1.1.0 - LANÇADO (21/07/2025)**
+
+- ✅ Sistema completo de lembretes
+- ✅ Notificações automáticas para lembretes
+- ✅ Interface aprimorada com prioridades visuais
+- ✅ Integração completa com sistema existente
+
 ### ✅ **v1.0.0 - LANÇADO (20/07/2025)**
 
 - ✅ Sistema de usuários e autenticação
@@ -374,12 +401,12 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para de
 - ✅ Gestão de fuso horário brasileiro
 - ✅ Validações e tratamento de erros
 
-### 🔄 **v1.1.0 - EM PLANEJAMENTO**
+### 🔄 **v1.2.0 - EM PLANEJAMENTO**
 
 - 🔄 Follow-up de leads com pipeline
-- 🔄 Lembretes personalizados
 - 🔄 Relatórios básicos de vendas
 - 🔄 API pública para integrações
+- 🔄 Melhorias de performance
 
 ### 🔮 **v2.0.0 - FUTURO**
 
@@ -395,7 +422,7 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para de
 
 | Métrica | Status | Descrição |
 |---------|--------|-----------|
-| Funcionalidade | 🟢 100% | Core features implementadas |
+| Funcionalidade | 🟢 100% | Core features + lembretes implementadas |
 | Estabilidade | 🟢 99.9% | Sistema robusto em produção |
 | Performance | 🟢 Otimizada | Cache e queries otimizadas |
 | Segurança | 🟢 Robusta | Rate limiting e validações |
@@ -417,7 +444,7 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para de
 
 **Desenvolvido com ❤️ por [Rafael Dantas](https://github.com/rafak1ngz)**
 
-**ZettiBot v1.0.0** - *Transformando caos em estratégia desde 2025*
+**ZettiBot v1.1.0** - *Transformando caos em estratégia desde 2025*
 
 [⭐ Star no GitHub](https://github.com/rafak1ngz/ZettiBot) • [🐛 Reportar Bug](https://github.com/rafak1ngz/ZettiBot/issues) • [💡 Sugerir Feature](https://github.com/rafak1ngz/ZettiBot/issues) • [📋 Changelog](CHANGELOG.md)
 
