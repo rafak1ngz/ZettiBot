@@ -9,6 +9,7 @@ import {
 } from './scheduler';
 import { ResultadoProcessamento, NotificacaoProcessamento } from './types';
 import { timestampLog } from './utils';
+import { utcParaBrasil } from '@/utils/timezone';
 
 const TELEGRAM_BOT_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const TELEGRAM_API_URL = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}`;
