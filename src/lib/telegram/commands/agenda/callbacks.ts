@@ -1,30 +1,50 @@
-import { Telegraf, Markup } from 'telegraf';
+import { Context, Markup, Telegraf } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { 
   handleNovoCompromisso, 
   handleVincularCliente,
   handleSemCliente,
   handleListarCompromissos,
-  handleSelecionarCliente
+  handleSelecionarCliente 
 } from './handlers';
 
-import { mostrarOpcoesNotificacao, processarSelecaoNotificacao, cancelarNotificacoesCompromisso } from './notifications';
+// IMPORTAÇÕES CORRETAS das funções de notificação
+import { 
+  handleConfiguracoesNotificacao, 
+  processarNotificacaoCompromisso 
+} from './notifications';
 
 export function registerAgendaCallbacks(bot: Telegraf) {
   // Callbacks para o menu da agenda
-  bot.action('agenda_novo', handleNovoCompromisso);
-  bot.action('agenda_vincular_cliente', handleVincularCliente);
-  bot.action('agenda_sem_cliente', handleSemCliente);
-  bot.action('agenda_listar', handleListarCompromissos);
-  
+  bot.action('agenda_novo', (ctx) => {
+    ctx.answerCbQuery();
+    return handleNovoCompromisso(ctx);
+  });
+
+  bot.action('agenda_vincular_cliente', (ctx) => {
+    ctx.answerCbQuery();
+    return handleVincularCliente(ctx);
+  });
+
+  bot.action('agenda_sem_cliente', (ctx) => {
+    ctx.answerCbQuery();
+    return handleSemCliente(ctx);
+  });
+
+  bot.action('agenda_listar', (ctx) => {
+    ctx.answerCbQuery();
+    return handleListarCompromissos(ctx);
+  });
+
   bot.action(/agenda_cliente_(.+)/, (ctx) => {
+    ctx.answerCbQuery();
     const clienteId = ctx.match[1];
     return handleSelecionarCliente(ctx, clienteId);
-  });  
+  });
 
-  // Confirmação de compromisso
+  // Confirmação de compromisso com notificações
   bot.action('agenda_confirmar', async (ctx) => {
     try {
       ctx.answerCbQuery();
@@ -44,7 +64,7 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       
       const session = sessions[0];
       
-      // Inserir compromisso E PEGAR O ID
+      // Inserir compromisso
       const { data: novoCompromisso, error: insertError } = await adminSupabase
         .from('compromissos')
         .insert({
@@ -57,10 +77,10 @@ export function registerAgendaCallbacks(bot: Telegraf) {
           status: 'pendente',
           updated_at: new Date().toISOString()
         })
-        .select('id')  // ← MUDANÇA: Buscar o ID do compromisso criado
+        .select('id')
         .single();
         
-      if (insertError) {
+      if (insertError || !novoCompromisso) {
         console.error('Erro ao inserir compromisso:', insertError);
         await ctx.reply('Ocorreu um erro ao salvar o compromisso. Por favor, tente novamente.');
         return;
@@ -72,18 +92,61 @@ export function registerAgendaCallbacks(bot: Telegraf) {
         .delete()
         .eq('id', session.id);
         
-      // ← MUDANÇA PRINCIPAL: Em vez do feedback direto, mostrar opções de notificação
-      await mostrarOpcoesNotificacao(ctx, novoCompromisso.id, {
-        titulo: session.data.titulo,
-        data_compromisso: session.data.data_compromisso || session.data.data_hora,
-        cliente_nome: session.data.nome_cliente,
-        local: session.data.local
-      });
+      // Redirecionar para configuração de notificações
+      await handleConfiguracoesNotificacao(ctx, novoCompromisso.id);
       
     } catch (error) {
       console.error('Erro ao confirmar compromisso:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
+  });
+
+  // Callbacks para notificações
+  bot.action(/agenda_notificacao_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const compromissoId = ctx.match[1];
+      await handleConfiguracoesNotificacao(ctx, compromissoId);
+    } catch (error) {
+      console.error('Erro no callback de notificação:', error);
+      await ctx.reply('Ocorreu um erro ao processar notificação.');
+    }
+  });
+
+  // Callbacks para diferentes tempos de notificação
+  bot.action(/notif_nao_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, 'nao', compromissoId);
+  });
+
+  bot.action(/notif_15m_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '15m', compromissoId);
+  });
+
+  bot.action(/notif_30m_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '30m', compromissoId);
+  });
+
+  bot.action(/notif_1h_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '1h', compromissoId);
+  });
+
+  bot.action(/notif_5h_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '5h', compromissoId);
+  });
+
+  bot.action(/notif_12h_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '12h', compromissoId);
+  });
+
+  bot.action(/notif_24h_(.+)/, async (ctx) => {
+    const compromissoId = ctx.match[1];
+    await processarNotificacaoCompromisso(ctx, '24h', compromissoId);
   });
 
   // Editar dados do compromisso antes do registro
@@ -116,7 +179,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const telegramId = ctx.from?.id;
       if (!telegramId) return;
       
-      // Atualizar sessão para editar título
       const { data: sessions } = await adminSupabase
         .from('sessions')
         .select('*')
@@ -149,7 +211,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const telegramId = ctx.from?.id;
       if (!telegramId) return;
       
-      // Atualizar sessão para editar descrição
       const { data: sessions } = await adminSupabase
         .from('sessions')
         .select('*')
@@ -182,7 +243,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const telegramId = ctx.from?.id;
       if (!telegramId) return;
       
-      // Atualizar sessão para editar data
       const { data: sessions } = await adminSupabase
         .from('sessions')
         .select('*')
@@ -201,12 +261,10 @@ export function registerAgendaCallbacks(bot: Telegraf) {
         })
         .eq('id', sessions[0].id);
         
-      // Edite a mensagem original sem teclado
       await ctx.editMessageText('Digite a nova data do compromisso no formato DD/MM/YYYY:', 
         { reply_markup: { inline_keyboard: [] } }
       );
       
-      // Envie uma nova mensagem com botões de teclado
       await ctx.reply('Escolha uma opção ou digite a data:',
         Markup.keyboard([
           ['Hoje', 'Amanhã']
@@ -225,7 +283,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const telegramId = ctx.from?.id;
       if (!telegramId) return;
       
-      // Atualizar sessão para editar hora
       const { data: sessions } = await adminSupabase
         .from('sessions')
         .select('*')
@@ -249,7 +306,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
         { reply_markup: { inline_keyboard: [] } }
       );
       
-      // Se necessário, envie uma nova mensagem removendo o teclado
       await ctx.reply('Digite o horário (exemplo: 14:30):',
         Markup.removeKeyboard()
       );
@@ -266,7 +322,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const telegramId = ctx.from?.id;
       if (!telegramId) return;
       
-      // Atualizar sessão para editar local
       const { data: sessions } = await adminSupabase
         .from('sessions')
         .select('*')
@@ -297,7 +352,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
     try {
       ctx.answerCbQuery();
       
-      // Obter a sessão atual
       const telegramId = ctx.from?.id;
       const { data: sessions } = await adminSupabase
         .from('sessions')
@@ -311,14 +365,12 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       
       const session = sessions[0];
       
-      // Construir data formatada
       const dataHora = new Date(session.data.data_hora);
       const dataFormatada = format(dataHora, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
       const clienteInfo = session.data.nome_cliente 
         ? `Cliente: ${session.data.nome_cliente}\n`
         : '';
         
-      // Atualizar mensagem com os dados atualizados
       await ctx.editMessageText(
         `📋 Confirme os dados do compromisso:\n\n` +
         `Título: ${session.data.titulo}\n` +
@@ -339,7 +391,7 @@ export function registerAgendaCallbacks(bot: Telegraf) {
     }
   });
 
-  // Handler para edição de compromisso
+  // Handler para edição de compromisso existente
   bot.action(/agenda_editar_([0-9a-fA-F-]+)/, async (ctx) => {
     try {
       ctx.answerCbQuery();
@@ -347,7 +399,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       const compromissoId = ctx.match[1];
       const telegramId = ctx.from?.id;
       
-      // Buscar o compromisso
       const { data: compromisso, error } = await adminSupabase
         .from('compromissos')
         .select(`
@@ -365,10 +416,9 @@ export function registerAgendaCallbacks(bot: Telegraf) {
         return;
       }
       
-      // Armazenar dados do compromisso em uma sessão
       await adminSupabase
         .from('sessions')
-        .delete() // Limpar sessões antigas
+        .delete()
         .eq('telegram_id', telegramId);
         
       await adminSupabase
@@ -385,7 +435,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
           updated_at: new Date().toISOString()
         }]);
       
-      // Mostrar opções de edição
       await ctx.reply(
         `O que você deseja editar no compromisso "${compromisso.titulo}"?`,
         Markup.inlineKeyboard([
@@ -410,7 +459,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       
       const compromissoId = ctx.match[1];
       
-      // Atualizar status do compromisso
       const { error } = await adminSupabase
         .from('compromissos')
         .update({
@@ -428,7 +476,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
       await ctx.reply('✅ Compromisso marcado como concluído!');
       
-      // Mostrar lista atualizada
       return handleListarCompromissos(ctx);
     } catch (error) {
       console.error('Erro ao concluir compromisso:', error);
@@ -443,7 +490,6 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       
       const compromissoId = ctx.match[1];
       
-      // Pedir confirmação
       await ctx.reply(
         '⚠️ Tem certeza que deseja cancelar este compromisso?',
         Markup.inlineKeyboard([
@@ -465,17 +511,7 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       ctx.answerCbQuery();
       
       const compromissoId = ctx.match[1];
-      const userId = ctx.state.user?.id;
       
-      if (!userId) {
-        await ctx.reply('Erro: Usuário não identificado.');
-        return;
-      }
-      
-      // Cancelar notificações ANTES de cancelar o compromisso
-      await cancelarNotificacoesCompromisso(compromissoId, userId);
-      
-      // Atualizar status do compromisso
       const { error } = await adminSupabase
         .from('compromissos')
         .update({
@@ -491,9 +527,8 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       }
       
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-      await ctx.reply('❌ Compromisso e notificações cancelados!');
+      await ctx.reply('❌ Compromisso cancelado!');
       
-      // Mostrar lista atualizada
       return handleListarCompromissos(ctx);
     } catch (error) {
       console.error('Erro ao cancelar compromisso:', error);
@@ -512,32 +547,4 @@ export function registerAgendaCallbacks(bot: Telegraf) {
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   });
-
-  // Callbacks de notificação
-  // Handler para "não notificar"
-  bot.action(/agenda_notify_none_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const compromissoId = ctx.match[1];
-      await processarSelecaoNotificacao(ctx, null, compromissoId);
-    } catch (error) {
-      console.error('Erro no callback notify_none:', error);
-      await ctx.reply('Erro ao processar sua solicitação.');
-    }
-  });
-
-  // Handler para tempos específicos
-  bot.action(/agenda_notify_(\d+)_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const minutosAntes = parseInt(ctx.match[1]);
-      const compromissoId = ctx.match[2];
-      await processarSelecaoNotificacao(ctx, minutosAntes, compromissoId);
-    } catch (error) {
-      console.error('Erro no callback notify_time:', error);
-      await ctx.reply('Erro ao processar sua solicitação.');
-    }
-  });
-
-
 }
