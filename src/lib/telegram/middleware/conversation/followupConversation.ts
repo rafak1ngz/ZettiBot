@@ -479,6 +479,9 @@ async function handleRegistrarContatoTexto(ctx: Context, session: any, contatoTe
   return true;
 }
 
+// ============================================================================
+// CORREÇÃO: handleProximaAcaoContato - SALVAR CONTATO + NOTIFICAÇÃO
+// ============================================================================
 async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao: string): Promise<boolean> {
   if (!proximaAcao || proximaAcao.length < 3) {
     await ctx.reply('Por favor, descreva a próxima ação (mínimo 3 caracteres).');
@@ -487,8 +490,29 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 
   try {
     const agora = new Date().toISOString();
+    const followupId = session.data.followup_id;
+    const userId = session.user_id;
 
-    // Atualizar followup
+    // ✅ CORREÇÃO 1: SALVAR O CONTATO NA TABELA contatos_followup
+    const { error: contatoError } = await adminSupabase
+      .from('contatos_followup')
+      .insert({
+        followup_id: followupId,
+        user_id: userId,
+        data_contato: agora,
+        tipo_contato: 'outro',
+        resumo: session.data.contato_descricao,
+        proxima_acao: proximaAcao,
+        created_at: agora
+      });
+
+    if (contatoError) {
+      console.error('Erro ao salvar contato:', contatoError);
+      await ctx.reply('Erro ao salvar contato. Tente novamente.');
+      return true;
+    }
+
+    // ✅ CORREÇÃO 2: ATUALIZAR FOLLOWUP
     const { error: updateError } = await adminSupabase
       .from('followups')
       .update({
@@ -496,7 +520,7 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
         proxima_acao: proximaAcao,
         updated_at: agora
       })
-      .eq('id', session.data.followup_id);
+      .eq('id', followupId);
 
     if (updateError) {
       console.error('Erro ao atualizar followup:', updateError);
@@ -504,13 +528,13 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
       return true;
     }
 
-    // Limpar sessão
+    // ✅ CORREÇÃO 3: LIMPAR SESSÃO
     await adminSupabase
       .from('sessions')
       .delete()
       .eq('id', session.id);
 
-    // ✅ NOVO: Buscar dados atualizados do follow-up para mostrar
+    // ✅ CORREÇÃO 4: BUSCAR DADOS ATUALIZADOS
     const { data: followupAtualizado, error: fetchError } = await adminSupabase
       .from('followups')
       .select(`
@@ -520,7 +544,7 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
           contato_nome
         )
       `)
-      .eq('id', session.data.followup_id)
+      .eq('id', followupId)
       .single();
 
     if (fetchError || !followupAtualizado) {
@@ -533,21 +557,25 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 
     const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
 
+    // ✅ CORREÇÃO 5: MOSTRAR RESUMO E PERGUNTAR SOBRE NOTIFICAÇÃO
     await ctx.reply(
       `✅ **Contato registrado com sucesso!**\n\n` +
       `🏢 **Cliente:** ${nomeEmpresa}\n` +
-      `📝 **Resumo do contato:** ${session.data.resumo_contato}\n` +
+      `📝 **Resumo:** ${session.data.contato_descricao}\n` +
       `🎬 **Próxima ação:** ${proximaAcao}\n` +
-      `🕐 **Último contato:** Hoje, ${format(new Date(), 'HH:mm', { locale: ptBR })}\n\n` +
-      `🎯 **Dica:** Você pode ver todos os dados atualizados em "📋 Listar Follow-ups"`,
+      `🕐 **Registrado:** Hoje, ${format(new Date(), 'HH:mm', { locale: ptBR })}\n\n` +
+      `🔔 **Deseja configurar um lembrete para a próxima ação?**`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback('🔄 Ver Follow-ups Ativos', 'followup_listar_ativos'),
-            Markup.button.callback('🆕 Novo Follow-up', 'followup_novo')
+            Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
+            Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`)
           ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+          [
+            Markup.button.callback('📅 24 horas antes', `notif_contato_24h_${followupId}`),
+            Markup.button.callback('📆 3 dias antes', `notif_contato_3d_${followupId}`)
+          ]
         ])
       }
     );

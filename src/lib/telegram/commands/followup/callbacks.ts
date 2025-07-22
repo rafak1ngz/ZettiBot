@@ -539,35 +539,46 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   // CALLBACKS PARA NOTIFICAÇÕES DE CONTATO - NOVO
   // ========================================================================
   bot.action(/notif_contato_nao_(.+)/, async (ctx) => {
-    ctx.answerCbQuery();
-    await ctx.editMessageText(
-      `✅ **Contato registrado com sucesso!**\n\n` +
-      `🔕 Nenhum lembrete será configurado.\n\n` +
-      `🎯 Continue acompanhando suas oportunidades!`, {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('📋 Ver Histórico', `followup_historico_${ctx.match[1]}`),
-            Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
-          ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      }
-    );
+    try {
+      ctx.answerCbQuery();
+      await ctx.editMessageText(
+        `✅ **Contato registrado com sucesso!**\n\n` +
+        `🔕 Nenhuma notificação será enviada.\n\n` +
+        `🎯 Continue trabalhando esta oportunidade!`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('📋 Ver Follow-ups', 'followup_listar_ativos'),
+              Markup.button.callback('📞 Novo Contato', `followup_contato_${ctx.match[1]}`)
+            ],
+            [
+              Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
+              Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+            ]
+          ])
+        }
+      );
+    } catch (error) {
+      console.error('Erro ao processar resposta:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua resposta.');
+    }
   });
 
+  // ✅ CALLBACK: Notificação 1 hora antes
   bot.action(/notif_contato_1h_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '1h', ctx.match[1]);
   });
 
+  // ✅ CALLBACK: Notificação 24 horas antes
   bot.action(/notif_contato_24h_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '24h', ctx.match[1]);
   });
 
+  // ✅ CALLBACK: Notificação 3 dias antes
   bot.action(/notif_contato_3d_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '3d', ctx.match[1]);
   });
-}
 
 // ============================================================================
 // FUNÇÃO AUXILIAR PARA CONTINUAR CRIAÇÃO DE FOLLOWUP - CORRIGIDA
@@ -697,14 +708,15 @@ async function processarNotificacaoContato(ctx: any, tempo: string, followupId: 
 
     const tempoTexto = {
       '1h': '1 hora',
-      '24h': '24 horas',
+      '24h': '24 horas', 
       '3d': '3 dias'
     }[tempo] || '24 horas';
 
     await ctx.editMessageText(
       `✅ **Contato registrado com sucesso!**\n\n` +
-      `⏰ Lembrete configurado para ${tempoTexto} antes da próxima ação.\n\n` +
-      `🎯 Mantenha o follow-up sempre atualizado!`, {
+      `⏰ Lembrete configurado para **${tempoTexto}** antes da próxima ação.\n\n` +
+      `🎯 Mantenha o follow-up sempre atualizado para melhores resultados!`,
+      {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
@@ -720,6 +732,7 @@ async function processarNotificacaoContato(ctx: any, tempo: string, followupId: 
     );
 
     // TODO: Implementar criação de notificação na próxima fase
+    console.log(`Notificação de contato configurada: ${tempo} para follow-up ${followupId}`);
     
   } catch (error) {
     console.error('Erro ao processar notificação de contato:', error);
