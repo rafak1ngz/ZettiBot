@@ -1,5 +1,5 @@
 // ============================================================================
-// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO CORRIGIDA E COMPLETA
+// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
 // ============================================================================
 
 import { Context } from 'telegraf';
@@ -16,6 +16,27 @@ import {
   getStatusTexto,
   isValidStatus 
 } from './types';
+
+// ============================================================================
+// UTILITÁRIO PARA FORMATAÇÃO SEGURA DE DATA
+// ============================================================================
+function formatarDataSegura(dataString: any): string {
+  if (!dataString) return 'Não definida';
+  
+  try {
+    const dataUTC = typeof dataString === 'string' ? new Date(dataString) : dataString;
+    
+    // Verificar se é uma data válida
+    if (!(dataUTC instanceof Date) || !dataUTC.getTime || isNaN(dataUTC.getTime())) {
+      return 'Data inválida';
+    }
+    
+    return format(utcParaBrasil(dataUTC), 'dd/MM/yyyy', { locale: ptBR });
+  } catch (error) {
+    console.error('Erro ao formatar data:', error);
+    return 'Erro na data';
+  }
+}
 
 // ============================================================================
 // MENU PRINCIPAL DO FOLLOWUP
@@ -208,7 +229,7 @@ export async function handleListarFollowups(ctx: Context, status: StatusFollowup
 }
 
 // ============================================================================
-// PAGINAÇÃO DE FOLLOWUPS - FUNÇÃO COMPLETA CORRIGIDA
+// PAGINAÇÃO DE FOLLOWUPS - VERSÃO ROBUSTA CORRIGIDA
 // ============================================================================
 export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: any[], pagina: number, status: StatusFollowup) {
   try {
@@ -227,52 +248,56 @@ export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: an
 
     // Mostrar followups da página atual
     for (const followup of followupsPagina) {
-      // ✅ CORRIGIDO: Verificar se clientes é array ou objeto
-      const cliente = Array.isArray(followup.clientes) 
-        ? followup.clientes[0] 
-        : followup.clientes;
+      try {
+        // ✅ CORRIGIDO: Verificar se clientes é array ou objeto
+        const cliente = Array.isArray(followup.clientes) 
+          ? followup.clientes[0] 
+          : followup.clientes;
 
-      const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
-      const nomeContato = cliente?.contato_nome || 'Contato não informado';
-      
-      const valorFormatado = followup.valor_estimado 
-        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(followup.valor_estimado)
-        : 'Não informado';
+        const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+        const nomeContato = cliente?.contato_nome || 'Contato não informado';
         
-      const dataFormatada = followup.data_prevista 
-        ? format(utcParaBrasil(followup.data_prevista), 'dd/MM/yyyy', { locale: ptBR })
-        : 'Não definida';
+        const valorFormatado = followup.valor_estimado 
+          ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(followup.valor_estimado)
+          : 'Não informado';
+          
+        // ✅ CORRIGIDO: Usar função segura para formatar data
+        const dataFormatada = formatarDataSegura(followup.data_prevista);
 
-      const mensagemFollowup = `**${followup.titulo}**\n\n` +
-        `🏢 **Cliente:** ${nomeEmpresa}\n` +
-        `👤 **Contato:** ${nomeContato}\n` +
-        `${getEstagioEmoji(followup.estagio)} **Estágio:** ${getEstagioTexto(followup.estagio)}\n` +
-        `💰 **Valor:** ${valorFormatado}\n` +
-        `📅 **Previsão:** ${dataFormatada}\n` +
-        `📝 **Próxima Ação:** ${followup.proxima_acao || 'Não definida'}`;
+        const mensagemFollowup = `**${followup.titulo}**\n\n` +
+          `🏢 **Cliente:** ${nomeEmpresa}\n` +
+          `👤 **Contato:** ${nomeContato}\n` +
+          `${getEstagioEmoji(followup.estagio)} **Estágio:** ${getEstagioTexto(followup.estagio)}\n` +
+          `💰 **Valor:** ${valorFormatado}\n` +
+          `📅 **Previsão:** ${dataFormatada}\n` +
+          `📝 **Próxima Ação:** ${followup.proxima_acao || 'Não definida'}`;
 
-      const botoes = [];
-      
-      // Botões específicos por status
-      if (status === 'ativo') {
-        botoes.push([
-          Markup.button.callback('📞 Registrar Contato', `followup_contato_${followup.id}`),
-          Markup.button.callback('✏️ Editar', `followup_editar_${followup.id}`)
-        ]);
-        botoes.push([
-          Markup.button.callback('✅ Marcar como Ganho', `followup_ganho_${followup.id}`),
-          Markup.button.callback('❌ Marcar como Perdido', `followup_perdido_${followup.id}`)
-        ]);
-      } else {
-        botoes.push([
-          Markup.button.callback('📋 Ver Detalhes', `followup_detalhes_${followup.id}`)
-        ]);
+        const botoes = [];
+        
+        // Botões específicos por status
+        if (status === 'ativo') {
+          botoes.push([
+            Markup.button.callback('📞 Registrar Contato', `followup_contato_${followup.id}`),
+            Markup.button.callback('✏️ Editar', `followup_editar_${followup.id}`)
+          ]);
+          botoes.push([
+            Markup.button.callback('✅ Marcar como Ganho', `followup_ganho_${followup.id}`),
+            Markup.button.callback('❌ Marcar como Perdido', `followup_perdido_${followup.id}`)
+          ]);
+        } else {
+          botoes.push([
+            Markup.button.callback('📋 Ver Detalhes', `followup_detalhes_${followup.id}`)
+          ]);
+        }
+
+        await ctx.reply(mensagemFollowup, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard(botoes)
+        });
+      } catch (itemError) {
+        console.error('Erro ao processar item de followup:', itemError);
+        await ctx.reply(`❌ Erro ao exibir follow-up: ${followup.titulo || 'Sem título'}`);
       }
-
-      await ctx.reply(mensagemFollowup, {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard(botoes)
-      });
     }
 
     // Botões de navegação

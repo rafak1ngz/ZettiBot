@@ -1,5 +1,5 @@
 // ============================================================================
-// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO CORRIGIDA E COMPLETA
+// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
 // ============================================================================
 
 import { Telegraf, Markup } from 'telegraf';
@@ -131,7 +131,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACK PARA SELECIONAR CLIENTE DA BUSCA
+  // CALLBACK PARA SELECIONAR CLIENTE DA BUSCA - CORRIGIDO
   // ========================================================================
   bot.action(/followup_selecionar_(.+)/, async (ctx) => {
     try {
@@ -167,7 +167,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 
       if (followupExistente) {
         // Cliente já tem followup ativo - pedir confirmação
-        await ctx.editMessageText(
+        await ctx.reply(
           `⚠️ **Atenção!**\n\n` +
           `O cliente **${cliente.nome_empresa}** já possui um follow-up ativo:\n` +
           `"${followupExistente.titulo}"\n\n` +
@@ -193,7 +193,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACK PARA CONFIRMAR SUBSTITUIÇÃO DE FOLLOWUP
+  // CALLBACK PARA CONFIRMAR SUBSTITUIÇÃO DE FOLLOWUP - CORRIGIDO
   // ========================================================================
   bot.action(/confirmar_substituir_(.+)/, async (ctx) => {
     try {
@@ -286,6 +286,21 @@ export function registerFollowupCallbacks(bot: Telegraf) {
       console.error('Erro ao escolher estágio:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
+  });
+
+  // ========================================================================
+  // CALLBACKS PARA SELEÇÃO RÁPIDA DE DATA - NOVO
+  // ========================================================================
+  bot.action('data_hoje_followup', async (ctx) => {
+    await processarDataRapida(ctx, 'hoje');
+  });
+
+  bot.action('data_amanha_followup', async (ctx) => {
+    await processarDataRapida(ctx, 'amanhã');
+  });
+
+  bot.action('data_semana_followup', async (ctx) => {
+    await processarDataRapida(ctx, 'próxima semana');
   });
 
   // ========================================================================
@@ -502,7 +517,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 }
 
 // ============================================================================
-// FUNÇÃO AUXILIAR PARA CONTINUAR CRIAÇÃO DE FOLLOWUP
+// FUNÇÃO AUXILIAR PARA CONTINUAR CRIAÇÃO DE FOLLOWUP - CORRIGIDA
 // ============================================================================
 async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: string, cliente: any) {
   try {
@@ -525,7 +540,8 @@ async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: st
       return ctx.reply('Erro ao processar seleção.');
     }
 
-    await ctx.editMessageText(
+    // ✅ CORRIGIDO: Usar reply em vez de editMessageText
+    await ctx.reply(
       `✅ **Cliente selecionado:**\n` +
       `🏢 ${cliente.nome_empresa}\n\n` +
       `📝 Agora digite o **título da oportunidade**:\n\n` +
@@ -535,6 +551,82 @@ async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: st
 
   } catch (error) {
     console.error('Erro ao continuar criação:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+}
+
+// ============================================================================
+// FUNÇÃO PARA PROCESSAR SELEÇÃO RÁPIDA DE DATA - NOVA
+// ============================================================================
+async function processarDataRapida(ctx: any, opcaoData: string) {
+  try {
+    ctx.answerCbQuery();
+    const telegramId = ctx.from?.id;
+
+    if (!telegramId) {
+      return ctx.reply('Não foi possível identificar seu usuário.');
+    }
+
+    // Buscar sessão atual
+    const { data: session, error: sessionError } = await adminSupabase
+      .from('sessions')
+      .select('*')
+      .eq('telegram_id', telegramId)
+      .single();
+
+    if (sessionError || !session) {
+      return ctx.reply('Sessão não encontrada. Tente novamente.');
+    }
+
+    // Calcular data baseada na opção
+    let data: Date;
+    const hoje = new Date();
+    
+    switch (opcaoData) {
+      case 'hoje':
+        data = hoje;
+        break;
+      case 'amanhã':
+        data = new Date(hoje);
+        data.setDate(data.getDate() + 1);
+        break;
+      case 'próxima semana':
+        data = new Date(hoje);
+        data.setDate(data.getDate() + 7);
+        break;
+      default:
+        return ctx.reply('Opção inválida.');
+    }
+
+    // Converter para UTC e salvar
+    const dataUTC = new Date(data.getTime() + (3 * 60 * 60 * 1000));
+    
+    // Atualizar sessão
+    const { error: updateError } = await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'proxima_acao',
+        data: { ...session.data, data_prevista: dataUTC.toISOString() },
+        updated_at: new Date().toISOString()
+      })
+      .eq('telegram_id', telegramId);
+
+    if (updateError) {
+      console.error('Erro ao atualizar sessão:', updateError);
+      return ctx.reply('Erro ao processar data.');
+    }
+
+    const dataFormatada = data.toLocaleDateString('pt-BR');
+
+    await ctx.reply(
+      `✅ **Data prevista:** ${dataFormatada}\n\n` +
+      `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
+      `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
+      { parse_mode: 'Markdown' }
+    );
+
+  } catch (error) {
+    console.error('Erro ao processar data rápida:', error);
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }
