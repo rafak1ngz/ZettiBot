@@ -562,3 +562,48 @@ async function processarNotificacaoFollowup(ctx: any, tempo: string, followupId:
     await ctx.reply('Ocorreu um erro ao configurar a notificação.');
   }
 }
+
+// ========================================================================
+// CALLBACK PARA EDITAR DADOS DO FOLLOWUP
+// ========================================================================
+bot.action('followup_editar_dados', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    
+    await ctx.editMessageText(
+      `✏️ <b>Editar Follow-up</b>\n\n` +
+      `Qual campo deseja editar?`,
+      {
+        parse_mode: 'HTML',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('📝 Título', 'editar_titulo_followup')],
+          [Markup.button.callback('🎯 Estágio', 'editar_estagio_followup')],
+          [Markup.button.callback('💰 Valor', 'editar_valor_followup')],
+          [Markup.button.callback('📅 Data Prevista', 'editar_data_followup')],
+          [Markup.button.callback('🎬 Próxima Ação', 'editar_proxima_acao_followup')],
+          [Markup.button.callback('🔙 Voltar', 'voltar_confirmacao_followup')]
+        ])
+      }
+    );
+  } catch (error) {
+    console.error('Erro ao editar dados:', error);
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+});
+
+// Callback para voltar à confirmação
+bot.action('voltar_confirmacao_followup', async (ctx) => {
+  try {
+    ctx.answerCbQuery();
+    // Recriar a tela de confirmação
+    // (você pode implementar isso reutilizando o código de handleProximaAcao)
+    await ctx.editMessageText(
+      '🔙 Voltando para confirmação...',
+      Markup.inlineKeyboard([
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    );
+  } catch (error) {
+    console.error('Erro ao voltar:', error);
+  }
+});

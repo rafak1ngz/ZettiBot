@@ -408,19 +408,20 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
   const estagioTexto = getEstagioTexto(dadosFollowup.estagio);
 
   await ctx.reply(
-    `📋 **Resumo do Follow-up**\n\n` +
-    `🏢 **Cliente:** ${dadosFollowup.nome_cliente}\n` +
-    `👤 **Contato:** ${dadosFollowup.contato_nome || 'Não informado'}\n` +
-    `📝 **Título:** ${dadosFollowup.titulo}\n` +
-    `🎯 **Estágio:** ${estagioTexto}\n` +
+    `📋 <b>Resumo do Follow-up</b>\n\n` +
+    `🏢 <b>Cliente:</b> ${dadosFollowup.nome_cliente}\n` +
+    `👤 <b>Contato:</b> ${dadosFollowup.contato_nome || 'Não informado'}\n` +
+    `📝 <b>Título:</b> ${dadosFollowup.titulo}\n` +
+    `🎯 <b>Estágio:</b> ${estagioTexto}\n` +
     `${valorTexto}\n` +
     `${previsaoTexto}\n` +
-    `🎬 **Próxima ação:** ${proximaAcao}\n\n` +
+    `🎬 <b>Próxima ação:</b> ${proximaAcao}\n\n` +
     `Os dados estão corretos?`,
     {
-      parse_mode: 'Markdown',
+      parse_mode: 'HTML', // ✅ MUDADO: HTML é mais confiável
       ...Markup.inlineKeyboard([
         [Markup.button.callback('✅ Confirmar e Criar', 'followup_confirmar')],
+        [Markup.button.callback('✏️ Editar Dados', 'followup_editar_dados')], // ✅ NOVO: Botão editar
         [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
       ])
     }
