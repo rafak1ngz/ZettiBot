@@ -209,7 +209,7 @@ export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: an
 
   // Mostrar followups da página atual
   for (const followup of followupsPagina) {
-    const cliente = followup.clientes;
+    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
     const nomeCliente = cliente?.nome_empresa || 'Cliente não encontrado';
     const nomeContato = cliente?.contato_nome ? ` - ${cliente.contato_nome}` : '';
     

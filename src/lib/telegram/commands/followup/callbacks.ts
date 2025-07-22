@@ -142,7 +142,7 @@ Exemplo: "Tech Solutions Ltda"
         .select(`
           titulo,
           valor_estimado,
-          clientes (nome_empresa)
+          clientes!inner (nome_empresa)
         `)
         .eq('id', followupId)
         .single();
@@ -156,9 +156,14 @@ Exemplo: "Tech Solutions Ltda"
         ? `💰 R$ ${new Intl.NumberFormat('pt-BR').format(followup.valor_estimado)}`
         : '';
 
+      // ✅ CORREÇÃO: Acesso seguro aos dados do cliente
+      const nomeEmpresa = Array.isArray(followup.clientes) 
+        ? followup.clientes[0]?.nome_empresa 
+        : followup.clientes?.nome_empresa;
+
       await ctx.reply(
         `🎉 **Parabéns! Venda realizada!**\n\n` +
-        `🏢 ${followup.clientes?.nome_empresa}\n` +
+        `🏢 ${nomeEmpresa || 'Cliente'}\n` +
         `📝 ${followup.titulo}\n` +
         `${valorTexto}\n\n` +
         `Confirma que este follow-up foi **GANHO**?`,
@@ -191,7 +196,7 @@ Exemplo: "Tech Solutions Ltda"
         .from('followups')
         .select(`
           titulo,
-          clientes (nome_empresa)
+          clientes!inner (nome_empresa)
         `)
         .eq('id', followupId)
         .single();
@@ -201,9 +206,14 @@ Exemplo: "Tech Solutions Ltda"
         return;
       }
 
+      // ✅ CORREÇÃO: Acesso seguro aos dados do cliente
+      const nomeEmpresa = Array.isArray(followup.clientes) 
+        ? followup.clientes[0]?.nome_empresa 
+        : followup.clientes?.nome_empresa;
+
       await ctx.reply(
         `❌ **Marcar como perdido**\n\n` +
-        `🏢 ${followup.clientes?.nome_empresa}\n` +
+        `🏢 ${nomeEmpresa || 'Cliente'}\n` +
         `📝 ${followup.titulo}\n\n` +
         `Confirma que este follow-up foi **PERDIDO**?`,
         {
