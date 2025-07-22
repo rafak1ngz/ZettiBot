@@ -4,10 +4,10 @@
 
 import { Context } from 'telegraf';
 import { Markup } from 'telegraf';
-import { adminSupabase } from '../../../db/supabase';
+import { adminSupabase } from '@/lib/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { utcParaBrasil } from '../../utils/dateUtils';
+import { utcParaBrasil } from '@/utils/timezone';
 import { 
   EstagioFollowup, 
   StatusFollowup, 
