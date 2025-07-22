@@ -599,11 +599,12 @@ O que deseja fazer agora?`,
         ? `\n📞 ${validators.formatters.telefone(cliente.contato_telefone)}`
         : '';
 
-      await ctx.editMessageText(
+      await ctx.reply(
         `✅ **Cliente selecionado:**\n\n` +
         `🏢 ${cliente.nome_empresa}${contatoInfo}${telefoneInfo}\n\n` +
         `📝 Digite o **título da oportunidade**:\n\n` +
-        `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`
+        `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`,
+        { parse_mode: 'Markdown' }
       );
 
     } catch (error) {
