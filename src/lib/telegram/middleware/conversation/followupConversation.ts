@@ -5,6 +5,7 @@ import { ptBR } from 'date-fns/locale';
 import { parseHoraBrasil, estaNoPassadoBrasil, brasilParaUTC } from '@/utils/timezone';
 import { validators } from '@/utils/validators';
 import { EstagioFollowup } from '@/types/database';
+import { getEstagioTexto } from '../../commands/followup/types';
 
 // ============================================================================
 // PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP
@@ -417,13 +418,7 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
     ? `📅 ${format(new Date(dadosFollowup.data_prevista), 'dd/MM/yyyy', { locale: ptBR })}`
     : '📅 Sem previsão';
 
-  const estagioTexto = {
-    'prospeccao': '🔍 Prospecção',
-    'apresentacao': '📋 Apresentação',
-    'proposta': '💰 Proposta',
-    'negociacao': '🤝 Negociação',
-    'fechamento': '✅ Fechamento'
-  }[dadosFollowup.estagio] || '📊 Não definido';
+  const estagioTexto = getEstagioTexto(dadosFollowup.estagio);
 
   await ctx.reply(
     `📋 **Resumo do Follow-up**\n\n` +
