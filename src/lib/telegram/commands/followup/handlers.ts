@@ -493,15 +493,17 @@ export async function handleVerHistoricoContatos(ctx: Context, followupId: strin
       const dataContato = new Date(contato.data_contato);
       const dataFormatada = format(utcParaBrasil(dataContato), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
       
-      // Emoji do tipo de contato
-      const tipoEmoji = {
+      // ✅ CORRIGIDO: Tipagem segura do emoji do tipo de contato
+      const tipoEmojiMap: Record<string, string> = {
         'ligacao': '📞',
         'email': '📧', 
         'reuniao': '🤝',
         'whatsapp': '💬',
         'visita': '🏢',
         'outro': '📝'
-      }[contato.tipo_contato] || '📝';
+      };
+      
+      const tipoEmoji = tipoEmojiMap[contato.tipo_contato] || '📝';
 
       await ctx.reply(
         `${tipoEmoji} **Contato ${i + 1}**\n` +
