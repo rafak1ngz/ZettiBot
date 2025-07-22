@@ -8,7 +8,8 @@ import { adminSupabase } from '@/lib/supabase';
 import { handleStartConversation } from './startConversation';
 import { handleClientesConversation } from './clientesConversation';
 import { handleAgendaConversation } from './agendaConversation';
-import { handleLembretesConversation } from './lembretesConversation'; // 🔥 ADICIONAR ESTA LINHA
+import { handleLembretesConversation } from './lembretesConversation';
+import { handleFollowupConversation } from './followupConversation';
 
 // Função de cancelamento compartilhada
 export async function cancelarOperacao(ctx: BotContext, telegramId: number) {
@@ -86,7 +87,6 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
     const session = sessions[0];
     console.log(`Found active session: command=${session.command}, step=${session.step}`);
 
-    // 🔥 AQUI É ONDE VOCÊ ADICIONA O NOVO CASE:
     // Router por comando
     switch (session.command) {
       case 'start':
@@ -95,8 +95,10 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
         return handleClientesConversation(ctx, session);
       case 'agenda':
         return handleAgendaConversation(ctx, session);
-      case 'lembretes': // 🔥 ADICIONAR ESTA LINHA
-        return handleLembretesConversation(ctx, session); // 🔥 ADICIONAR ESTA LINHA
+      case 'lembretes':
+        return handleLembretesConversation(ctx, session); 
+      case 'followup':
+        return handleFollowupConversation(ctx, session);
       default:
         console.log(`Unknown command: ${session.command}`);
         return next();

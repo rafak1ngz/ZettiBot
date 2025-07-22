@@ -9,6 +9,8 @@ import {
   listarClientesPaginados 
 } from './clientes';
 import { handleLembretes, registerLembretesCallbacks } from './lembretes';
+import { handleFollowup, registerFollowupCallbacks } from './followup';
+
 
 // ============================================================================
 // IMPORTAR NOVO MÓDULO DE AGENDA
@@ -99,7 +101,7 @@ export const registerCommands = (bot: Telegraf) => {
 
   bot.action('menu_followup', (ctx) => {
     ctx.answerCbQuery();
-    return ctx.reply('O módulo de Follow Up está em desenvolvimento. Em breve estará disponível!');
+    return handleFollowup(ctx);
   });
 
   bot.action('menu_lembretes', (ctx) => {
@@ -351,5 +353,296 @@ O que deseja fazer agora?`,
   // REGISTRAR CALLBACKS DE LEMBRETES
   // ========================================================================
   registerLembretesCallbacks(bot);
-  
+
+  // ========================================================================
+  // COMANDOS DE FOLLOWUP
+  // ========================================================================
+  bot.command('followup', handleFollowup);
+
+  // ========================================================================
+  // REGISTRAR CALLBACKS DE FOLLOWUP 
+  // ========================================================================
+  registerFollowupCallbacks(bot);
+
+// ========================================================================
+  // CALLBACK PARA SELECIONAR CLIENTE NO FOLLOWUP
+  // ========================================================================
+  bot.action(/followup_selecionar_cliente_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const clienteId = ctx.match[1];
+      const telegramId = ctx.from?.id;
+      const userId = ctx.state.user?.id;
+
+      if (!telegramId || !userId) {
+        return ctx.reply('Não foi possível identificar seu usuário.');
+      }
+
+      // Buscar dados do cliente
+      const { data: cliente, error } = await adminSupabase
+        .from('clientes')
+        .select('*')
+        .eq('id', clienteId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !cliente) {
+        return ctx.reply('Cliente não encontrado.');
+      }
+
+      // Verificar se já tem followup ativo para este cliente
+      const { data: followupExistente } = await adminSupabase
+        .from('followups')
+        .select('id, titulo')
+        .eq('cliente_id', clienteId)
+        .eq('user_id', userId)
+        .eq('status', 'ativo')
+        .single();
+
+      if (followupExistente) {
+        // Cliente já tem followup ativo - pedir confirmação
+        await ctx.reply(
+          `⚠️ **Atenção!**\n\n` +
+          `O cliente **${cliente.nome_empresa}** já possui um follow-up ativo:\n` +
+          `"${followupExistente.titulo}"\n\n` +
+          `Deseja substituir pelo novo follow-up?\n` +
+          `(O anterior será marcado como perdido)`,
+          {
+            parse_mode: 'Markdown',
+            ...Markup.inlineKeyboard([
+              [Markup.button.callback('✅ Sim, substituir', `confirmar_substituir_${clienteId}`)],
+              [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+            ])
+          }
+        );
+        return;
+      }
+
+      // Cliente sem followup ativo - continuar criação
+      await continuarCriacaoFollowup(ctx, telegramId, userId, cliente);
+
+    } catch (error) {
+      console.error('Erro ao selecionar cliente:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACK PARA CONFIRMAR SUBSTITUIÇÃO DE FOLLOWUP
+  // ========================================================================
+  bot.action(/confirmar_substituir_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const clienteId = ctx.match[1];
+      const telegramId = ctx.from?.id;
+      const userId = ctx.state.user?.id;
+
+      if (!telegramId || !userId) {
+        return ctx.reply('Não foi possível identificar seu usuário.');
+      }
+
+      // Marcar followup existente como perdido
+      await adminSupabase
+        .from('followups')
+        .update({
+          status: 'perdido',
+          updated_at: new Date().toISOString()
+        })
+        .eq('cliente_id', clienteId)
+        .eq('user_id', userId)
+        .eq('status', 'ativo');
+
+      // Buscar dados do cliente
+      const { data: cliente, error } = await adminSupabase
+        .from('clientes')
+        .select('*')
+        .eq('id', clienteId)
+        .eq('user_id', userId)
+        .single();
+
+      if (error || !cliente) {
+        return ctx.reply('Cliente não encontrado.');
+      }
+
+      // Continuar criação do novo followup
+      await continuarCriacaoFollowup(ctx, telegramId, userId, cliente);
+
+    } catch (error) {
+      console.error('Erro ao substituir followup:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  });
+
+  // ========================================================================
+  // CALLBACKS PARA ESTÁGIOS DO FOLLOWUP
+  // ========================================================================
+  bot.action('estagio_prospeccao', (ctx) => selecionarEstagio(ctx, 'prospeccao'));
+  bot.action('estagio_apresentacao', (ctx) => selecionarEstagio(ctx, 'apresentacao'));
+  bot.action('estagio_proposta', (ctx) => selecionarEstagio(ctx, 'proposta'));
+  bot.action('estagio_negociacao', (ctx) => selecionarEstagio(ctx, 'negociacao'));
+  bot.action('estagio_fechamento', (ctx) => selecionarEstagio(ctx, 'fechamento'));
+
+  // ========================================================================
+  // CALLBACKS PARA ATUALIZAR ESTÁGIO APÓS CONTATO
+  // ========================================================================
+  bot.action(/atualizar_estagio_([0-9a-fA-F-]+)_(\w+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const followupId = ctx.match[1];
+      const novoEstagio = ctx.match[2];
+      const userId = ctx.state.user?.id;
+
+      if (!userId) {
+        return ctx.reply('Sessão expirada.');
+      }
+
+      // Atualizar estágio
+      const { error } = await adminSupabase
+        .from('followups')
+        .update({
+          estagio: novoEstagio,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', followupId)
+        .eq('user_id', userId);
+
+      if (error) {
+        console.error('Erro ao atualizar estágio:', error);
+        return ctx.reply('Erro ao atualizar estágio.');
+      }
+
+      const estagioTexto = {
+        'prospeccao': '🔍 Prospecção',
+        'apresentacao': '📋 Apresentação',
+        'proposta': '💰 Proposta',
+        'negociacao': '🤝 Negociação',
+        'fechamento': '✅ Fechamento'
+      }[novoEstagio];
+
+      await ctx.editMessageText(
+        `✅ **Estágio atualizado para:** ${estagioTexto}\n\n` +
+        `📈 Follow-up progredindo bem! Continue assim!`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('📋 Ver Follow-ups', 'followup_listar_ativos'),
+              Markup.button.callback('📊 Menu Follow-up', 'menu_followup')
+            ],
+            [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+          ])
+        }
+      );
+
+    } catch (error) {
+      console.error('Erro ao atualizar estágio:', error);
+      await ctx.reply('Ocorreu um erro ao atualizar o estágio.');
+    }
+  });
+
+  bot.action('manter_estagio_atual', async (ctx) => {
+    ctx.answerCbQuery();
+    await ctx.editMessageText(
+      `✅ **Contato registrado com sucesso!**\n\n` +
+      `🎯 Estágio mantido como estava.\n` +
+      `📈 Continue trabalhando esta oportunidade!`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('📋 Ver Follow-ups', 'followup_listar_ativos'),
+            Markup.button.callback('📊 Menu Follow-up', 'menu_followup')
+          ],
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      }
+    );
+  });
+
+  // ========================================================================
+  // FUNÇÕES AUXILIARES
+  // ========================================================================
+  async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: string, cliente: any) {
+    // Criar sessão para dados do followup
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('telegram_id', telegramId);
+
+    await adminSupabase
+      .from('sessions')
+      .insert([{
+        telegram_id: telegramId,
+        user_id: userId,
+        command: 'followup',
+        step: 'titulo_followup',
+        data: {
+          cliente_id: cliente.id,
+          nome_cliente: cliente.nome_empresa,
+          contato_nome: cliente.contato_nome
+        },
+        updated_at: new Date().toISOString()
+      }]);
+
+    const contatoInfo = cliente.contato_nome ? ` - ${cliente.contato_nome}` : '';
+    const telefoneInfo = cliente.contato_telefone 
+      ? `\n📞 ${validators.formatters.telefone(cliente.contato_telefone)}`
+      : '';
+
+    await ctx.editMessageText(
+      `✅ **Cliente selecionado:**\n\n` +
+      `🏢 ${cliente.nome_empresa}${contatoInfo}${telefoneInfo}\n\n` +
+      `📝 Digite o **título da oportunidade**:\n\n` +
+      `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`
+    );
+  }
+
+  async function selecionarEstagio(ctx: any, estagio: string) {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
+
+      // Atualizar sessão com estágio selecionado
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'valor_estimado',
+          data: (await adminSupabase
+            .from('sessions')
+            .select('data')
+            .eq('telegram_id', telegramId)
+            .single()
+          ).data?.data ? {
+            ...(await adminSupabase
+              .from('sessions')
+              .select('data')
+              .eq('telegram_id', telegramId)
+              .single()
+            ).data.data,
+            estagio
+          } : { estagio },
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+
+      const estagioTexto = {
+        'prospeccao': '🔍 Prospecção',
+        'apresentacao': '📋 Apresentação',
+        'proposta': '💰 Proposta',
+        'negociacao': '🤝 Negociação',
+        'fechamento': '✅ Fechamento'
+      }[estagio];
+
+      await ctx.editMessageText(
+        `✅ Estágio: **${estagioTexto}**\n\n` +
+        `💰 Valor estimado da oportunidade (opcional, digite "pular"):\n\n` +
+        `Exemplos: 15000, 25.500, 100000`
+      );
+
+    } catch (error) {
+      console.error('Erro ao selecionar estágio:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  }  
+
 };

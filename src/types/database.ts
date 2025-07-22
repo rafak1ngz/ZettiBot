@@ -36,7 +36,10 @@ export interface Compromisso {
   updated_at: string;
 }
 
+// ============================================================================
 // NOVAS INTERFACES PARA CORRIGIR O ERRO
+// ============================================================================
+
 export interface CompromissoComCliente extends Compromisso {
   clientes?: Cliente | null;
 }
@@ -57,7 +60,10 @@ export interface CompromissoQuery {
   } | null;
 }
 
+// ============================================================================
 // INTERFACE PARA NOTIFICAÇÕES
+// ============================================================================
+
 export interface Notificacao {
   id: string;
   user_id: string;
@@ -73,8 +79,10 @@ export interface Notificacao {
   created_at: string;
   updated_at: string;
 }
-
+// ============================================================================
 // INTERFACE PARA LEMBRETES
+// ============================================================================
+
 export interface Lembrete {
   id: string;
   user_id: string;
@@ -89,3 +97,62 @@ export interface Lembrete {
 
 export type PrioridadeLembrete = 'baixa' | 'media' | 'alta';
 export type StatusLembrete = 'pendente' | 'concluido' | 'cancelado';
+
+
+// ============================================================================
+// INTERFACES PARA FOLLOWUP
+// ============================================================================
+
+export type EstagioFollowup = 
+  | 'prospeccao'    // 🔍 Prospecção - Primeiro contato
+  | 'apresentacao'  // 📋 Apresentação - Demo do produto  
+  | 'proposta'      // 💰 Proposta - Orçamento enviado
+  | 'negociacao'    // 🤝 Negociação - Ajustes de preço
+  | 'fechamento';   // ✅ Fechamento - Pronto para assinar
+
+export type StatusFollowup = 'ativo' | 'ganho' | 'perdido';
+
+export interface Followup {
+  id: string;
+  user_id: string;
+  cliente_id: string;
+  titulo: string;
+  estagio: EstagioFollowup;
+  valor_estimado?: number;
+  data_inicio: string;
+  data_prevista?: string;
+  ultimo_contato: string;
+  proxima_acao?: string;
+  descricao?: string;
+  status: StatusFollowup;
+  created_at: string;
+  updated_at: string;
+}
+
+// Interface para followup com dados do cliente
+export interface FollowupComCliente extends Followup {
+  clientes?: Cliente | null;
+}
+
+// Interface para queries específicas
+export interface FollowupQuery {
+  id: string;
+  user_id: string;
+  cliente_id: string;
+  titulo: string;
+  estagio: EstagioFollowup;
+  valor_estimado?: number;
+  data_inicio: string;
+  data_prevista?: string;
+  ultimo_contato: string;
+  proxima_acao?: string;
+  descricao?: string;
+  status: StatusFollowup;
+  created_at: string;
+  updated_at: string;
+  clientes?: {
+    nome_empresa: string;
+    contato_nome?: string;
+    contato_telefone?: string;
+  } | null;
+}
