@@ -78,51 +78,38 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACK PARA CRIAR CLIENTE DURANTE FOLLOWUP
+  // CALLBACK PARA CRIAR CLIENTE DURANTE FOLLOWUP - VERSÃO COM DEBUG
   // ========================================================================
   bot.action('followup_criar_cliente', async (ctx) => {
-    console.log('🔥 CALLBACK followup_criar_cliente CHAMADO!');
+    console.log('🔥 CALLBACK followup_criar_cliente EXECUTADO!');
     try {
       ctx.answerCbQuery();
       
       const telegramId = ctx.from?.id;
       const userId = ctx.state.user?.id;
       
+      console.log('📋 Debug - telegramId:', telegramId, 'userId:', userId);
+      
       if (!telegramId || !userId) {
+        console.log('❌ Erro: IDs não encontrados');
         return ctx.reply('Não foi possível identificar seu usuário.');
       }
       
-      // ✅ CORREÇÃO: Buscar sessão atual primeiro
-      const { data: sessionAtual, error: sessionError } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .single();
-
-      if (sessionError || !sessionAtual) {
-        console.error('Erro ao buscar sessão:', sessionError);
-        return ctx.reply('Sessão não encontrada. Por favor, inicie novamente.');
-      }
-
-      // ✅ CORREÇÃO: Atualizar sessão com verificação
-      const { error: updateError } = await adminSupabase
+      // Atualizar sessão para criação inline de cliente
+      const { error } = await adminSupabase
         .from('sessions')
         .update({
           step: 'criar_cliente_nome_empresa',
-          data: sessionAtual.data || {}, // Manter dados existentes
           updated_at: new Date().toISOString()
         })
         .eq('telegram_id', telegramId);
-
-      if (updateError) {
-        console.error('Erro ao atualizar sessão:', updateError);
+        
+      console.log('📋 Update session result:', error ? `ERRO: ${error.message}` : 'SUCESSO');
+      
+      if (error) {
+        console.error('❌ Erro ao atualizar sessão:', error);
         return ctx.reply('Erro ao processar solicitação. Tente novamente.');
       }
-
-      // ✅ ADICIONAR LOG DE DEBUG TEMPORÁRIO
-      console.log('✅ Sessão atualizada para criar_cliente_nome_empresa');
-      console.log('Telegram ID:', telegramId);
-      console.log('User ID:', userId);
       
       await ctx.editMessageText(`🆕 **Vamos criar um cliente rapidamente!**
 
@@ -130,8 +117,10 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 
   Exemplo: "Tech Solutions Ltda"`);
 
+      console.log('✅ Mensagem de criação de cliente enviada');
+      
     } catch (error) {
-      console.error('Erro ao iniciar criação de cliente:', error);
+      console.error('❌ Erro no callback followup_criar_cliente:', error);
       await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
     }
   });
