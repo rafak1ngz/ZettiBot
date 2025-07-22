@@ -62,7 +62,7 @@ export async function handleFollowupConversation(ctx: Context, session: any): Pr
 }
 
 // ============================================================================
-// BUSCA DE CLIENTE EXISTENTE - VERSÃO CORRIGIDA
+// BUSCA DE CLIENTE EXISTENTE
 // ============================================================================
 async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca: string): Promise<boolean> {
   if (termoBusca.length < 2) {
@@ -121,9 +121,9 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
     const statusTexto = temFollowup ? '(Já tem follow-up ativo)' : '';
 
     await ctx.reply(
-      `${statusEmoji} **${cliente.nome_empresa}**${contatoInfo}${telefoneInfo}\n${statusTexto}`,
+      `${statusEmoji} <b>${cliente.nome_empresa}</b>${contatoInfo}${telefoneInfo}\n${statusTexto}`,
       {
-        parse_mode: 'Markdown',
+        parse_mode: 'HTML', // ✅ CORRIGIDO: HTML em vez de Markdown
         ...Markup.inlineKeyboard([
           [Markup.button.callback(
             temFollowup ? '⚠️ Selecionar (substituir follow-up)' : '✅ Selecionar Cliente',
@@ -134,8 +134,6 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
     );
   }
 
-  // ✅ CORREÇÃO: Parar aqui, sem enviar botões extras nem limpar sessão
-  // A sessão deve ser mantida para que o callback followup_selecionar_cliente funcione
   return true;
 }
 
@@ -158,7 +156,10 @@ async function handleCriarClienteNomeEmpresa(ctx: Context, session: any, nomeEmp
     })
     .eq('id', session.id);
 
-  await ctx.reply(`✅ Empresa: **${nomeEmpresa}**\n\nAgora digite o **nome do contato principal**:`);
+  await ctx.reply(
+    `✅ Empresa: <b>${nomeEmpresa}</b>\n\nAgora digite o <b>nome do contato principal</b>:`,
+    { parse_mode: 'HTML' } // ✅ CORRIGIDO
+  );
   return true;
 }
 
@@ -178,7 +179,10 @@ async function handleCriarClienteContatoNome(ctx: Context, session: any, contato
     })
     .eq('id', session.id);
 
-  await ctx.reply(`✅ Contato: **${contatoNome}**\n\nTelefone do contato (opcional, digite "pular"):`);
+  await ctx.reply(
+    `✅ Contato: <b>${contatoNome}</b>\n\nTelefone do contato (opcional, digite "pular"):`,
+    { parse_mode: 'HTML' } // ✅ CORRIGIDO
+  );
   return true;
 }
 
@@ -235,12 +239,13 @@ async function handleCriarClienteTelefone(ctx: Context, session: any, telefone: 
     : '';
 
   await ctx.reply(
-    `✅ **Cliente criado com sucesso!**\n\n` +
+    `✅ <b>Cliente criado com sucesso!</b>\n\n` +
     `🏢 ${novoCliente.nome_empresa}\n` +
     `👤 ${novoCliente.contato_nome}${telefoneTexto}\n\n` +
     `Agora vamos criar o follow-up!\n\n` +
-    `📝 Digite o **título da oportunidade**:\n\n` +
-    `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`
+    `📝 Digite o <b>título da oportunidade</b>:\n\n` +
+    `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`,
+    { parse_mode: 'HTML' } // ✅ CORRIGIDO
   );
   return true;
 }
@@ -266,14 +271,17 @@ async function handleTituloFollowup(ctx: Context, session: any, titulo: string):
 
   // Mostrar botões de estágio
   await ctx.reply(
-    `✅ Título: **${titulo}**\n\nEm que estágio está esta oportunidade?`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔍 Prospecção - Primeiro contato', 'estagio_prospeccao')],
-      [Markup.button.callback('📋 Apresentação - Demo/apresentação', 'estagio_apresentacao')],
-      [Markup.button.callback('💰 Proposta - Orçamento enviado', 'estagio_proposta')],
-      [Markup.button.callback('🤝 Negociação - Ajustes de condições', 'estagio_negociacao')],
-      [Markup.button.callback('✅ Fechamento - Pronto para fechar', 'estagio_fechamento')]
-    ])
+    `✅ Título: <b>${titulo}</b>\n\nEm que estágio está esta oportunidade?`,
+    {
+      parse_mode: 'HTML', // ✅ CORRIGIDO
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔍 Prospecção - Primeiro contato', 'estagio_prospeccao')],
+        [Markup.button.callback('📋 Apresentação - Demo/apresentação', 'estagio_apresentacao')],
+        [Markup.button.callback('💰 Proposta - Orçamento enviado', 'estagio_proposta')],
+        [Markup.button.callback('🤝 Negociação - Ajustes de condições', 'estagio_negociacao')],
+        [Markup.button.callback('✅ Fechamento - Pronto para fechar', 'estagio_fechamento')]
+      ])
+    }
   );
   return true;
 }
@@ -309,12 +317,15 @@ async function handleValorEstimado(ctx: Context, session: any, valor: string): P
     : 'Não informado';
 
   await ctx.reply(
-    `✅ Valor estimado: **${valorTexto}**\n\n` +
+    `✅ Valor estimado: <b>${valorTexto}</b>\n\n` +
     `📅 Data prevista de fechamento (opcional, digite "pular"):\n\n` +
     `Formato: DD/MM/YYYY\nExemplo: 30/08/2025`,
-    Markup.keyboard([
-      ['Em 1 mês', 'Em 3 meses']
-    ]).oneTime().resize()
+    {
+      parse_mode: 'HTML', // ✅ CORRIGIDO
+      ...Markup.keyboard([
+        ['Hoje', 'Amanhã'] // ✅ CORRIGIDO: Hoje e Amanhã em vez de 1 mês e 3 meses
+      ]).oneTime().resize()
+    }
   );
   return true;
 }
@@ -325,11 +336,11 @@ async function handleDataPrevista(ctx: Context, session: any, dataTexto: string)
   if (dataTexto.toLowerCase() !== 'pular') {
     let data = null;
     
-    // Atalhos
-    if (dataTexto.toLowerCase() === 'em 1 mês') {
-      data = addDays(new Date(), 30);
-    } else if (dataTexto.toLowerCase() === 'em 3 meses') {
-      data = addDays(new Date(), 90);
+    // ✅ CORRIGIDO: Atalhos para hoje e amanhã
+    if (dataTexto.toLowerCase() === 'hoje') {
+      data = new Date();
+    } else if (dataTexto.toLowerCase() === 'amanhã') {
+      data = addDays(new Date(), 1);
     } else {
       // Parse manual da data
       data = parse(dataTexto, 'dd/MM/yyyy', new Date());
@@ -340,9 +351,10 @@ async function handleDataPrevista(ctx: Context, session: any, dataTexto: string)
       return true;
     }
     
-    // Verificar se não é no passado
+    // Verificar se não é no passado (exceto para "hoje")
     const hoje = new Date();
     hoje.setHours(0, 0, 0, 0);
+    data.setHours(0, 0, 0, 0);
     
     if (data < hoje) {
       await ctx.reply('A data prevista não pode ser no passado. Digite uma data futura.');
@@ -367,13 +379,16 @@ async function handleDataPrevista(ctx: Context, session: any, dataTexto: string)
     : 'Não informada';
 
   await ctx.reply(
-    `✅ Previsão: **${dataTextoFormatado}**\n\n` +
-    `🎬 Qual é a **próxima ação** para este follow-up?\n\n` +
+    `✅ Previsão: <b>${dataTextoFormatado}</b>\n\n` +
+    `🎬 Qual é a <b>próxima ação</b> para este follow-up?\n\n` +
     `Exemplos:\n` +
     `• "Ligar segunda-feira para agendar demo"\n` +
     `• "Aguardar retorno da proposta"\n` +
     `• "Enviar material técnico por email"`,
-    Markup.removeKeyboard()
+    {
+      parse_mode: 'HTML', // ✅ CORRIGIDO
+      ...Markup.removeKeyboard()
+    }
   );
   return true;
 }
@@ -418,11 +433,10 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
     `🎬 <b>Próxima ação:</b> ${proximaAcao}\n\n` +
     `Os dados estão corretos?`,
     {
-      parse_mode: 'HTML', // ✅ MUDADO: HTML é mais confiável
+      parse_mode: 'HTML',
       ...Markup.inlineKeyboard([
         [Markup.button.callback('✅ Confirmar e Criar', 'followup_confirmar')],
-        [Markup.button.callback('✏️ Editar Dados', 'followup_editar_dados')], // ✅ NOVO: Botão editar
-        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')] // ✅ REMOVIDO: Botão editar por ora
       ])
     }
   );
@@ -449,9 +463,10 @@ async function handleRegistrarContatoTexto(ctx: Context, session: any, resumoCon
     .eq('id', session.id);
 
   await ctx.reply(
-    `✅ **Contato registrado:**\n${resumoContato}\n\n` +
-    `🎬 **Qual a próxima ação?**\n\n` +
-    `Exemplo: "Fazer demo quinta-feira às 14h"`
+    `✅ <b>Contato registrado:</b>\n${resumoContato}\n\n` +
+    `🎬 <b>Qual a próxima ação?</b>\n\n` +
+    `Exemplo: "Fazer demo quinta-feira às 14h"`,
+    { parse_mode: 'HTML' } // ✅ CORRIGIDO
   );
   return true;
 }
@@ -488,18 +503,21 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 
     // Perguntar sobre atualização de estágio
     await ctx.reply(
-      `✅ **Contato registrado com sucesso!**\n\n` +
+      `✅ <b>Contato registrado com sucesso!</b>\n\n` +
       `📞 ${session.data.resumo_contato}\n` +
       `🎬 ${proximaAcao}\n\n` +
       `🎯 Deseja atualizar o estágio do follow-up?`,
-      Markup.inlineKeyboard([
-        [Markup.button.callback('🔍 Prospecção', `atualizar_estagio_${session.data.id}_prospeccao`)],
-        [Markup.button.callback('📋 Apresentação', `atualizar_estagio_${session.data.id}_apresentacao`)],
-        [Markup.button.callback('💰 Proposta', `atualizar_estagio_${session.data.id}_proposta`)],
-        [Markup.button.callback('🤝 Negociação', `atualizar_estagio_${session.data.id}_negociacao`)],
-        [Markup.button.callback('✅ Fechamento', `atualizar_estagio_${session.data.id}_fechamento`)],
-        [Markup.button.callback('➡️ Manter atual', 'manter_estagio_atual')]
-      ])
+      {
+        parse_mode: 'HTML', // ✅ CORRIGIDO
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🔍 Prospecção', `atualizar_estagio_${session.data.id}_prospeccao`)],
+          [Markup.button.callback('📋 Apresentação', `atualizar_estagio_${session.data.id}_apresentacao`)],
+          [Markup.button.callback('💰 Proposta', `atualizar_estagio_${session.data.id}_proposta`)],
+          [Markup.button.callback('🤝 Negociação', `atualizar_estagio_${session.data.id}_negociacao`)],
+          [Markup.button.callback('✅ Fechamento', `atualizar_estagio_${session.data.id}_fechamento`)],
+          [Markup.button.callback('➡️ Manter atual', 'manter_estagio_atual')]
+        ])
+      }
     );
 
     return true;
