@@ -10,6 +10,7 @@ import {
 import { StatusFollowup } from './types'; // ✅ CORRIGIDO: Import do local correto
 
 export function registerFollowupCallbacks(bot: Telegraf) {
+  console.log('🚀 REGISTRANDO CALLBACKS DE FOLLOWUP!');
   
   // ========================================================================
   // CALLBACKS PRINCIPAIS
@@ -48,31 +49,45 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACK PARA BUSCAR CLIENTE EXISTENTE
+  // CALLBACK PARA BUSCAR CLIENTE EXISTENTE - VERSÃO COM DEBUG
   // ========================================================================
   bot.action('followup_buscar_cliente', async (ctx) => {
+    console.log('🔥 CALLBACK followup_buscar_cliente EXECUTADO!');
     try {
       ctx.answerCbQuery();
       
       const telegramId = ctx.from?.id;
       const userId = ctx.state.user?.id;
       
+      console.log('📋 Debug buscar - telegramId:', telegramId, 'userId:', userId);
+      
       if (!telegramId || !userId) {
+        console.log('❌ Erro buscar: IDs não encontrados');
         return ctx.reply('Não foi possível identificar seu usuário.');
       }
       
       // Atualizar sessão para busca de cliente
-      await adminSupabase
+      const { error } = await adminSupabase
         .from('sessions')
         .update({
           step: 'busca_cliente_followup',
           updated_at: new Date().toISOString()
         })
         .eq('telegram_id', telegramId);
+        
+      console.log('📋 Update session buscar result:', error ? `ERRO: ${error.message}` : 'SUCESSO');
+      
+      if (error) {
+        console.error('❌ Erro ao atualizar sessão buscar:', error);
+        return ctx.reply('Erro ao processar solicitação. Tente novamente.');
+      }
       
       await ctx.editMessageText('🔍 Digite o nome ou parte do nome da empresa que deseja buscar:');
+      
+      console.log('✅ Mensagem de busca enviada');
+      
     } catch (error) {
-      console.error('Erro ao iniciar busca de cliente:', error);
+      console.error('❌ Erro no callback followup_buscar_cliente:', error);
       await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
     }
   });
