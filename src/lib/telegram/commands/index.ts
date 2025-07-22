@@ -577,6 +577,7 @@ O que deseja fazer agora?`,
         .insert([{
           telegram_id: telegramId,
           user_id: userId,
+          command: 'followup', // ✅ ADICIONADO: campo obrigatório
           step: 'titulo_followup',
           data: {
             cliente_id: cliente.id,

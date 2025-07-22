@@ -384,14 +384,14 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
     await adminSupabase
       .from('sessions')
       .delete()
-      .eq('telegram_id', telegramId)
-      .eq('type', 'followup_contato');
+      .eq('telegram_id', telegramId); // ✅ REMOVIDO: .eq('type', 'followup_contato')
 
     await adminSupabase
       .from('sessions')
       .insert({
         telegram_id: telegramId,
         user_id: userId,
+        command: 'followup', // ✅ ADICIONADO: campo obrigatório
         step: 'observacoes',
         data: { followup_id: followupId },
         created_at: new Date().toISOString(),
