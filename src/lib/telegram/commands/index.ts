@@ -565,67 +565,104 @@ O que deseja fazer agora?`,
   // FUNÇÕES AUXILIARES
   // ========================================================================
   async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: string, cliente: any) {
-    // Criar sessão para dados do followup
-    await adminSupabase
-      .from('sessions')
-      .delete()
-      .eq('telegram_id', telegramId);
+    try {
+      // Criar sessão para dados do followup
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('telegram_id', telegramId);
 
-    await adminSupabase
-      .from('sessions')
-      .insert([{
-        telegram_id: telegramId,
-        user_id: userId,
-        command: 'followup',
-        step: 'titulo_followup',
-        data: {
-          cliente_id: cliente.id,
-          nome_cliente: cliente.nome_empresa,
-          contato_nome: cliente.contato_nome
-        },
-        updated_at: new Date().toISOString()
-      }]);
+      const { error } = await adminSupabase
+        .from('sessions')
+        .insert([{
+          telegram_id: telegramId,
+          user_id: userId,
+          type: 'followup', // ✅ ADICIONADO: tipo da sessão
+          step: 'titulo_followup',
+          data: {
+            cliente_id: cliente.id,
+            nome_cliente: cliente.nome_empresa,
+            contato_nome: cliente.contato_nome
+          },
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }]);
 
-    const contatoInfo = cliente.contato_nome ? ` - ${cliente.contato_nome}` : '';
-    const telefoneInfo = cliente.contato_telefone 
-      ? `\n📞 ${validators.formatters.telefone(cliente.contato_telefone)}`
-      : '';
+      if (error) {
+        console.error('Erro ao criar sessão:', error);
+        await ctx.reply('Erro ao iniciar processo. Por favor, tente novamente.');
+        return;
+      }
 
-    await ctx.editMessageText(
-      `✅ **Cliente selecionado:**\n\n` +
-      `🏢 ${cliente.nome_empresa}${contatoInfo}${telefoneInfo}\n\n` +
-      `📝 Digite o **título da oportunidade**:\n\n` +
-      `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`
-    );
+      const contatoInfo = cliente.contato_nome ? ` - ${cliente.contato_nome}` : '';
+      const telefoneInfo = cliente.contato_telefone 
+        ? `\n📞 ${validators.formatters.telefone(cliente.contato_telefone)}`
+        : '';
+
+      await ctx.editMessageText(
+        `✅ **Cliente selecionado:**\n\n` +
+        `🏢 ${cliente.nome_empresa}${contatoInfo}${telefoneInfo}\n\n` +
+        `📝 Digite o **título da oportunidade**:\n\n` +
+        `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`
+      );
+
+    } catch (error) {
+      console.error('Erro ao continuar criação de followup:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
   }
+
+  // ============================================================================
+  // FUNÇÃO CORRIGIDA PARA SELECIONAR ESTÁGIO - SUBSTITUA NO SEU index.ts
+  // ============================================================================
 
   async function selecionarEstagio(ctx: any, estagio: string) {
     try {
       ctx.answerCbQuery();
       const telegramId = ctx.from?.id;
 
+      if (!telegramId) {
+        await ctx.reply('Não foi possível identificar seu usuário.');
+        return;
+      }
+
+      // ✅ CORREÇÃO: Buscar sessão de forma segura
+      const { data: sessionData, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('data')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (sessionError || !sessionData) {
+        console.error('Erro ao buscar sessão:', sessionError);
+        await ctx.reply('Sessão não encontrada. Por favor, inicie o processo novamente.');
+        return;
+      }
+
+      // ✅ CORREÇÃO: Verificar se data existe e é um objeto válido
+      const dadosAtuais = sessionData.data || {};
+      
+      // Combinar dados existentes com novo estágio
+      const novosDados = {
+        ...dadosAtuais,
+        estagio
+      };
+
       // Atualizar sessão com estágio selecionado
-      await adminSupabase
+      const { error: updateError } = await adminSupabase
         .from('sessions')
         .update({
           step: 'valor_estimado',
-          data: (await adminSupabase
-            .from('sessions')
-            .select('data')
-            .eq('telegram_id', telegramId)
-            .single()
-          ).data?.data ? {
-            ...(await adminSupabase
-              .from('sessions')
-              .select('data')
-              .eq('telegram_id', telegramId)
-              .single()
-            ).data.data,
-            estagio
-          } : { estagio },
+          data: novosDados,
           updated_at: new Date().toISOString()
         })
         .eq('telegram_id', telegramId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar sessão:', updateError);
+        await ctx.reply('Erro ao salvar dados. Por favor, tente novamente.');
+        return;
+      }
 
       const estagioTexto = {
         'prospeccao': '🔍 Prospecção',
@@ -645,6 +682,6 @@ O que deseja fazer agora?`,
       console.error('Erro ao selecionar estágio:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
-  }  
+  }
 
 };
