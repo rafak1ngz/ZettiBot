@@ -81,6 +81,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   // CALLBACK PARA CRIAR CLIENTE DURANTE FOLLOWUP
   // ========================================================================
   bot.action('followup_criar_cliente', async (ctx) => {
+    console.log('🔥 CALLBACK followup_criar_cliente CHAMADO!');
     try {
       ctx.answerCbQuery();
       
@@ -91,22 +92,44 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         return ctx.reply('Não foi possível identificar seu usuário.');
       }
       
-      // Atualizar sessão para criação inline de cliente
-      await adminSupabase
+      // ✅ CORREÇÃO: Buscar sessão atual primeiro
+      const { data: sessionAtual, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (sessionError || !sessionAtual) {
+        console.error('Erro ao buscar sessão:', sessionError);
+        return ctx.reply('Sessão não encontrada. Por favor, inicie novamente.');
+      }
+
+      // ✅ CORREÇÃO: Atualizar sessão com verificação
+      const { error: updateError } = await adminSupabase
         .from('sessions')
         .update({
           step: 'criar_cliente_nome_empresa',
+          data: sessionAtual.data || {}, // Manter dados existentes
           updated_at: new Date().toISOString()
         })
         .eq('telegram_id', telegramId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar sessão:', updateError);
+        return ctx.reply('Erro ao processar solicitação. Tente novamente.');
+      }
+
+      // ✅ ADICIONAR LOG DE DEBUG TEMPORÁRIO
+      console.log('✅ Sessão atualizada para criar_cliente_nome_empresa');
+      console.log('Telegram ID:', telegramId);
+      console.log('User ID:', userId);
       
-      await ctx.editMessageText(`
-🆕 Vamos criar um cliente rapidamente!
+      await ctx.editMessageText(`🆕 **Vamos criar um cliente rapidamente!**
 
-Por favor, digite o **nome da empresa**:
+  Por favor, digite o **nome da empresa**:
 
-Exemplo: "Tech Solutions Ltda"
-      `);
+  Exemplo: "Tech Solutions Ltda"`);
+
     } catch (error) {
       console.error('Erro ao iniciar criação de cliente:', error);
       await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
