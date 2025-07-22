@@ -136,14 +136,10 @@ Exemplo: "Tech Solutions Ltda"
       ctx.answerCbQuery();
       const followupId = ctx.match[1];
 
-      // Buscar dados do followup para confirmação
+      // ✅ CORREÇÃO: Query simplificada para evitar problemas de tipagem
       const { data: followup, error } = await adminSupabase
         .from('followups')
-        .select(`
-          titulo,
-          valor_estimado,
-          clientes!inner (nome_empresa)
-        `)
+        .select('titulo, valor_estimado, cliente_id')
         .eq('id', followupId)
         .single();
 
@@ -152,18 +148,21 @@ Exemplo: "Tech Solutions Ltda"
         return;
       }
 
+      // ✅ CORREÇÃO: Buscar cliente separadamente
+      const { data: cliente, error: clienteError } = await adminSupabase
+        .from('clientes')
+        .select('nome_empresa')
+        .eq('id', followup.cliente_id)
+        .single();
+
+      const nomeEmpresa = cliente?.nome_empresa || 'Cliente';
       const valorTexto = followup.valor_estimado 
         ? `💰 R$ ${new Intl.NumberFormat('pt-BR').format(followup.valor_estimado)}`
         : '';
 
-      // ✅ CORREÇÃO: Acesso seguro aos dados do cliente
-      const nomeEmpresa = Array.isArray(followup.clientes) 
-        ? followup.clientes[0]?.nome_empresa 
-        : followup.clientes?.nome_empresa;
-
       await ctx.reply(
         `🎉 **Parabéns! Venda realizada!**\n\n` +
-        `🏢 ${nomeEmpresa || 'Cliente'}\n` +
+        `🏢 ${nomeEmpresa}\n` +
         `📝 ${followup.titulo}\n` +
         `${valorTexto}\n\n` +
         `Confirma que este follow-up foi **GANHO**?`,
@@ -191,13 +190,10 @@ Exemplo: "Tech Solutions Ltda"
       ctx.answerCbQuery();
       const followupId = ctx.match[1];
 
-      // Buscar dados do followup
+      // ✅ CORREÇÃO: Query simplificada para evitar problemas de tipagem
       const { data: followup, error } = await adminSupabase
         .from('followups')
-        .select(`
-          titulo,
-          clientes!inner (nome_empresa)
-        `)
+        .select('titulo, cliente_id')
         .eq('id', followupId)
         .single();
 
@@ -206,14 +202,18 @@ Exemplo: "Tech Solutions Ltda"
         return;
       }
 
-      // ✅ CORREÇÃO: Acesso seguro aos dados do cliente
-      const nomeEmpresa = Array.isArray(followup.clientes) 
-        ? followup.clientes[0]?.nome_empresa 
-        : followup.clientes?.nome_empresa;
+      // ✅ CORREÇÃO: Buscar cliente separadamente
+      const { data: cliente, error: clienteError } = await adminSupabase
+        .from('clientes')
+        .select('nome_empresa')
+        .eq('id', followup.cliente_id)
+        .single();
+
+      const nomeEmpresa = cliente?.nome_empresa || 'Cliente';
 
       await ctx.reply(
         `❌ **Marcar como perdido**\n\n` +
-        `🏢 ${nomeEmpresa || 'Cliente'}\n` +
+        `🏢 ${nomeEmpresa}\n` +
         `📝 ${followup.titulo}\n\n` +
         `Confirma que este follow-up foi **PERDIDO**?`,
         {
