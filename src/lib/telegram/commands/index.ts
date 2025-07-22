@@ -8,7 +8,7 @@ import {
   handleClientesBuscar,
   listarClientesPaginados 
 } from './clientes';
-import { validators } from '../utils/validators';
+import { validators } from '@/utils/validators';
 import { handleLembretes, registerLembretesCallbacks } from './lembretes';
 import { handleFollowup, registerFollowupCallbacks } from './followup';
 import { getEstagioTexto, isValidEstagio } from './followup/types';
