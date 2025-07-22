@@ -1,7 +1,3 @@
-// ============================================================================
-// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
-// ============================================================================
-
 import { Telegraf, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
 import { 
@@ -80,16 +76,17 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         console.error('Erro ao atualizar sessão buscar:', error);
         return ctx.reply('Erro ao processar solicitação. Tente novamente.');
       }
-      
+
       await ctx.editMessageText(
-        `🔍 **Buscar Cliente**\n\n` +
-        `Digite o nome da empresa ou CNPJ para buscar:`,
+        `🔍 **Buscar Cliente Existente**\n\n` +
+        `Digite o **nome da empresa** que deseja buscar:\n\n` +
+        `💡 Digite pelo menos 2 caracteres`,
         { parse_mode: 'Markdown' }
       );
-      
+
     } catch (error) {
-      console.error('Erro no callback buscar cliente:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+      console.error('Erro ao configurar busca:', error);
+      await ctx.reply('Ocorreu um erro. Tente novamente.');
     }
   });
 
@@ -101,10 +98,6 @@ export function registerFollowupCallbacks(bot: Telegraf) {
       ctx.answerCbQuery();
       
       const telegramId = ctx.from?.id;
-      
-      if (!telegramId) {
-        return ctx.reply('Não foi possível identificar seu usuário.');
-      }
       
       // Atualizar sessão para criação de cliente
       const { error } = await adminSupabase
@@ -119,179 +112,44 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         console.error('Erro ao atualizar sessão criar:', error);
         return ctx.reply('Erro ao processar solicitação. Tente novamente.');
       }
-      
-      await ctx.editMessageText(
-        `🆕 **Criar Novo Cliente**\n\n` +
-        `Digite o nome da empresa:`,
-        { parse_mode: 'Markdown' }
-      );
-      
-    } catch (error) {
-      console.error('Erro no callback criar cliente:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
-    }
-  });
-
-  // ========================================================================
-  // CALLBACK PARA SELECIONAR CLIENTE DA BUSCA - CORRIGIDO
-  // ========================================================================
-  bot.action(/followup_selecionar_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const clienteId = ctx.match[1];
-      const telegramId = ctx.from?.id;
-      const userId = ctx.state.user?.id;
-
-      if (!telegramId || !userId) {
-        return ctx.reply('Não foi possível identificar seu usuário.');
-      }
-
-      // Buscar dados do cliente
-      const { data: cliente, error } = await adminSupabase
-        .from('clientes')
-        .select('*')
-        .eq('id', clienteId)
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !cliente) {
-        return ctx.reply('Cliente não encontrado.');
-      }
-
-      // Verificar se já tem followup ativo para este cliente
-      const { data: followupExistente } = await adminSupabase
-        .from('followups')
-        .select('id, titulo')
-        .eq('cliente_id', clienteId)
-        .eq('user_id', userId)
-        .eq('status', 'ativo')
-        .single();
-
-      if (followupExistente) {
-        // Cliente já tem followup ativo - pedir confirmação
-        await ctx.reply(
-          `⚠️ **Atenção!**\n\n` +
-          `O cliente **${cliente.nome_empresa}** já possui um follow-up ativo:\n` +
-          `"${followupExistente.titulo}"\n\n` +
-          `Deseja substituir pelo novo follow-up?\n` +
-          `(O anterior será marcado como perdido)`, {
-            parse_mode: 'Markdown',
-            ...Markup.inlineKeyboard([
-              [Markup.button.callback('✅ Sim, substituir', `confirmar_substituir_${clienteId}`)],
-              [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-            ])
-          }
-        );
-        return;
-      }
-
-      // Cliente sem followup ativo - continuar criação
-      await continuarCriacaoFollowup(ctx, telegramId, userId, cliente);
-
-    } catch (error) {
-      console.error('Erro ao selecionar cliente:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
-    }
-  });
-
-  // ========================================================================
-  // CALLBACK PARA CONFIRMAR SUBSTITUIÇÃO DE FOLLOWUP - CORRIGIDO
-  // ========================================================================
-  bot.action(/confirmar_substituir_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const clienteId = ctx.match[1];
-      const telegramId = ctx.from?.id;
-      const userId = ctx.state.user?.id;
-
-      if (!telegramId || !userId) {
-        return ctx.reply('Não foi possível identificar seu usuário.');
-      }
-
-      // Marcar followup existente como perdido
-      await adminSupabase
-        .from('followups')
-        .update({
-          status: 'perdido',
-          updated_at: new Date().toISOString()
-        })
-        .eq('cliente_id', clienteId)
-        .eq('user_id', userId)
-        .eq('status', 'ativo');
-
-      // Buscar dados do cliente
-      const { data: cliente, error } = await adminSupabase
-        .from('clientes')
-        .select('*')
-        .eq('id', clienteId)
-        .eq('user_id', userId)
-        .single();
-
-      if (error || !cliente) {
-        return ctx.reply('Cliente não encontrado.');
-      }
-
-      await continuarCriacaoFollowup(ctx, telegramId, userId, cliente);
-
-    } catch (error) {
-      console.error('Erro ao confirmar substituição:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
-    }
-  });
-
-  // ========================================================================
-  // CALLBACK PARA ESCOLHER ESTÁGIO DO FOLLOWUP
-  // ========================================================================
-  bot.action(/followup_estagio_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const estagio = ctx.match[1];
-      const telegramId = ctx.from?.id;
-
-      if (!telegramId) {
-        return ctx.reply('Não foi possível identificar seu usuário.');
-      }
-
-      // Atualizar sessão com estágio escolhido
-      const { data: session, error: fetchError } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .single();
-
-      if (fetchError || !session) {
-        return ctx.reply('Sessão não encontrada. Tente novamente.');
-      }
-
-      const { error: updateError } = await adminSupabase
-        .from('sessions')
-        .update({
-          step: 'valor_estimado',
-          data: { ...session.data, estagio },
-          updated_at: new Date().toISOString()
-        })
-        .eq('telegram_id', telegramId);
-
-      if (updateError) {
-        console.error('Erro ao atualizar sessão:', updateError);
-        return ctx.reply('Erro ao processar escolha.');
-      }
 
       await ctx.editMessageText(
-        `💰 **Valor Estimado**\n\n` +
-        `Digite o valor estimado da oportunidade ou "pular":\n\n` +
-        `Exemplo: 15000 ou R$ 15.000`,
+        `🏢 **Criar Novo Cliente**\n\n` +
+        `Digite o **nome da empresa**:`,
         { parse_mode: 'Markdown' }
       );
 
     } catch (error) {
-      console.error('Erro ao escolher estágio:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+      console.error('Erro ao configurar criação:', error);
+      await ctx.reply('Ocorreu um erro. Tente novamente.');
     }
   });
 
   // ========================================================================
-  // CALLBACKS PARA SELEÇÃO RÁPIDA DE DATA - NOVO
+  // CALLBACKS PARA SELEÇÃO DE ESTÁGIO
+  // ========================================================================
+  bot.action('estagio_prospeccao', async (ctx) => {
+    await processarEstagio(ctx, 'prospeccao');
+  });
+
+  bot.action('estagio_apresentacao', async (ctx) => {
+    await processarEstagio(ctx, 'apresentacao');
+  });
+
+  bot.action('estagio_proposta', async (ctx) => {
+    await processarEstagio(ctx, 'proposta');
+  });
+
+  bot.action('estagio_negociacao', async (ctx) => {
+    await processarEstagio(ctx, 'negociacao');
+  });
+
+  bot.action('estagio_fechamento', async (ctx) => {
+    await processarEstagio(ctx, 'fechamento');
+  });
+
+  // ========================================================================
+  // CALLBACKS PARA SELEÇÃO RÁPIDA DE DATA
   // ========================================================================
   bot.action('data_hoje_followup', async (ctx) => {
     await processarDataRapida(ctx, 'hoje');
@@ -318,14 +176,12 @@ export function registerFollowupCallbacks(bot: Telegraf) {
     return handleRegistrarContato(ctx, followupId);
   });
 
-  // ✅ NOVO: Callback para ver histórico de contatos
   bot.action(/followup_historico_(.+)/, async (ctx) => {
     ctx.answerCbQuery();
     const followupId = ctx.match[1];
     return handleVerHistoricoContatos(ctx, followupId);
   });
 
-  // ✅ NOVO: Callback para ver detalhes do follow-up
   bot.action(/followup_detalhes_(.+)/, async (ctx) => {
     ctx.answerCbQuery();
     const followupId = ctx.match[1];
@@ -503,7 +359,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACKS PARA NOTIFICAÇÕES DE FOLLOWUP (PLACEHOLDER LIMPO)
+  // CALLBACKS PARA NOTIFICAÇÕES DE FOLLOWUP
   // ========================================================================
   bot.action(/notif_followup_nao_(.+)/, async (ctx) => {
     ctx.answerCbQuery();
@@ -536,7 +392,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACKS PARA NOTIFICAÇÕES DE CONTATO - NOVO
+  // CALLBACKS PARA NOTIFICAÇÕES DE CONTATO - CORRIGIDO
   // ========================================================================
   bot.action(/notif_contato_nao_(.+)/, async (ctx) => {
     try {
@@ -565,213 +421,220 @@ export function registerFollowupCallbacks(bot: Telegraf) {
     }
   });
 
-  // ✅ CALLBACK: Notificação 1 hora antes
   bot.action(/notif_contato_1h_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '1h', ctx.match[1]);
   });
 
-  // ✅ CALLBACK: Notificação 24 horas antes
   bot.action(/notif_contato_24h_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '24h', ctx.match[1]);
   });
 
-  // ✅ CALLBACK: Notificação 3 dias antes
   bot.action(/notif_contato_3d_(.+)/, async (ctx) => {
     await processarNotificacaoContato(ctx, '3d', ctx.match[1]);
   });
 
-// ============================================================================
-// FUNÇÃO AUXILIAR PARA CONTINUAR CRIAÇÃO DE FOLLOWUP - CORRIGIDA
-// ============================================================================
-async function continuarCriacaoFollowup(ctx: any, telegramId: number, userId: string, cliente: any) {
-  try {
-    // Atualizar sessão com cliente selecionado
-    const { error } = await adminSupabase
-      .from('sessions')
-      .update({
-        step: 'titulo_followup',
-        data: { 
-          cliente_id: cliente.id,
-          nome_cliente: cliente.nome_empresa,
-          contato_nome: cliente.contato_nome
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('telegram_id', telegramId);
+  // ========================================================================
+  // FUNÇÕES AUXILIARES
+  // ========================================================================
+  async function processarEstagio(ctx: any, estagio: string) {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
 
-    if (error) {
-      console.error('Erro ao atualizar sessão:', error);
-      return ctx.reply('Erro ao processar seleção.');
+      if (!telegramId) {
+        return ctx.reply('Erro ao identificar usuário.');
+      }
+
+      // Buscar sessão atual
+      const { data: session, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (sessionError || !session) {
+        return ctx.reply('Sessão não encontrada. Tente novamente.');
+      }
+
+      // Atualizar sessão
+      const { error: updateError } = await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'valor_estimado',
+          data: { ...session.data, estagio },
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar sessão:', updateError);
+        return ctx.reply('Erro ao processar estágio.');
+      }
+
+      await ctx.editMessageText(
+        `💰 **Valor Estimado**\n\n` +
+        `Digite o valor estimado da oportunidade ou "pular":\n\n` +
+        `Exemplo: 15000 ou R$ 15.000`,
+        { parse_mode: 'Markdown' }
+      );
+
+    } catch (error) {
+      console.error('Erro ao escolher estágio:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
-
-    // ✅ CORRIGIDO: Usar reply em vez de editMessageText
-    await ctx.reply(
-      `✅ **Cliente selecionado:**\n` +
-      `🏢 ${cliente.nome_empresa}\n\n` +
-      `📝 Agora digite o **título da oportunidade**:\n\n` +
-      `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`,
-      { parse_mode: 'Markdown' }
-    );
-
-  } catch (error) {
-    console.error('Erro ao continuar criação:', error);
-    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
-}
 
-// ============================================================================
-// FUNÇÃO PARA PROCESSAR SELEÇÃO RÁPIDA DE DATA - NOVA
-// ============================================================================
-async function processarDataRapida(ctx: any, opcaoData: string) {
-  try {
-    ctx.answerCbQuery();
-    const telegramId = ctx.from?.id;
+  async function processarDataRapida(ctx: any, opcaoData: string) {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
 
-    if (!telegramId) {
-      return ctx.reply('Não foi possível identificar seu usuário.');
-    }
+      if (!telegramId) {
+        return ctx.reply('Erro ao identificar usuário.');
+      }
 
-    // Buscar sessão atual
-    const { data: session, error: sessionError } = await adminSupabase
-      .from('sessions')
-      .select('*')
-      .eq('telegram_id', telegramId)
-      .single();
+      // Buscar sessão atual
+      const { data: session, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
 
-    if (sessionError || !session) {
-      return ctx.reply('Sessão não encontrada. Tente novamente.');
-    }
+      if (sessionError || !session) {
+        return ctx.reply('Sessão não encontrada. Tente novamente.');
+      }
 
-    // Calcular data baseada na opção
-    let dataUTC: Date | null = null;
-    let dataFormatada = 'Não definida';
-    
-    if (opcaoData !== 'pular') {
-      let data: Date;
-      const hoje = new Date();
+      // Calcular data baseada na opção
+      let dataUTC: Date | null = null;
+      let dataFormatada = 'Não definida';
       
-      switch (opcaoData) {
-        case 'hoje':
-          data = hoje;
-          break;
-        case 'amanhã':
-          data = new Date(hoje);
-          data.setDate(data.getDate() + 1);
-          break;
-        case 'próxima semana':
-          data = new Date(hoje);
-          data.setDate(data.getDate() + 7);
-          break;
-        default:
-          return ctx.reply('Opção inválida.');
+      if (opcaoData !== 'pular') {
+        let data: Date;
+        const hoje = new Date();
+        
+        switch (opcaoData) {
+          case 'hoje':
+            data = hoje;
+            break;
+          case 'amanhã':
+            data = new Date(hoje);
+            data.setDate(data.getDate() + 1);
+            break;
+          case 'próxima semana':
+            data = new Date(hoje);
+            data.setDate(data.getDate() + 7);
+            break;
+          default:
+            return ctx.reply('Opção inválida.');
+        }
+
+        // Converter para UTC e salvar
+        dataUTC = new Date(data.getTime() + (3 * 60 * 60 * 1000));
+        dataFormatada = data.toLocaleDateString('pt-BR');
+      }
+      
+      // Atualizar sessão
+      const { error: updateError } = await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'proxima_acao',
+          data: { ...session.data, data_prevista: dataUTC?.toISOString() || null },
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+
+      if (updateError) {
+        console.error('Erro ao atualizar sessão:', updateError);
+        return ctx.reply('Erro ao processar data.');
       }
 
-      // Converter para UTC e salvar
-      dataUTC = new Date(data.getTime() + (3 * 60 * 60 * 1000));
-      dataFormatada = data.toLocaleDateString('pt-BR');
+      await ctx.reply(
+        `✅ **Data prevista:** ${dataFormatada}\n\n` +
+        `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
+        `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
+        { parse_mode: 'Markdown' }
+      );
+
+    } catch (error) {
+      console.error('Erro ao processar data rápida:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
-    
-    // Atualizar sessão
-    const { error: updateError } = await adminSupabase
-      .from('sessions')
-      .update({
-        step: 'proxima_acao',
-        data: { ...session.data, data_prevista: dataUTC?.toISOString() || null },
-        updated_at: new Date().toISOString()
-      })
-      .eq('telegram_id', telegramId);
+  }
 
-    if (updateError) {
-      console.error('Erro ao atualizar sessão:', updateError);
-      return ctx.reply('Erro ao processar data.');
+  // ========================================================================
+  // FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE CONTATO
+  // ========================================================================
+  async function processarNotificacaoContato(ctx: any, tempo: string, followupId: string) {
+    try {
+      ctx.answerCbQuery();
+
+      const tempoTexto = {
+        '1h': '1 hora',
+        '24h': '24 horas', 
+        '3d': '3 dias'
+      }[tempo] || '24 horas';
+
+      await ctx.editMessageText(
+        `✅ **Contato registrado com sucesso!**\n\n` +
+        `⏰ Lembrete configurado para **${tempoTexto}** antes da próxima ação.\n\n` +
+        `🎯 Mantenha o follow-up sempre atualizado para melhores resultados!`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('📋 Ver Histórico', `followup_historico_${followupId}`),
+              Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
+            ],
+            [
+              Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
+              Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+            ]
+          ])
+        }
+      );
+
+      console.log(`Notificação de contato configurada: ${tempo} para follow-up ${followupId}`);
+      
+    } catch (error) {
+      console.error('Erro ao processar notificação de contato:', error);
+      await ctx.reply('Ocorreu um erro ao configurar a notificação.');
     }
-
-    await ctx.reply(
-      `✅ **Data prevista:** ${dataFormatada}\n\n` +
-      `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
-      `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
-      { parse_mode: 'Markdown' }
-    );
-
-  } catch (error) {
-    console.error('Erro ao processar data rápida:', error);
-    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
-}
 
-// ============================================================================
-// FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE CONTATO - NOVA
-// ============================================================================
-async function processarNotificacaoContato(ctx: any, tempo: string, followupId: string) {
-  try {
-    ctx.answerCbQuery();
+  // ========================================================================
+  // FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE FOLLOWUP
+  // ========================================================================
+  async function processarNotificacaoFollowup(ctx: any, tempo: string, followupId: string) {
+    try {
+      ctx.answerCbQuery();
 
-    const tempoTexto = {
-      '1h': '1 hora',
-      '24h': '24 horas', 
-      '3d': '3 dias'
-    }[tempo] || '24 horas';
+      const tempoTexto = {
+        '1h': '1 hora',
+        '24h': '24 horas',
+        '3d': '3 dias'
+      }[tempo] || '24 horas';
 
-    await ctx.editMessageText(
-      `✅ **Contato registrado com sucesso!**\n\n` +
-      `⏰ Lembrete configurado para **${tempoTexto}** antes da próxima ação.\n\n` +
-      `🎯 Mantenha o follow-up sempre atualizado para melhores resultados!`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('📋 Ver Histórico', `followup_historico_${followupId}`),
-            Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
-          ],
-          [
-            Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
-            Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-          ]
-        ])
-      }
-    );
+      await ctx.editMessageText(
+        `✅ **Follow-up criado com sucesso!**\n\n` +
+        `⏰ Lembrete configurado para ${tempoTexto} antes da próxima ação.\n\n` +
+        `🎯 Agora é focar e conquistar esta venda!`, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
+              Markup.button.callback('📋 Listar Follow-ups', 'followup_listar_ativos')
+            ],
+            [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+          ])
+        }
+      );
 
-    // TODO: Implementar criação de notificação na próxima fase
-    console.log(`Notificação de contato configurada: ${tempo} para follow-up ${followupId}`);
-    
-  } catch (error) {
-    console.error('Erro ao processar notificação de contato:', error);
-    await ctx.reply('Ocorreu um erro ao configurar a notificação.');
+      // TODO: Implementar criação de notificação na próxima fase
+      
+    } catch (error) {
+      console.error('Erro ao processar notificação de followup:', error);
+      await ctx.reply('Ocorreu um erro ao configurar a notificação.');
+    }
   }
-}
 
-// ============================================================================
-// FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE FOLLOWUP
-// ============================================================================
-async function processarNotificacaoFollowup(ctx: any, tempo: string, followupId: string) {
-  try {
-    ctx.answerCbQuery();
-
-    const tempoTexto = {
-      '1h': '1 hora',
-      '24h': '24 horas',
-      '3d': '3 dias'
-    }[tempo] || '24 horas';
-
-    await ctx.editMessageText(
-      `✅ **Follow-up criado com sucesso!**\n\n` +
-      `⏰ Lembrete configurado para ${tempoTexto} antes da próxima ação.\n\n` +
-      `🎯 Agora é focar e conquistar esta venda!`, {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
-            Markup.button.callback('📋 Listar Follow-ups', 'followup_listar_ativos')
-          ],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      }
-    );
-
-    // TODO: Implementar criação de notificação na próxima fase
-    
-  } catch (error) {
-    console.error('Erro ao processar notificação de followup:', error);
-    await ctx.reply('Ocorreu um erro ao configurar a notificação.');
-  }
 }
