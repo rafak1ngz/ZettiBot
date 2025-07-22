@@ -403,8 +403,8 @@ O que deseja fazer agora?`,
       if (followupExistente) {
         // Cliente já tem followup ativo - pedir confirmação
         await ctx.reply(
-          `⚠️ **Atenção!**\n\n` +
-          `O cliente **${cliente.nome_empresa}** já possui um follow-up ativo:\n` +
+          `⚠️ <b>Atenção!</b>\n\n` +
+          `O cliente <b>${cliente.nome_empresa}</b> já possui um follow-up ativo:\n` +
           `"${followupExistente.titulo}"\n\n` +
           `Deseja substituir pelo novo follow-up?\n` +
           `(O anterior será marcado como perdido)`,
@@ -521,7 +521,7 @@ O que deseja fazer agora?`,
       const estagioTexto = getEstagioTexto(novoEstagio);
 
       await ctx.editMessageText(
-        `✅ **Estágio atualizado para:** ${estagioTexto}\n\n` +
+        `✅ <b>Estágio atualizado para:</b> ${estagioTexto}\n\n` +
         `📈 Follow-up progredindo bem! Continue assim!`,
         {
           parse_mode: 'Markdown',
@@ -545,7 +545,7 @@ O que deseja fazer agora?`,
   bot.action('manter_estagio_atual', async (ctx) => {
     ctx.answerCbQuery();
     await ctx.editMessageText(
-      `✅ **Contato registrado com sucesso!**\n\n` +
+      `✅ <b>Contato registrado com sucesso!</b>\n\n` +
       `🎯 Estágio mantido como estava.\n` +
       `📈 Continue trabalhando esta oportunidade!`,
       {
@@ -600,9 +600,9 @@ O que deseja fazer agora?`,
         : '';
 
       await ctx.reply(
-        `✅ **Cliente selecionado:**\n\n` +
+        `✅ <b>Cliente selecionado:</b>\n\n` +
         `🏢 ${cliente.nome_empresa}${contatoInfo}${telefoneInfo}\n\n` +
-        `📝 Digite o **título da oportunidade**:\n\n` +
+        `📝 Digite o <b>título da oportunidade</b>:\n\n` +
         `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`,
         { parse_mode: 'Markdown' }
       );
@@ -674,7 +674,7 @@ O que deseja fazer agora?`,
       }[estagio];
 
       await ctx.editMessageText(
-        `✅ Estágio: **${estagioTexto}**\n\n` +
+        `✅ Estágio: <b>${estagioTexto}</b>\n\n` +
         `💰 Valor estimado da oportunidade (opcional, digite "pular"):\n\n` +
         `Exemplos: 15000, 25.500, 100000`
       );
