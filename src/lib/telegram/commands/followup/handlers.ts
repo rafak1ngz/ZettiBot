@@ -392,7 +392,6 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
       .insert({
         telegram_id: telegramId,
         user_id: userId,
-        type: 'followup_contato',
         step: 'observacoes',
         data: { followup_id: followupId },
         created_at: new Date().toISOString(),

@@ -577,7 +577,6 @@ O que deseja fazer agora?`,
         .insert([{
           telegram_id: telegramId,
           user_id: userId,
-          type: 'followup', // ✅ ADICIONADO: tipo da sessão
           step: 'titulo_followup',
           data: {
             cliente_id: cliente.id,
