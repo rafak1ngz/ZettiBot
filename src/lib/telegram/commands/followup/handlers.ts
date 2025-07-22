@@ -1,5 +1,5 @@
 // ============================================================================
-// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
+// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO FINAL SEM ERROS DE TIPAGEM
 // ============================================================================
 
 import { Context } from 'telegraf';
@@ -36,6 +36,22 @@ function formatarDataSegura(dataString: any): string {
     console.error('Erro ao formatar data:', error);
     return 'Erro na data';
   }
+}
+
+// ============================================================================
+// UTILITÁRIO PARA EMOJI DE TIPO DE CONTATO
+// ============================================================================
+function getEmojiTipoContato(tipoContato: string): string {
+  const tipoEmojiMap: Record<string, string> = {
+    'ligacao': '📞',
+    'email': '📧', 
+    'reuniao': '🤝',
+    'whatsapp': '💬',
+    'visita': '🏢',
+    'outro': '📝'
+  };
+  
+  return tipoEmojiMap[tipoContato] || '📝';
 }
 
 // ============================================================================
@@ -493,17 +509,8 @@ export async function handleVerHistoricoContatos(ctx: Context, followupId: strin
       const dataContato = new Date(contato.data_contato);
       const dataFormatada = format(utcParaBrasil(dataContato), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
       
-      // ✅ CORRIGIDO: Tipagem segura do emoji do tipo de contato
-      const tipoEmojiMap: Record<string, string> = {
-        'ligacao': '📞',
-        'email': '📧', 
-        'reuniao': '🤝',
-        'whatsapp': '💬',
-        'visita': '🏢',
-        'outro': '📝'
-      };
-      
-      const tipoEmoji = tipoEmojiMap[contato.tipo_contato] || '📝';
+      // ✅ CORRIGIDO: Usar função utilitária para emoji
+      const tipoEmoji = getEmojiTipoContato(contato.tipo_contato);
 
       await ctx.reply(
         `${tipoEmoji} **Contato ${i + 1}**\n` +
@@ -543,5 +550,148 @@ export async function handleVerHistoricoContatos(ctx: Context, followupId: strin
   } catch (error) {
     console.error('Erro ao mostrar histórico:', error);
     await ctx.reply('Ocorreu um erro ao carregar histórico.');
+  }
+}
+
+// ============================================================================
+// 🆕 NOVA FUNÇÃO: VER DETALHES COMPLETOS DO FOLLOW-UP
+// ============================================================================
+export async function handleVerDetalhesFollowup(ctx: Context, followupId: string) {
+  try {
+    const userId = ctx.state.user?.id;
+    
+    if (!userId) {
+      return ctx.reply('Você precisa estar autenticado.');
+    }
+
+    // Buscar dados completos do follow-up
+    const { data: followup, error: followupError } = await adminSupabase
+      .from('followups')
+      .select(`
+        *,
+        clientes (
+          nome_empresa,
+          contato_nome,
+          contato_telefone,
+          contato_email,
+          cnpj
+        )
+      `)
+      .eq('id', followupId)
+      .eq('user_id', userId)
+      .single();
+
+    if (followupError || !followup) {
+      return ctx.reply('Follow-up não encontrado.');
+    }
+
+    // Buscar quantidade de contatos registrados
+    const { data: contatos, error: contatosError } = await adminSupabase
+      .from('contatos_followup')
+      .select('id')
+      .eq('followup_id', followupId)
+      .eq('user_id', userId);
+
+    const totalContatos = contatos?.length || 0;
+
+    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
+    
+    // ✅ Dados do cliente
+    const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+    const nomeContato = cliente?.contato_nome || '';
+    const telefone = cliente?.contato_telefone || '';
+    const email = cliente?.contato_email || '';
+    const cnpj = cliente?.cnpj || '';
+    
+    // ✅ Dados do follow-up
+    const estagioEmoji = getEstagioEmoji(followup.estagio);
+    const estagioTexto = getEstagioTexto(followup.estagio);
+    const statusTexto = getStatusTexto(followup.status);
+    
+    const valorFormatado = followup.valor_estimado 
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(followup.valor_estimado)
+      : 'Não informado';
+      
+    const dataInicioFormatada = format(utcParaBrasil(new Date(followup.data_inicio)), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
+    const ultimoContatoFormatado = format(utcParaBrasil(new Date(followup.ultimo_contato)), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
+    
+    const dataPrevisaoFormatada = followup.data_prevista 
+      ? formatarDataSegura(followup.data_prevista)
+      : 'Não definida';
+
+    // Montar mensagem detalhada
+    let mensagemDetalhes = `📋 **DETALHES COMPLETOS**\n\n`;
+    
+    // Seção do Follow-up
+    mensagemDetalhes += `${estagioEmoji} **${followup.titulo}**\n`;
+    mensagemDetalhes += `🎯 **Status:** ${statusTexto}\n`;
+    mensagemDetalhes += `📊 **Estágio:** ${estagioTexto}\n`;
+    mensagemDetalhes += `💰 **Valor estimado:** ${valorFormatado}\n\n`;
+    
+    // Seção do Cliente
+    mensagemDetalhes += `👥 **DADOS DO CLIENTE**\n`;
+    mensagemDetalhes += `🏢 **Empresa:** ${nomeEmpresa}\n`;
+    if (nomeContato) mensagemDetalhes += `👤 **Contato:** ${nomeContato}\n`;
+    if (telefone) mensagemDetalhes += `📞 **Telefone:** ${telefone}\n`;
+    if (email) mensagemDetalhes += `📧 **Email:** ${email}\n`;
+    if (cnpj) mensagemDetalhes += `📋 **CNPJ:** ${cnpj}\n`;
+    mensagemDetalhes += `\n`;
+    
+    // Seção de Timeline
+    mensagemDetalhes += `⏰ **TIMELINE**\n`;
+    mensagemDetalhes += `📅 **Criado em:** ${dataInicioFormatada}\n`;
+    mensagemDetalhes += `🕐 **Último contato:** ${ultimoContatoFormatado}\n`;
+    mensagemDetalhes += `📈 **Previsão fechamento:** ${dataPrevisaoFormatada}\n`;
+    mensagemDetalhes += `📞 **Total de contatos:** ${totalContatos}\n\n`;
+    
+    // Seção de Próxima Ação
+    mensagemDetalhes += `🎬 **PRÓXIMA AÇÃO**\n`;
+    mensagemDetalhes += `${followup.proxima_acao || 'Não definida'}\n\n`;
+    
+    // Observações se houver
+    if (followup.descricao) {
+      mensagemDetalhes += `📝 **OBSERVAÇÕES**\n`;
+      mensagemDetalhes += `${followup.descricao}`;
+    }
+
+    await ctx.reply(mensagemDetalhes, { parse_mode: 'Markdown' });
+
+    // Botões de ação baseados no status
+    let botoes = [];
+    
+    if (followup.status === 'ativo') {
+      botoes = [
+        [
+          Markup.button.callback('📞 Registrar Contato', `followup_contato_${followupId}`),
+          Markup.button.callback('✏️ Editar Follow-up', `followup_editar_${followupId}`)
+        ],
+        [
+          Markup.button.callback('📋 Ver Histórico', `followup_historico_${followupId}`),
+          Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
+        ],
+        [
+          Markup.button.callback('✅ Marcar como Ganho', `followup_ganho_${followupId}`),
+          Markup.button.callback('❌ Marcar como Perdido', `followup_perdido_${followupId}`)
+        ],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ];
+    } else {
+      botoes = [
+        [
+          Markup.button.callback('📋 Ver Histórico', `followup_historico_${followupId}`),
+          Markup.button.callback('🔄 Ver Follow-ups', `followup_listar_${followup.status}s`)
+        ],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ];
+    }
+
+    await ctx.reply(
+      'O que deseja fazer?',
+      Markup.inlineKeyboard(botoes)
+    );
+
+  } catch (error) {
+    console.error('Erro ao mostrar detalhes:', error);
+    await ctx.reply('Ocorreu um erro ao carregar detalhes do follow-up.');
   }
 }

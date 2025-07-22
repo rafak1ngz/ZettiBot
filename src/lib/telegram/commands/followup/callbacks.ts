@@ -10,6 +10,7 @@ import {
   handleListarFollowups,
   handleRegistrarContato,
   handleVerHistoricoContatos,
+  handleVerDetalhesFollowup,
   mostrarFollowupsPaginados 
 } from './handlers';
 import { StatusFollowup } from './types';
@@ -324,6 +325,13 @@ export function registerFollowupCallbacks(bot: Telegraf) {
     return handleVerHistoricoContatos(ctx, followupId);
   });
 
+  // ✅ NOVO: Callback para ver detalhes do follow-up
+  bot.action(/followup_detalhes_(.+)/, async (ctx) => {
+    ctx.answerCbQuery();
+    const followupId = ctx.match[1];
+    return handleVerDetalhesFollowup(ctx, followupId);
+  });
+
   bot.action(/followup_editar_(.+)/, async (ctx) => {
     try {
       ctx.answerCbQuery();
@@ -526,6 +534,39 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   bot.action(/notif_followup_3d_(.+)/, async (ctx) => {
     await processarNotificacaoFollowup(ctx, '3d', ctx.match[1]);
   });
+
+  // ========================================================================
+  // CALLBACKS PARA NOTIFICAÇÕES DE CONTATO - NOVO
+  // ========================================================================
+  bot.action(/notif_contato_nao_(.+)/, async (ctx) => {
+    ctx.answerCbQuery();
+    await ctx.editMessageText(
+      `✅ **Contato registrado com sucesso!**\n\n` +
+      `🔕 Nenhum lembrete será configurado.\n\n` +
+      `🎯 Continue acompanhando suas oportunidades!`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('📋 Ver Histórico', `followup_historico_${ctx.match[1]}`),
+            Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
+          ],
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      }
+    );
+  });
+
+  bot.action(/notif_contato_1h_(.+)/, async (ctx) => {
+    await processarNotificacaoContato(ctx, '1h', ctx.match[1]);
+  });
+
+  bot.action(/notif_contato_24h_(.+)/, async (ctx) => {
+    await processarNotificacaoContato(ctx, '24h', ctx.match[1]);
+  });
+
+  bot.action(/notif_contato_3d_(.+)/, async (ctx) => {
+    await processarNotificacaoContato(ctx, '3d', ctx.match[1]);
+  });
 }
 
 // ============================================================================
@@ -644,6 +685,45 @@ async function processarDataRapida(ctx: any, opcaoData: string) {
   } catch (error) {
     console.error('Erro ao processar data rápida:', error);
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+}
+
+// ============================================================================
+// FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE CONTATO - NOVA
+// ============================================================================
+async function processarNotificacaoContato(ctx: any, tempo: string, followupId: string) {
+  try {
+    ctx.answerCbQuery();
+
+    const tempoTexto = {
+      '1h': '1 hora',
+      '24h': '24 horas',
+      '3d': '3 dias'
+    }[tempo] || '24 horas';
+
+    await ctx.editMessageText(
+      `✅ **Contato registrado com sucesso!**\n\n` +
+      `⏰ Lembrete configurado para ${tempoTexto} antes da próxima ação.\n\n` +
+      `🎯 Mantenha o follow-up sempre atualizado!`, {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('📋 Ver Histórico', `followup_historico_${followupId}`),
+            Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos')
+          ],
+          [
+            Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
+            Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+          ]
+        ])
+      }
+    );
+
+    // TODO: Implementar criação de notificação na próxima fase
+    
+  } catch (error) {
+    console.error('Erro ao processar notificação de contato:', error);
+    await ctx.reply('Ocorreu um erro ao configurar a notificação.');
   }
 }
 

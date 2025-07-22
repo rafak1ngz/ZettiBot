@@ -1,5 +1,5 @@
 // ============================================================================
-// EXPORTS DO MÓDULO FOLLOWUP - VERSÃO ORGANIZADA
+// EXPORTS DO MÓDULO FOLLOWUP - VERSÃO FINAL
 // ============================================================================
 
 export { 
@@ -8,6 +8,7 @@ export {
   handleListarFollowups,
   handleRegistrarContato,
   handleVerHistoricoContatos,
+  handleVerDetalhesFollowup,
   mostrarFollowupsPaginados 
 } from './handlers';
 
