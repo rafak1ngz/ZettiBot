@@ -1,5 +1,5 @@
 // ============================================================================
-// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO CORRIGIDA
+// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO CORRIGIDA E COMPLETA
 // ============================================================================
 
 import { Context } from 'telegraf';
@@ -77,7 +77,6 @@ export async function handleFollowup(ctx: Context) {
   } catch (error) {
     console.error('Erro no menu followup:', error);
     await ctx.reply('Ocorreu um erro. Tente novamente.');
-    return false;
   }
 }
 
@@ -85,29 +84,26 @@ export async function handleFollowup(ctx: Context) {
 // NOVO FOLLOWUP
 // ============================================================================
 export async function handleNovoFollowup(ctx: Context) {
-  console.log('🔥 handleNovoFollowup CHAMADO!');
   try {
     const userId = ctx.state.user?.id;
     if (!userId) {
-      console.log('❌ UserId não encontrado');
       return ctx.reply('Você precisa estar autenticado para usar este comando.');
     }
 
     const telegramId = ctx.from?.id;
     if (!telegramId) {
-      console.log('❌ TelegramId não encontrado');
       return ctx.reply('Não foi possível identificar seu usuário.');
     }
-
-    console.log('📋 handleNovoFollowup - telegramId:', telegramId, 'userId:', userId);
 
     // Limpar sessões existentes
     const { error: deleteError } = await adminSupabase
       .from('sessions')
       .delete()
       .eq('telegram_id', telegramId);
-      
-    console.log('🗑️ Delete sessions result:', deleteError ? `ERRO: ${deleteError.message}` : 'SUCESSO');
+
+    if (deleteError) {
+      console.error('Erro ao limpar sessão:', deleteError);
+    }
 
     // Criar nova sessão para followup
     const { error: insertError } = await adminSupabase
@@ -121,29 +117,25 @@ export async function handleNovoFollowup(ctx: Context) {
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       }]);
-      
-    console.log('➕ Insert session result:', insertError ? `ERRO: ${insertError.message}` : 'SUCESSO');
 
     if (insertError) {
-      console.error('❌ Erro ao criar sessão:', insertError);
+      console.error('Erro ao criar sessão:', insertError);
       return ctx.reply('Erro ao iniciar processo. Tente novamente.');
     }
 
-    console.log('📤 Enviando mensagem com opções...');
+    await ctx.editMessageText(`🆕 **Novo Follow-up**
 
-    await ctx.editMessageText(`🆕 Novo Follow-up
-
-Como deseja proceder?`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔍 Buscar Cliente Existente', 'followup_buscar_cliente')],
-      [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-    ]));
-    
-    console.log('✅ Mensagem com opções enviada!');
+Como deseja proceder?`, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [Markup.button.callback('🔍 Buscar Cliente Existente', 'followup_buscar_cliente')],
+        [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
+        [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+      ])
+    });
     
   } catch (error) {
-    console.error('❌ Erro em handleNovoFollowup:', error);
+    console.error('Erro em handleNovoFollowup:', error);
     await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 }
@@ -193,11 +185,13 @@ export async function handleListarFollowups(ctx: Context, status: StatusFollowup
       const statusTexto = getStatusTexto(status).toLowerCase();
 
       return ctx.reply(
-        `Você não possui follow-ups ${statusTexto}.`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback('🆕 Criar Follow-up', 'followup_novo')],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
+        `Você não possui follow-ups ${statusTexto}.`, {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🆕 Criar Follow-up', 'followup_novo')],
+            [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+          ])
+        }
       );
     }
 
@@ -214,117 +208,107 @@ export async function handleListarFollowups(ctx: Context, status: StatusFollowup
 }
 
 // ============================================================================
-// PAGINAÇÃO DE FOLLOWUPS
+// PAGINAÇÃO DE FOLLOWUPS - FUNÇÃO COMPLETA CORRIGIDA
 // ============================================================================
 export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: any[], pagina: number, status: StatusFollowup) {
-  const followupsPorPagina = 3; // Menos por página pois tem mais info
-  const inicio = pagina * followupsPorPagina;
-  const fim = inicio + followupsPorPagina;
-  const followupsPagina = todosFollowups.slice(inicio, fim);
-  const totalPaginas = Math.ceil(todosFollowups.length / followupsPorPagina);
+  try {
+    const followupsPorPagina = 3;
+    const inicio = pagina * followupsPorPagina;
+    const fim = inicio + followupsPorPagina;
+    const followupsPagina = todosFollowups.slice(inicio, fim);
+    const totalPaginas = Math.ceil(todosFollowups.length / followupsPorPagina);
 
-  const statusTexto = getStatusTexto(status);
+    const statusTexto = getStatusTexto(status);
 
-  // Cabeçalho com contador
-  await ctx.reply(`${statusTexto} (${pagina + 1}/${totalPaginas}) - Total: ${todosFollowups.length}`);
+    // Cabeçalho com contador
+    await ctx.reply(`**${statusTexto}** (${pagina + 1}/${totalPaginas}) - Total: ${todosFollowups.length}`, {
+      parse_mode: 'Markdown'
+    });
 
-  // Mostrar followups da página atual
-  for (const followup of followupsPagina) {
-    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
-    const nomeCliente = cliente?.nome_empresa || 'Cliente não encontrado';
-    const nomeContato = cliente?.contato_nome ? ` - ${cliente.contato_nome}` : '';
-    
-    // Emoji do estágio usando função segura
-    const estagioEmoji = getEstagioEmoji(followup.estagio);
+    // Mostrar followups da página atual
+    for (const followup of followupsPagina) {
+      // ✅ CORRIGIDO: Verificar se clientes é array ou objeto
+      const cliente = Array.isArray(followup.clientes) 
+        ? followup.clientes[0] 
+        : followup.clientes;
 
-    // Formatação de valor
-    const valorTexto = followup.valor_estimado 
-      ? `💰 R$ ${new Intl.NumberFormat('pt-BR').format(followup.valor_estimado)}`
-      : '💰 Valor não informado';
+      const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+      const nomeContato = cliente?.contato_nome || 'Contato não informado';
+      
+      const valorFormatado = followup.valor_estimado 
+        ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(followup.valor_estimado)
+        : 'Não informado';
+        
+      const dataFormatada = followup.data_prevista 
+        ? format(utcParaBrasil(followup.data_prevista), 'dd/MM/yyyy', { locale: ptBR })
+        : 'Não definida';
 
-    // Data de previsão
-    let previsaoTexto = '';
-    if (followup.data_prevista) {
-      const dataPrevisaoUTC = new Date(followup.data_prevista);
-      const dataPrevisaoBrasil = utcParaBrasil(dataPrevisaoUTC);
-      previsaoTexto = `\n📅 Previsão: ${format(dataPrevisaoBrasil, 'dd/MM/yyyy', { locale: ptBR })}`;
-    }
+      const mensagemFollowup = `**${followup.titulo}**\n\n` +
+        `🏢 **Cliente:** ${nomeEmpresa}\n` +
+        `👤 **Contato:** ${nomeContato}\n` +
+        `${getEstagioEmoji(followup.estagio)} **Estágio:** ${getEstagioTexto(followup.estagio)}\n` +
+        `💰 **Valor:** ${valorFormatado}\n` +
+        `📅 **Previsão:** ${dataFormatada}\n` +
+        `📝 **Próxima Ação:** ${followup.proxima_acao || 'Não definida'}`;
 
-    // Último contato
-    const ultimoContatoUTC = new Date(followup.ultimo_contato);
-    const ultimoContatoBrasil = utcParaBrasil(ultimoContatoUTC);
-    const ultimoContatoTexto = `\n🕐 Último contato: ${format(ultimoContatoBrasil, 'dd/MM/yyyy', { locale: ptBR })}`;
-
-    // Próxima ação
-    const proximaAcaoTexto = followup.proxima_acao 
-      ? `\n🎬 ${followup.proxima_acao}`
-      : '';
-
-    let botoes = [];
-    
-    if (status === 'ativo') {
-      // Botões para followups ativos
-      botoes = [
-        [
-          Markup.button.callback('📞 Contato', `followup_contato_${followup.id}`),
+      const botoes = [];
+      
+      // Botões específicos por status
+      if (status === 'ativo') {
+        botoes.push([
+          Markup.button.callback('📞 Registrar Contato', `followup_contato_${followup.id}`),
           Markup.button.callback('✏️ Editar', `followup_editar_${followup.id}`)
-        ],
-        [
-          Markup.button.callback('✅ Ganhou', `followup_ganho_${followup.id}`),
-          Markup.button.callback('❌ Perdeu', `followup_perdido_${followup.id}`)
-        ]
-      ];
-    } else {
-      // Botões para followups finalizados
-      botoes = [
-        [Markup.button.callback('👁️ Ver Detalhes', `followup_detalhes_${followup.id}`)]
-      ];
-    }
-    
-    await ctx.reply(
-      `${estagioEmoji} **${followup.titulo}**\n` +
-      `🏢 ${nomeCliente}${nomeContato}\n` +
-      `${valorTexto}${previsaoTexto}${ultimoContatoTexto}${proximaAcaoTexto}`,
-      {
+        ]);
+        botoes.push([
+          Markup.button.callback('✅ Marcar como Ganho', `followup_ganho_${followup.id}`),
+          Markup.button.callback('❌ Marcar como Perdido', `followup_perdido_${followup.id}`)
+        ]);
+      } else {
+        botoes.push([
+          Markup.button.callback('📋 Ver Detalhes', `followup_detalhes_${followup.id}`)
+        ]);
+      }
+
+      await ctx.reply(mensagemFollowup, {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard(botoes)
+      });
+    }
+
+    // Botões de navegação
+    const botoesNavegacao = [];
+    
+    if (totalPaginas > 1) {
+      const navButtons = [];
+      
+      if (pagina > 0) {
+        navButtons.push(Markup.button.callback('⬅️ Anterior', `followup_pagina_${status}_${pagina - 1}`));
       }
-    );
-  }
+      
+      if (pagina < totalPaginas - 1) {
+        navButtons.push(Markup.button.callback('➡️ Próxima', `followup_pagina_${status}_${pagina + 1}`));
+      }
+      
+      if (navButtons.length > 0) {
+        botoesNavegacao.push(navButtons);
+      }
+    }
 
-  // Botões de navegação
-  const botoesNavegacao = [];
-  
-  // Botões de paginação
-  const botoesPaginacao = [];
-  if (pagina > 0) {
-    botoesPaginacao.push(Markup.button.callback('⬅️ Anterior', `followup_pagina_${status}_${pagina - 1}`));
-  }
-  if (pagina < totalPaginas - 1) {
-    botoesPaginacao.push(Markup.button.callback('➡️ Próxima', `followup_pagina_${status}_${pagina + 1}`));
-  }
-  
-  if (botoesPaginacao.length > 0) {
-    botoesNavegacao.push(botoesPaginacao);
-  }
-
-  // Botões de ação
-  if (status === 'ativo') {
     botoesNavegacao.push([
       Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
       Markup.button.callback('📊 Follow-up Menu', 'menu_followup')
     ]);
-  } else {
-    botoesNavegacao.push([
-      Markup.button.callback('📊 Follow-up Menu', 'menu_followup'),
-      Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-    ]);
-  }
+    botoesNavegacao.push([Markup.button.callback('🏠 Menu Principal', 'menu_principal')]);
 
-  await ctx.reply(
-    'O que deseja fazer?',
-    Markup.inlineKeyboard(botoesNavegacao)
-  );
+    await ctx.reply('📍 **Navegação:**', {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard(botoesNavegacao)
+    });
+
+  } catch (error) {
+    console.error('Erro na paginação de followups:', error);
+    await ctx.reply('Erro ao exibir followups. Tente novamente.');
+  }
 }
 
 // ============================================================================
@@ -336,10 +320,10 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
     const telegramId = ctx.from?.id;
     
     if (!userId || !telegramId) {
-      return ctx.reply('Não foi possível identificar seu usuário.');
+      return ctx.reply('Você precisa estar autenticado.');
     }
 
-    // Buscar dados do followup
+    // Buscar followup
     const { data: followup, error } = await adminSupabase
       .from('followups')
       .select(`
@@ -354,52 +338,46 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
       .single();
 
     if (error || !followup) {
-      console.error('Erro ao buscar followup:', error);
-      await ctx.reply('Follow-up não encontrado.');
-      return;
+      return ctx.reply('Follow-up não encontrado.');
     }
 
-    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
-    const nomeCliente = cliente?.nome_empresa || 'Cliente não encontrado';
-    const nomeContato = cliente?.contato_nome ? ` - ${cliente.contato_nome}` : '';
-    
-    // Usar função segura para obter emoji e texto do estágio
-    const estagioEmoji = getEstagioEmoji(followup.estagio);
-    const estagioTexto = getEstagioTexto(followup.estagio);
-
-    await ctx.reply(
-      `📞 **Registrar Contato**\n\n` +
-      `${estagioEmoji} **${followup.titulo}**\n` +
-      `🏢 ${nomeCliente}${nomeContato}\n\n` +
-      `📝 Digite suas **observações** sobre este contato:`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-        ])
-      }
-    );
-
-    // Limpar sessões anteriores e criar nova
+    // Limpar sessão anterior
     await adminSupabase
       .from('sessions')
       .delete()
-      .eq('telegram_id', telegramId); // ✅ REMOVIDO: .eq('type', 'followup_contato')
+      .eq('telegram_id', telegramId);
 
-    await adminSupabase
+    // Criar nova sessão
+    const { error: sessionError } = await adminSupabase
       .from('sessions')
       .insert({
         telegram_id: telegramId,
         user_id: userId,
-        command: 'followup', // ✅ ADICIONADO: campo obrigatório
-        step: 'observacoes',
+        command: 'followup',
+        step: 'registrar_contato',
         data: { followup_id: followupId },
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
       });
 
+    if (sessionError) {
+      console.error('Erro ao criar sessão:', sessionError);
+      return ctx.reply('Erro ao iniciar registro de contato.');
+    }
+
+    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
+    const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+
+    await ctx.reply(
+      `📞 **Registrar Contato**\n\n` +
+      `**Follow-up:** ${followup.titulo}\n` +
+      `**Cliente:** ${nomeEmpresa}\n\n` +
+      `Descreva o contato realizado:`,
+      { parse_mode: 'Markdown' }
+    );
+
   } catch (error) {
     console.error('Erro ao registrar contato:', error);
-    await ctx.reply('Ocorreu um erro. Tente novamente.');
+    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
   }
 }

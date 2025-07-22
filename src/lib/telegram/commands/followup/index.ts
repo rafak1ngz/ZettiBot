@@ -1,5 +1,5 @@
 // ============================================================================
-// EXPORTS DO MÓDULO FOLLOWUP - VERSÃO ATUALIZADA
+// EXPORTS DO MÓDULO FOLLOWUP - VERSÃO ORGANIZADA
 // ============================================================================
 
 export { 

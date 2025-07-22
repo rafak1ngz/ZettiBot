@@ -1,5 +1,5 @@
 // ============================================================================
-// TIPOS E CONSTANTES PARA MÓDULO FOLLOWUP
+// TIPOS E CONSTANTES PARA MÓDULO FOLLOWUP - VERSÃO CORRIGIDA
 // ============================================================================
 
 // Tipo para os estágios do follow-up
