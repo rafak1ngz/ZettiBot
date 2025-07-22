@@ -9,6 +9,7 @@ import {
   handleNovoFollowup, 
   handleListarFollowups,
   handleRegistrarContato,
+  handleVerHistoricoContatos,
   mostrarFollowupsPaginados 
 } from './handlers';
 import { StatusFollowup } from './types';
@@ -303,6 +304,10 @@ export function registerFollowupCallbacks(bot: Telegraf) {
     await processarDataRapida(ctx, 'próxima semana');
   });
 
+  bot.action('data_pular_followup', async (ctx) => {
+    await processarDataRapida(ctx, 'pular');
+  });
+
   // ========================================================================
   // CALLBACKS PARA AÇÕES DO FOLLOWUP
   // ========================================================================
@@ -310,6 +315,13 @@ export function registerFollowupCallbacks(bot: Telegraf) {
     ctx.answerCbQuery();
     const followupId = ctx.match[1];
     return handleRegistrarContato(ctx, followupId);
+  });
+
+  // ✅ NOVO: Callback para ver histórico de contatos
+  bot.action(/followup_historico_(.+)/, async (ctx) => {
+    ctx.answerCbQuery();
+    const followupId = ctx.match[1];
+    return handleVerHistoricoContatos(ctx, followupId);
   });
 
   bot.action(/followup_editar_(.+)/, async (ctx) => {
@@ -579,34 +591,40 @@ async function processarDataRapida(ctx: any, opcaoData: string) {
     }
 
     // Calcular data baseada na opção
-    let data: Date;
-    const hoje = new Date();
+    let dataUTC: Date | null = null;
+    let dataFormatada = 'Não definida';
     
-    switch (opcaoData) {
-      case 'hoje':
-        data = hoje;
-        break;
-      case 'amanhã':
-        data = new Date(hoje);
-        data.setDate(data.getDate() + 1);
-        break;
-      case 'próxima semana':
-        data = new Date(hoje);
-        data.setDate(data.getDate() + 7);
-        break;
-      default:
-        return ctx.reply('Opção inválida.');
-    }
+    if (opcaoData !== 'pular') {
+      let data: Date;
+      const hoje = new Date();
+      
+      switch (opcaoData) {
+        case 'hoje':
+          data = hoje;
+          break;
+        case 'amanhã':
+          data = new Date(hoje);
+          data.setDate(data.getDate() + 1);
+          break;
+        case 'próxima semana':
+          data = new Date(hoje);
+          data.setDate(data.getDate() + 7);
+          break;
+        default:
+          return ctx.reply('Opção inválida.');
+      }
 
-    // Converter para UTC e salvar
-    const dataUTC = new Date(data.getTime() + (3 * 60 * 60 * 1000));
+      // Converter para UTC e salvar
+      dataUTC = new Date(data.getTime() + (3 * 60 * 60 * 1000));
+      dataFormatada = data.toLocaleDateString('pt-BR');
+    }
     
     // Atualizar sessão
     const { error: updateError } = await adminSupabase
       .from('sessions')
       .update({
         step: 'proxima_acao',
-        data: { ...session.data, data_prevista: dataUTC.toISOString() },
+        data: { ...session.data, data_prevista: dataUTC?.toISOString() || null },
         updated_at: new Date().toISOString()
       })
       .eq('telegram_id', telegramId);
@@ -615,8 +633,6 @@ async function processarDataRapida(ctx: any, opcaoData: string) {
       console.error('Erro ao atualizar sessão:', updateError);
       return ctx.reply('Erro ao processar data.');
     }
-
-    const dataFormatada = data.toLocaleDateString('pt-BR');
 
     await ctx.reply(
       `✅ **Data prevista:** ${dataFormatada}\n\n` +

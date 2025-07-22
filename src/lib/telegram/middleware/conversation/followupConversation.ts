@@ -311,9 +311,24 @@ async function handleValorEstimado(ctx: Context, session: any, valorTexto: strin
 
   await ctx.reply(
     `✅ **Valor:** ${valorTextoFormatado}\n\n` +
-    `📅 Digite a **data prevista** de fechamento ou "pular":\n\n` +
-    `Formatos aceitos: 15/12/2024, 15/12, amanhã, próxima semana`,
+    `📅 Digite a **data prevista** de fechamento ou escolha uma opção:`,
     { parse_mode: 'Markdown' }
+  );
+
+  // ✅ CORRIGIDO: Botões inline em vez de keyboard
+  await ctx.reply(
+    `Ou escolha uma opção rápida:`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📅 Hoje', 'data_hoje_followup'),
+          Markup.button.callback('🗓️ Amanhã', 'data_amanha_followup')
+        ],
+        [Markup.button.callback('📆 Próxima semana', 'data_semana_followup')],
+        [Markup.button.callback('⏭️ Pular', 'data_pular_followup')]
+      ])
+    }
   );
   return true;
 }
@@ -495,11 +510,36 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
       .delete()
       .eq('id', session.id);
 
+    // ✅ NOVO: Buscar dados atualizados do follow-up para mostrar
+    const { data: followupAtualizado, error: fetchError } = await adminSupabase
+      .from('followups')
+      .select(`
+        *,
+        clientes (
+          nome_empresa,
+          contato_nome
+        )
+      `)
+      .eq('id', session.data.followup_id)
+      .single();
+
+    if (fetchError || !followupAtualizado) {
+      console.error('Erro ao buscar follow-up atualizado:', fetchError);
+    }
+
+    const cliente = Array.isArray(followupAtualizado?.clientes) 
+      ? followupAtualizado.clientes[0] 
+      : followupAtualizado?.clientes;
+
+    const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+
     await ctx.reply(
       `✅ **Contato registrado com sucesso!**\n\n` +
-      `📝 **Descrição:** ${session.data.contato_descricao}\n` +
-      `🎬 **Próxima ação:** ${proximaAcao}\n\n` +
-      `Continue acompanhando suas oportunidades!`,
+      `🏢 **Cliente:** ${nomeEmpresa}\n` +
+      `📝 **Resumo do contato:** ${session.data.resumo_contato}\n` +
+      `🎬 **Próxima ação:** ${proximaAcao}\n` +
+      `🕐 **Último contato:** Hoje, ${format(new Date(), 'HH:mm', { locale: ptBR })}\n\n` +
+      `🎯 **Dica:** Você pode ver todos os dados atualizados em "📋 Listar Follow-ups"`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([

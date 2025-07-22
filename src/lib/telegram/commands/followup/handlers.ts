@@ -281,11 +281,16 @@ export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: an
             Markup.button.callback('✏️ Editar', `followup_editar_${followup.id}`)
           ]);
           botoes.push([
+            Markup.button.callback('📋 Ver Histórico', `followup_historico_${followup.id}`),
+            Markup.button.callback('📋 Ver Detalhes', `followup_detalhes_${followup.id}`)
+          ]);
+          botoes.push([
             Markup.button.callback('✅ Marcar como Ganho', `followup_ganho_${followup.id}`),
             Markup.button.callback('❌ Marcar como Perdido', `followup_perdido_${followup.id}`)
           ]);
         } else {
           botoes.push([
+            Markup.button.callback('📋 Ver Histórico', `followup_historico_${followup.id}`),
             Markup.button.callback('📋 Ver Detalhes', `followup_detalhes_${followup.id}`)
           ]);
         }
@@ -404,5 +409,137 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
   } catch (error) {
     console.error('Erro ao registrar contato:', error);
     await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+  }
+}
+
+// ============================================================================
+// 🆕 NOVA FUNÇÃO: VER HISTÓRICO DE CONTATOS
+// ============================================================================
+export async function handleVerHistoricoContatos(ctx: Context, followupId: string) {
+  try {
+    const userId = ctx.state.user?.id;
+    
+    if (!userId) {
+      return ctx.reply('Você precisa estar autenticado.');
+    }
+
+    // Buscar dados do follow-up
+    const { data: followup, error: followupError } = await adminSupabase
+      .from('followups')
+      .select(`
+        titulo,
+        estagio,
+        clientes (
+          nome_empresa,
+          contato_nome
+        )
+      `)
+      .eq('id', followupId)
+      .eq('user_id', userId)
+      .single();
+
+    if (followupError || !followup) {
+      return ctx.reply('Follow-up não encontrado.');
+    }
+
+    // Buscar histórico de contatos
+    const { data: contatos, error: contatosError } = await adminSupabase
+      .from('contatos_followup')
+      .select('*')
+      .eq('followup_id', followupId)
+      .eq('user_id', userId)
+      .order('data_contato', { ascending: false });
+
+    if (contatosError) {
+      console.error('Erro ao buscar histórico:', contatosError);
+      return ctx.reply('Erro ao carregar histórico de contatos.');
+    }
+
+    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
+    const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+    const nomeContato = cliente?.contato_nome || '';
+    
+    const estagioEmoji = getEstagioEmoji(followup.estagio);
+    const estagioTexto = getEstagioTexto(followup.estagio);
+
+    // Cabeçalho
+    await ctx.reply(
+      `📋 **Histórico de Contatos**\n\n` +
+      `${estagioEmoji} **${followup.titulo}**\n` +
+      `🏢 ${nomeEmpresa}${nomeContato ? ` - ${nomeContato}` : ''}\n` +
+      `🎯 ${estagioTexto}`,
+      { parse_mode: 'Markdown' }
+    );
+
+    if (!contatos || contatos.length === 0) {
+      return ctx.reply(
+        `📝 **Nenhum contato registrado ainda**\n\n` +
+        `Este follow-up ainda não possui histórico de contatos.`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('📞 Registrar Primeiro Contato', `followup_contato_${followupId}`)],
+            [Markup.button.callback('🔙 Voltar', 'voltar_followups')]
+          ])
+        }
+      );
+    }
+
+    // Mostrar histórico
+    await ctx.reply(`📞 **${contatos.length} contato(s) registrado(s):**`, { parse_mode: 'Markdown' });
+
+    for (let i = 0; i < Math.min(contatos.length, 5); i++) {
+      const contato = contatos[i];
+      const dataContato = new Date(contato.data_contato);
+      const dataFormatada = format(utcParaBrasil(dataContato), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
+      
+      // Emoji do tipo de contato
+      const tipoEmoji = {
+        'ligacao': '📞',
+        'email': '📧', 
+        'reuniao': '🤝',
+        'whatsapp': '💬',
+        'visita': '🏢',
+        'outro': '📝'
+      }[contato.tipo_contato] || '📝';
+
+      await ctx.reply(
+        `${tipoEmoji} **Contato ${i + 1}**\n` +
+        `📅 ${dataFormatada}\n\n` +
+        `**Resumo:**\n${contato.resumo}\n\n` +
+        `**Próxima ação definida:**\n${contato.proxima_acao || 'Não definida'}`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    // Se houver mais contatos, mostrar resumo
+    if (contatos.length > 5) {
+      await ctx.reply(
+        `📊 **Resumo:** Mostrando os 5 contatos mais recentes de ${contatos.length} total.\n\n` +
+        `💡 **Dica:** Mantenha seu histórico sempre atualizado para um follow-up mais eficiente!`,
+        { parse_mode: 'Markdown' }
+      );
+    }
+
+    // Botões de ação
+    await ctx.reply(
+      `O que deseja fazer?`,
+      {
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('📞 Novo Contato', `followup_contato_${followupId}`),
+            Markup.button.callback('✏️ Editar Follow-up', `followup_editar_${followupId}`)
+          ],
+          [
+            Markup.button.callback('🔄 Ver Follow-ups', 'followup_listar_ativos'),
+            Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+          ]
+        ])
+      }
+    );
+
+  } catch (error) {
+    console.error('Erro ao mostrar histórico:', error);
+    await ctx.reply('Ocorreu um erro ao carregar histórico.');
   }
 }

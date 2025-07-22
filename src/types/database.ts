@@ -1,3 +1,7 @@
+// ============================================================================
+// TIPOS E INTERFACES DO DATABASE - COM HISTÓRICO DE CONTATOS
+// ============================================================================
+
 export interface User {
   id: string;
   telegram_id: number;
@@ -36,10 +40,6 @@ export interface Compromisso {
   updated_at: string;
 }
 
-// ============================================================================
-// NOVAS INTERFACES PARA CORRIGIR O ERRO
-// ============================================================================
-
 export interface CompromissoComCliente extends Compromisso {
   clientes?: Cliente | null;
 }
@@ -60,10 +60,6 @@ export interface CompromissoQuery {
   } | null;
 }
 
-// ============================================================================
-// INTERFACE PARA NOTIFICAÇÕES
-// ============================================================================
-
 export interface Notificacao {
   id: string;
   user_id: string;
@@ -79,9 +75,6 @@ export interface Notificacao {
   created_at: string;
   updated_at: string;
 }
-// ============================================================================
-// INTERFACE PARA LEMBRETES
-// ============================================================================
 
 export interface Lembrete {
   id: string;
@@ -97,7 +90,6 @@ export interface Lembrete {
 
 export type PrioridadeLembrete = 'baixa' | 'media' | 'alta';
 export type StatusLembrete = 'pendente' | 'concluido' | 'cancelado';
-
 
 // ============================================================================
 // INTERFACES PARA FOLLOWUP
@@ -129,12 +121,10 @@ export interface Followup {
   updated_at: string;
 }
 
-// Interface para followup com dados do cliente
 export interface FollowupComCliente extends Followup {
   clientes?: Cliente | null;
 }
 
-// Interface para queries específicas
 export interface FollowupQuery {
   id: string;
   user_id: string;
@@ -155,4 +145,33 @@ export interface FollowupQuery {
     contato_nome?: string;
     contato_telefone?: string;
   } | null;
+}
+
+// ============================================================================
+// 🆕 NOVA INTERFACE PARA HISTÓRICO DE CONTATOS
+// ============================================================================
+
+export type TipoContato = 'ligacao' | 'email' | 'reuniao' | 'whatsapp' | 'visita' | 'outro';
+
+export interface ContatoFollowup {
+  id: string;
+  followup_id: string;
+  user_id: string;
+  data_contato: string;
+  tipo_contato: TipoContato;
+  resumo: string;
+  proxima_acao?: string;
+  observacoes?: string;
+  created_at: string;
+}
+
+export interface ContatoFollowupComDados extends ContatoFollowup {
+  followups?: {
+    titulo: string;
+    estagio: EstagioFollowup;
+    clientes?: {
+      nome_empresa: string;
+      contato_nome?: string;
+    };
+  };
 }

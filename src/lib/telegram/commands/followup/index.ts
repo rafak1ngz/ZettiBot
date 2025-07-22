@@ -7,6 +7,7 @@ export {
   handleNovoFollowup, 
   handleListarFollowups,
   handleRegistrarContato,
+  handleVerHistoricoContatos,
   mostrarFollowupsPaginados 
 } from './handlers';
 
