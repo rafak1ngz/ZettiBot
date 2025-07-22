@@ -10,7 +10,7 @@ import {
 } from './clientes';
 import { handleLembretes, registerLembretesCallbacks } from './lembretes';
 import { handleFollowup, registerFollowupCallbacks } from './followup';
-
+import { getEstagioTexto, isValidEstagio } from './followup/types';
 
 // ============================================================================
 // IMPORTAR NOVO MÓDULO DE AGENDA
@@ -496,6 +496,11 @@ O que deseja fazer agora?`,
         return ctx.reply('Sessão expirada.');
       }
 
+      // Validar estágio antes de usar
+      if (!isValidEstagio(novoEstagio)) {
+        return ctx.reply('Estágio inválido.');
+      }
+
       // Atualizar estágio
       const { error } = await adminSupabase
         .from('followups')
@@ -511,13 +516,8 @@ O que deseja fazer agora?`,
         return ctx.reply('Erro ao atualizar estágio.');
       }
 
-      const estagioTexto = {
-        'prospeccao': '🔍 Prospecção',
-        'apresentacao': '📋 Apresentação',
-        'proposta': '💰 Proposta',
-        'negociacao': '🤝 Negociação',
-        'fechamento': '✅ Fechamento'
-      }[novoEstagio];
+      // Usar função segura para obter texto do estágio
+      const estagioTexto = getEstagioTexto(novoEstagio);
 
       await ctx.editMessageText(
         `✅ **Estágio atualizado para:** ${estagioTexto}\n\n` +
@@ -539,6 +539,7 @@ O que deseja fazer agora?`,
       await ctx.reply('Ocorreu um erro ao atualizar o estágio.');
     }
   });
+
 
   bot.action('manter_estagio_atual', async (ctx) => {
     ctx.answerCbQuery();

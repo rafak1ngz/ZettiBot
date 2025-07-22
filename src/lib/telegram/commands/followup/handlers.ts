@@ -1,171 +1,204 @@
-import { Context, Markup } from 'telegraf';
-import { adminSupabase } from '@/lib/supabase';
+// ============================================================================
+// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO CORRIGIDA
+// ============================================================================
+
+import { Context } from 'telegraf';
+import { Markup } from 'telegraf';
+import { adminSupabase } from '../../../db/supabase';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { utcParaBrasil } from '@/utils/timezone';
-import { EstagioFollowup, StatusFollowup } from '@/types/database';
+import { utcParaBrasil } from '../../utils/dateUtils';
+import { 
+  EstagioFollowup, 
+  StatusFollowup, 
+  getEstagioEmoji, 
+  getEstagioTexto, 
+  getStatusTexto,
+  isValidStatus 
+} from './types';
 
 // ============================================================================
-// MENU PRINCIPAL DE FOLLOWUP
+// MENU PRINCIPAL DO FOLLOWUP
 // ============================================================================
 export async function handleFollowup(ctx: Context) {
-  const userId = ctx.state.user?.id;
-  if (!userId) {
-    return ctx.reply('Você precisa estar autenticado para usar este comando.');
+  try {
+    const userId = ctx.state.user?.id;
+    if (!userId) {
+      return ctx.reply('Você precisa estar autenticado. Use /inicio para registrar-se.');
+    }
+
+    // Buscar estatísticas
+    const { data: followups, error } = await adminSupabase
+      .from('followups')
+      .select('status, valor_estimado')
+      .eq('user_id', userId);
+
+    if (error) {
+      console.error('Erro ao buscar estatísticas:', error);
+      return ctx.reply('Erro ao carregar estatísticas.');
+    }
+
+    // Calcular estatísticas
+    const ativos = followups?.filter(f => f.status === 'ativo').length || 0;
+    const ganhos = followups?.filter(f => f.status === 'ganho').length || 0;
+    const perdidos = followups?.filter(f => f.status === 'perdido').length || 0;
+    
+    const valorTotal = followups
+      ?.filter(f => f.status === 'ativo' && f.valor_estimado)
+      .reduce((acc, f) => acc + f.valor_estimado, 0) || 0;
+
+    const valorFormatado = new Intl.NumberFormat('pt-BR', {
+      style: 'currency',
+      currency: 'BRL'
+    }).format(valorTotal);
+
+    const mensagem = `📊 **Painel Follow-up**\n\n` +
+      `🔄 **Ativos:** ${ativos}\n` +
+      `✅ **Ganhos:** ${ganhos}\n` +
+      `❌ **Perdidos:** ${perdidos}\n\n` +
+      `💰 **Pipeline Total:** ${valorFormatado}`;
+
+    await ctx.reply(mensagem, {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
+          Markup.button.callback('🔄 Ver Ativos', 'followup_listar_ativos')
+        ],
+        [
+          Markup.button.callback('✅ Ver Ganhos', 'followup_listar_ganhos'),
+          Markup.button.callback('❌ Ver Perdidos', 'followup_listar_perdidos')
+        ],
+        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+      ])
+    });
+
+    return true;
+  } catch (error) {
+    console.error('Erro no menu followup:', error);
+    await ctx.reply('Ocorreu um erro. Tente novamente.');
+    return false;
   }
-
-  // Buscar estatísticas rápidas
-  const { data: stats } = await adminSupabase
-    .from('followups')
-    .select('status')
-    .eq('user_id', userId);
-
-  const ativos = stats?.filter(f => f.status === 'ativo').length || 0;
-  const ganhos = stats?.filter(f => f.status === 'ganho').length || 0;
-  const perdidos = stats?.filter(f => f.status === 'perdido').length || 0;
-
-  return ctx.reply(`
-📊 Follow-up ZettiBot 
-
-📈 Seus números:
-🔄 Ativos: ${ativos}
-✅ Ganhos: ${ganhos} 
-❌ Perdidos: ${perdidos}
-
-O que deseja fazer?
-  `, 
-  Markup.inlineKeyboard([
-    [
-      Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
-      Markup.button.callback('📋 Listar Follow-ups', 'followup_listar')
-    ],
-    [
-      Markup.button.callback('🏠 Menu Principal', 'menu_principal')
-    ]
-  ]));
 }
 
 // ============================================================================
-// CRIAR NOVO FOLLOWUP
+// NOVO FOLLOWUP
 // ============================================================================
 export async function handleNovoFollowup(ctx: Context) {
   try {
     const userId = ctx.state.user?.id;
-    if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
-    }
-
     const telegramId = ctx.from?.id;
-    if (!telegramId) {
+
+    if (!userId || !telegramId) {
       return ctx.reply('Não foi possível identificar seu usuário.');
     }
 
-    // Limpar sessões existentes
+    // Limpar sessões anteriores
     await adminSupabase
       .from('sessions')
       .delete()
-      .eq('telegram_id', telegramId);
+      .eq('telegram_id', telegramId)
+      .eq('type', 'followup');
 
-    // Criar nova sessão para followup
-    await adminSupabase
-      .from('sessions')
-      .insert([{
-        telegram_id: telegramId,
-        user_id: userId,
-        command: 'followup',
-        step: 'escolher_cliente',
-        data: {},
-        updated_at: new Date().toISOString()
-      }]);
+    // Buscar clientes
+    const { data: clientes, error } = await adminSupabase
+      .from('clientes')
+      .select('id, nome_empresa, contato_nome')
+      .eq('user_id', userId)
+      .order('nome_empresa');
 
-    await ctx.editMessageText(`
-🆕 Novo Follow-up
-
-Como deseja proceder?
-    `,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔍 Buscar Cliente Existente', 'followup_buscar_cliente')],
-      [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-    ]));
-  } catch (error) {
-    console.error('Erro ao iniciar novo followup:', error);
-    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
-  }
-}
-
-// ============================================================================
-// LISTAR FOLLOWUPS
-// ============================================================================
-export async function handleListarFollowups(ctx: Context) {
-  try {
-    const userId = ctx.state.user?.id;
-    if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
+    if (error) {
+      console.error('Erro ao buscar clientes:', error);
+      return ctx.reply('Erro ao buscar clientes.');
     }
 
-    await ctx.editMessageText(`
-📋 Listar Follow-ups
+    if (!clientes || clientes.length === 0) {
+      return ctx.reply(
+        'Você ainda não possui clientes cadastrados.\n\n' +
+        'Para criar um follow-up, primeiro cadastre um cliente.',
+        Markup.inlineKeyboard([
+          [Markup.button.callback('➕ Cadastrar Cliente', 'clientes_adicionar')],
+          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        ])
+      );
+    }
 
-Que tipo deseja visualizar?
-    `,
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔄 Ativos', 'followup_listar_ativos')],
-      [
-        Markup.button.callback('✅ Ganhos', 'followup_listar_ganhos'),
-        Markup.button.callback('❌ Perdidos', 'followup_listar_perdidos')
-      ],
-      [Markup.button.callback('🔙 Voltar', 'menu_followup')],
-      [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-    ]));
+    await ctx.reply(
+      '🔍 **Selecione um cliente** para criar o follow-up:\n\n' +
+      'Digite parte do nome da empresa para buscar:',
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      }
+    );
+
+    // Criar sessão
+    await adminSupabase
+      .from('sessions')
+      .insert({
+        telegram_id: telegramId,
+        user_id: userId,
+        type: 'followup',
+        step: 'buscar_cliente',
+        data: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+    return true;
   } catch (error) {
-    console.error('Erro ao listar followups:', error);
-    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
+    console.error('Erro ao iniciar novo followup:', error);
+    await ctx.reply('Ocorreu um erro. Tente novamente.');
+    return false;
   }
 }
 
 // ============================================================================
 // LISTAR FOLLOWUPS POR STATUS
 // ============================================================================
-export async function listarFollowupsPorStatus(ctx: Context, status: StatusFollowup) {
+export async function handleListarFollowups(ctx: Context, status: StatusFollowup) {
   try {
     const userId = ctx.state.user?.id;
     if (!userId) {
-      return ctx.reply('Você precisa estar autenticado para usar este comando.');
+      return ctx.reply('Você precisa estar autenticado.');
     }
 
-    // Loading state
-    const loadingMsg = await ctx.reply('⏳ Buscando seus follow-ups...');
+    // Validar status
+    if (!isValidStatus(status)) {
+      return ctx.reply('Status inválido.');
+    }
 
-    // Buscar followups por status
+    // Mostrar loading
+    const loadingMsg = await ctx.reply('🔄 Carregando follow-ups...');
+
+    // Buscar followups
     const { data: followups, error } = await adminSupabase
       .from('followups')
       .select(`
         *,
         clientes (
           nome_empresa,
-          contato_nome,
-          contato_telefone
+          contato_nome
         )
       `)
       .eq('user_id', userId)
       .eq('status', status)
-      .order('updated_at', { ascending: false });
+      .order('created_at', { ascending: false });
 
     if (error) {
+      console.error('Erro ao buscar followups:', error);
       await ctx.deleteMessage(loadingMsg.message_id);
-      await ctx.reply('❌ Erro ao buscar follow-ups. Tente novamente.');
+      await ctx.reply('Erro ao buscar follow-ups. Tente novamente.');
       return;
     }
 
     if (!followups || followups.length === 0) {
       await ctx.deleteMessage(loadingMsg.message_id);
       
-      const statusTexto = {
-        'ativo': 'ativos',
-        'ganho': 'ganhos', 
-        'perdido': 'perdidos'
-      }[status];
+      const statusTexto = getStatusTexto(status).toLowerCase();
 
       return ctx.reply(
         `Você não possui follow-ups ${statusTexto}.`,
@@ -198,11 +231,7 @@ export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: an
   const followupsPagina = todosFollowups.slice(inicio, fim);
   const totalPaginas = Math.ceil(todosFollowups.length / followupsPorPagina);
 
-  const statusTexto = {
-    'ativo': '🔄 Ativos',
-    'ganho': '✅ Ganhos', 
-    'perdido': '❌ Perdidos'
-  }[status];
+  const statusTexto = getStatusTexto(status);
 
   // Cabeçalho com contador
   await ctx.reply(`${statusTexto} (${pagina + 1}/${totalPaginas}) - Total: ${todosFollowups.length}`);
@@ -213,14 +242,8 @@ export async function mostrarFollowupsPaginados(ctx: Context, todosFollowups: an
     const nomeCliente = cliente?.nome_empresa || 'Cliente não encontrado';
     const nomeContato = cliente?.contato_nome ? ` - ${cliente.contato_nome}` : '';
     
-    // Emojis por estágio
-    const estagioEmoji = {
-      'prospeccao': '🔍',
-      'apresentacao': '📋',
-      'proposta': '💰',
-      'negociacao': '🤝',
-      'fechamento': '✅'
-    }[followup.estagio] || '📊';
+    // Emoji do estágio usando função segura
+    const estagioEmoji = getEstagioEmoji(followup.estagio);
 
     // Formatação de valor
     const valorTexto = followup.valor_estimado 
@@ -344,35 +367,48 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
       return;
     }
 
-    // Criar sessão para registrar contato
+    const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
+    const nomeCliente = cliente?.nome_empresa || 'Cliente não encontrado';
+    const nomeContato = cliente?.contato_nome ? ` - ${cliente.contato_nome}` : '';
+    
+    // Usar função segura para obter emoji e texto do estágio
+    const estagioEmoji = getEstagioEmoji(followup.estagio);
+    const estagioTexto = getEstagioTexto(followup.estagio);
+
+    await ctx.reply(
+      `📞 **Registrar Contato**\n\n` +
+      `${estagioEmoji} **${followup.titulo}**\n` +
+      `🏢 ${nomeCliente}${nomeContato}\n\n` +
+      `📝 Digite suas **observações** sobre este contato:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+        ])
+      }
+    );
+
+    // Limpar sessões anteriores e criar nova
     await adminSupabase
       .from('sessions')
       .delete()
-      .eq('telegram_id', telegramId);
+      .eq('telegram_id', telegramId)
+      .eq('type', 'followup_contato');
 
     await adminSupabase
       .from('sessions')
-      .insert([{
+      .insert({
         telegram_id: telegramId,
         user_id: userId,
-        command: 'followup',
-        step: 'registrar_contato',
-        data: followup,
+        type: 'followup_contato',
+        step: 'observacoes',
+        data: { followup_id: followupId },
+        created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      }]);
+      });
 
-    const ultimoContatoUTC = new Date(followup.ultimo_contato);
-    const ultimoContatoBrasil = utcParaBrasil(ultimoContatoUTC);
-    const ultimoContatoTexto = format(ultimoContatoBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-
-    await ctx.reply(
-      `📞 **${followup.clientes?.nome_empresa}** - ${followup.clientes?.contato_nome || 'Contato'}\n\n` +
-      `🕐 Último contato: ${ultimoContatoTexto}\n\n` +
-      `Digite o resumo do contato realizado:`,
-      { parse_mode: 'Markdown' }
-    );
   } catch (error) {
-    console.error('Erro ao iniciar registro de contato:', error);
-    await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    console.error('Erro ao registrar contato:', error);
+    await ctx.reply('Ocorreu um erro. Tente novamente.');
   }
 }
