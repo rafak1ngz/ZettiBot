@@ -5,10 +5,9 @@ import {
   handleNovoFollowup, 
   handleListarFollowups,
   handleRegistrarContato,
-  listarFollowupsPorStatus,
   mostrarFollowupsPaginados 
 } from './handlers';
-import { StatusFollowup } from '@/types/database';
+import { StatusFollowup } from './types'; // ✅ CORRIGIDO: Import do local correto
 
 export function registerFollowupCallbacks(bot: Telegraf) {
   
@@ -27,7 +26,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 
   bot.action('followup_listar', (ctx) => {
     ctx.answerCbQuery();
-    return handleListarFollowups(ctx);
+    return handleListarFollowups(ctx, 'ativo'); // ✅ CORRIGIDO: Função correta
   });
 
   // ========================================================================
@@ -35,17 +34,17 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   // ========================================================================
   bot.action('followup_listar_ativos', (ctx) => {
     ctx.answerCbQuery();
-    return listarFollowupsPorStatus(ctx, 'ativo');
+    return handleListarFollowups(ctx, 'ativo'); // ✅ CORRIGIDO: Função correta
   });
 
   bot.action('followup_listar_ganhos', (ctx) => {
     ctx.answerCbQuery();
-    return listarFollowupsPorStatus(ctx, 'ganho');
+    return handleListarFollowups(ctx, 'ganho'); // ✅ CORRIGIDO: Função correta
   });
 
   bot.action('followup_listar_perdidos', (ctx) => {
     ctx.answerCbQuery();
-    return listarFollowupsPorStatus(ctx, 'perdido');
+    return handleListarFollowups(ctx, 'perdido'); // ✅ CORRIGIDO: Função correta
   });
 
   // ========================================================================
@@ -382,7 +381,7 @@ Exemplo: "Tech Solutions Ltda"
     try {
       ctx.answerCbQuery();
       await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-      return listarFollowupsPorStatus(ctx, 'ativo');
+      return handleListarFollowups(ctx, 'ativo'); // ✅ CORRIGIDO: Função correta
     } catch (error) {
       console.error('Erro ao voltar:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
