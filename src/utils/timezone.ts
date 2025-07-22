@@ -1,5 +1,8 @@
-// ✅ UTILITÁRIOS CENTRALIZADOS PARA FUSO HORÁRIO
-import { format } from 'date-fns';
+// ============================================================================
+// UTILITÁRIOS SIMPLIFICADOS PARA FUSO HORÁRIO - VERSÃO CORRIGIDA
+// ============================================================================
+
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
 // Constante do fuso brasileiro
@@ -29,20 +32,12 @@ export function agoraBrasil(): Date {
 /**
  * Criar data brasileira a partir de dia/mês/ano/hora/minuto e converter para UTC
  */
-export function criarDataBrasil(ano: number, mes: number, dia: number, hora: number, minuto: number): Date {
+export function criarDataBrasil(ano: number, mes: number, dia: number, hora: number = 0, minuto: number = 0): Date {
   // Criar data local brasileira
   const dataLocal = new Date(ano, mes, dia, hora, minuto, 0, 0);
   
-  // ✅ CORREÇÃO: Converter para UTC antes de retornar
-  const dataUTC = brasilParaUTC(dataLocal);
-  
-  console.log('=== DEBUG criarDataBrasil ===');
-  console.log('Input:', { ano, mes, dia, hora, minuto });
-  console.log('Data local criada:', dataLocal.toLocaleString('pt-BR'));
-  console.log('Data UTC para salvar:', dataUTC.toISOString());
-  console.log('==========================');
-  
-  return dataUTC;
+  // Converter para UTC antes de retornar
+  return brasilParaUTC(dataLocal);
 }
 
 /**
@@ -54,32 +49,55 @@ export function formatarDataBrasil(dataUTC: Date, formato: string = "dd/MM/yyyy 
 }
 
 /**
- * Calcular diferença em minutos entre duas datas UTC
- */
-export function diferencaMinutos(dataUTC1: Date, dataUTC2: Date): number {
-  return Math.floor((dataUTC1.getTime() - dataUTC2.getTime()) / (1000 * 60));
-}
-
-/**
  * Verificar se data UTC está no passado (considerando fuso brasileiro)
  */
 export function estaNoPassadoBrasil(dataUTC: Date): boolean {
   const agoraUTC = new Date(); // Agora em UTC (servidor)
-  
-  console.log('=== DEBUG estaNoPassadoBrasil ===');
-  console.log('Data UTC para verificar:', dataUTC.toISOString());
-  console.log('Agora UTC (servidor):', agoraUTC.toISOString());
-  console.log('Data Brasil (display):', utcParaBrasil(dataUTC).toLocaleString('pt-BR'));
-  console.log('Agora Brasil (display):', utcParaBrasil(agoraUTC).toLocaleString('pt-BR'));
-  console.log('É passado?', dataUTC <= agoraUTC);
-  console.log('Diferença (min):', Math.floor((dataUTC.getTime() - agoraUTC.getTime()) / (1000 * 60)));
-  console.log('==============================');
-  
   return dataUTC <= agoraUTC;
 }
 
 /**
- * Parse de hora brasileira para data UTC - VERSÃO CORRIGIDA
+ * ✅ NOVA: Parse de data brasileira - VERSÃO SIMPLIFICADA
+ * Recebe string de data e retorna Date em horário brasileiro
+ */
+export function parseDataBrasil(dataTexto: string): Date | null {
+  try {
+    // Verificar atalhos de data
+    if (dataTexto.toLowerCase() === 'hoje') {
+      return new Date();
+    } else if (dataTexto.toLowerCase() === 'amanhã') {
+      return addDays(new Date(), 1);
+    } else if (dataTexto.toLowerCase() === 'próxima semana') {
+      return addDays(new Date(), 7);
+    }
+    
+    // Tentar parsing de data formato DD/MM ou DD/MM/YYYY
+    let data;
+    if (dataTexto.includes('/')) {
+      const partes = dataTexto.split('/');
+      if (partes.length === 2) {
+        // Formato DD/MM - usar ano atual
+        const anoAtual = new Date().getFullYear();
+        data = parse(`${dataTexto}/${anoAtual}`, 'dd/MM/yyyy', new Date());
+      } else if (partes.length === 3) {
+        // Formato DD/MM/YYYY
+        data = parse(dataTexto, 'dd/MM/yyyy', new Date());
+      } else {
+        return null;
+      }
+    } else {
+      return null;
+    }
+    
+    return isValid(data) ? data : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * ✅ NOVA: Parse de hora brasileira - VERSÃO SIMPLIFICADA 
+ * Recebe data base e string de hora, retorna Date completa
  */
 export function parseHoraBrasil(dataBase: Date, horaTexto: string): Date | null {
   const regex = /^([0-1]?[0-9]|2[0-3]):?([0-5][0-9])$/;
@@ -92,12 +110,43 @@ export function parseHoraBrasil(dataBase: Date, horaTexto: string): Date | null 
   
   if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) return null;
   
-  // ✅ CORREÇÃO: Usar criarDataBrasil que já converte para UTC
-  return criarDataBrasil(
+  // Criar nova data com a hora especificada
+  return new Date(
     dataBase.getFullYear(),
     dataBase.getMonth(),
     dataBase.getDate(),
     horas,
-    minutos
+    minutos,
+    0,
+    0
   );
+}
+
+/**
+ * ✅ NOVA: Parse simplificado de data/hora - UMA FUNÇÃO APENAS
+ * Para usar nos followups onde não sabemos se é data ou hora
+ */
+export function parseDataHoraBrasil(textoCompleto: string): Date | null {
+  // Se contém :, pode ser hora
+  if (textoCompleto.includes(':')) {
+    const hoje = new Date();
+    return parseHoraBrasil(hoje, textoCompleto);
+  }
+  
+  // Senão, tratar como data
+  return parseDataBrasil(textoCompleto);
+}
+
+/**
+ * Calcular diferença em minutos entre duas datas UTC
+ */
+export function diferencaMinutos(dataUTC1: Date, dataUTC2: Date): number {
+  return Math.floor((dataUTC1.getTime() - dataUTC2.getTime()) / (1000 * 60));
+}
+
+/**
+ * Gerar timestamp para logs
+ */
+export function timestampLog(): string {
+  return format(agoraBrasil(), 'yyyy-MM-dd HH:mm:ss', { locale: ptBR });
 }

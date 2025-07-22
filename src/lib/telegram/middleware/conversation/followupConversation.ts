@@ -4,9 +4,9 @@
 
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format, parse, isValid, addDays } from 'date-fns';
+import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { parseHoraBrasil, estaNoPassadoBrasil, brasilParaUTC } from '@/utils/timezone';
+import { estaNoPassadoBrasil, brasilParaUTC, parseDataBrasil } from '@/utils/timezone';
 import { validators } from '@/utils/validators';
 // ✅ CORRIGIDO: Import unificado
 import { EstagioFollowup, getEstagioTexto, ESTAGIO_TEXTO } from '../../commands/followup/types';
@@ -322,9 +322,10 @@ async function handleDataPrevista(ctx: Context, session: any, dataTexto: string)
   let dataValue = null;
 
   if (dataTexto.toLowerCase() !== 'pular') {
-    const dataParseada = parseHoraBrasil(dataTexto);
+    // ✅ CORRIGIDO: Usar parseDataBrasil do timezone
+    const dataParseada = parseDataBrasil(dataTexto);
     
-    if (!dataParseada || estaNoPassadoBrasil(dataParseada)) {
+    if (!dataParseada || estaNoPassadoBrasil(brasilParaUTC(dataParseada))) {
       await ctx.reply(
         'Por favor, forneça uma data futura válida ou "pular".\n\n' +
         'Formatos aceitos: 15/12/2024, 15/12, amanhã, próxima semana'
