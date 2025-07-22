@@ -182,6 +182,7 @@ async function handleCriarClienteTelefone(ctx: Context, session: any, telefone: 
   let telefoneValue = null;
 
   if (telefone.toLowerCase() !== 'pular') {
+    // ✅ CORRIGIDO: Usar validators.cleanTelefone()
     const telefoneLimpo = validators.cleanTelefone(telefone);
     
     if (!validators.telefone(telefoneLimpo)) {

@@ -1,3 +1,7 @@
+// ============================================================================
+// VALIDATORS E FORMATTERS - VERSÃO ATUALIZADA E CORRIGIDA
+// ============================================================================
+
 export const validators = {
   // Validação básica de CNPJ
   cnpj: (value: string): boolean => {
@@ -12,8 +16,8 @@ export const validators = {
     // Verificar se todos os dígitos são iguais
     if (/^(\d)\1+$/.test(cleaned)) return false;
     
-    // Validação simplificada
-    return true; // Implementar algoritmo completo se necessário
+    // Validação simplificada (pode implementar algoritmo completo depois)
+    return true;
   },
   
   // Validação básica de telefone
@@ -23,7 +27,7 @@ export const validators = {
     // Remover caracteres não numéricos
     const cleaned = value.replace(/[^\d]/g, '');
     
-    // Verificar tamanho (assumindo formato brasileiro)
+    // Verificar tamanho (formato brasileiro)
     return cleaned.length >= 10 && cleaned.length <= 11;
   },
   
@@ -31,9 +35,19 @@ export const validators = {
   email: (value: string): boolean => {
     if (!value) return true; // Aceitar vazio
     
-    // Expressão regular simples para validar email
+    // Expressão regular para validar email
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(value);
+  },
+  
+  // ✅ NOVO: Função para limpar telefone (evita erro)
+  cleanTelefone: (value: string): string => {
+    return value.replace(/[^\d]/g, '');
+  },
+  
+  // ✅ NOVO: Função para limpar CNPJ
+  cleanCnpj: (value: string): string => {
+    return value.replace(/[^\d]/g, '');
   },
   
   // Funções formatadoras
@@ -53,12 +67,12 @@ export const validators = {
         // Fixo: (99) 9999-9999
         return `(${cleaned.slice(0, 2)}) ${cleaned.slice(2, 6)}-${cleaned.slice(6)}`;
       } else {
-        // Se não for um formato reconhecido
+        // Se não for um formato reconhecido, retornar como está
         return value;
       }
     },
     
-    // Nova função para formatar CNPJ
+    // Formatar CNPJ
     cnpj: (value: string): string => {
       if (!value) return '';
       
@@ -72,9 +86,11 @@ export const validators = {
       return `${cleaned.slice(0, 2)}.${cleaned.slice(2, 5)}.${cleaned.slice(5, 8)}/${cleaned.slice(8, 12)}-${cleaned.slice(12)}`;
     }
   }
-}
+};
 
-// ✅ NOVA: Sanitização de texto
+// ============================================================================
+// SANITIZADORES ADICIONAIS
+// ============================================================================
 export const sanitizers = {
   // Limpar texto de caracteres especiais
   cleanText: (text: string): string => {
@@ -93,7 +109,9 @@ export const sanitizers = {
   }
 };
 
-// ✅ MELHORAR: Validação de CNPJ com algoritmo real
+// ============================================================================
+// VALIDAÇÃO AVANÇADA DE CNPJ (ALGORITMO COMPLETO)
+// ============================================================================
 export const validarCNPJ = (cnpj: string): boolean => {
   if (!cnpj) return true; // Opcional
   
@@ -101,7 +119,7 @@ export const validarCNPJ = (cnpj: string): boolean => {
   if (cleaned.length !== 14) return false;
   if (/^(\d)\1+$/.test(cleaned)) return false; // Todos iguais
   
-  // ✅ Algoritmo real de validação de CNPJ
+  // Algoritmo de validação de CNPJ
   let soma = 0;
   let pos = 5;
   
