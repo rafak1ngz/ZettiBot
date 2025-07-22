@@ -85,74 +85,66 @@ export async function handleFollowup(ctx: Context) {
 // NOVO FOLLOWUP
 // ============================================================================
 export async function handleNovoFollowup(ctx: Context) {
+  console.log('🔥 handleNovoFollowup CHAMADO!');
   try {
     const userId = ctx.state.user?.id;
-    const telegramId = ctx.from?.id;
+    if (!userId) {
+      console.log('❌ UserId não encontrado');
+      return ctx.reply('Você precisa estar autenticado para usar este comando.');
+    }
 
-    if (!userId || !telegramId) {
+    const telegramId = ctx.from?.id;
+    if (!telegramId) {
+      console.log('❌ TelegramId não encontrado');
       return ctx.reply('Não foi possível identificar seu usuário.');
     }
 
-    // Limpar sessões anteriores
-    await adminSupabase
+    console.log('📋 handleNovoFollowup - telegramId:', telegramId, 'userId:', userId);
+
+    // Limpar sessões existentes
+    const { error: deleteError } = await adminSupabase
       .from('sessions')
       .delete()
-      .eq('telegram_id', telegramId)
-      .eq('type', 'followup');
+      .eq('telegram_id', telegramId);
+      
+    console.log('🗑️ Delete sessions result:', deleteError ? `ERRO: ${deleteError.message}` : 'SUCESSO');
 
-    // Buscar clientes
-    const { data: clientes, error } = await adminSupabase
-      .from('clientes')
-      .select('id, nome_empresa, contato_nome')
-      .eq('user_id', userId)
-      .order('nome_empresa');
-
-    if (error) {
-      console.error('Erro ao buscar clientes:', error);
-      return ctx.reply('Erro ao buscar clientes.');
-    }
-
-    if (!clientes || clientes.length === 0) {
-      return ctx.reply(
-        'Você ainda não possui clientes cadastrados.\n\n' +
-        'Para criar um follow-up, primeiro cadastre um cliente.',
-        Markup.inlineKeyboard([
-          [Markup.button.callback('➕ Cadastrar Cliente', 'clientes_adicionar')],
-          [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
-        ])
-      );
-    }
-
-    await ctx.reply(
-      '🔍 **Selecione um cliente** para criar o follow-up:\n\n' +
-      'Digite parte do nome da empresa para buscar:',
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
-          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-        ])
-      }
-    );
-
-    // Criar sessão
-    await adminSupabase
+    // Criar nova sessão para followup
+    const { error: insertError } = await adminSupabase
       .from('sessions')
-      .insert({
+      .insert([{
         telegram_id: telegramId,
         user_id: userId,
-        type: 'followup',
-        step: 'buscar_cliente',
+        command: 'followup',
+        step: 'escolher_cliente',
         data: {},
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString()
-      });
+      }]);
+      
+    console.log('➕ Insert session result:', insertError ? `ERRO: ${insertError.message}` : 'SUCESSO');
 
-    return true;
+    if (insertError) {
+      console.error('❌ Erro ao criar sessão:', insertError);
+      return ctx.reply('Erro ao iniciar processo. Tente novamente.');
+    }
+
+    console.log('📤 Enviando mensagem com opções...');
+
+    await ctx.editMessageText(`🆕 Novo Follow-up
+
+Como deseja proceder?`,
+    Markup.inlineKeyboard([
+      [Markup.button.callback('🔍 Buscar Cliente Existente', 'followup_buscar_cliente')],
+      [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
+      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
+    ]));
+    
+    console.log('✅ Mensagem com opções enviada!');
+    
   } catch (error) {
-    console.error('Erro ao iniciar novo followup:', error);
-    await ctx.reply('Ocorreu um erro. Tente novamente.');
-    return false;
+    console.error('❌ Erro em handleNovoFollowup:', error);
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 }
 
