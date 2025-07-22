@@ -62,7 +62,7 @@ export async function handleFollowupConversation(ctx: Context, session: any): Pr
 }
 
 // ============================================================================
-// BUSCA DE CLIENTE EXISTENTE
+// BUSCA DE CLIENTE EXISTENTE - VERSÃO CORRIGIDA
 // ============================================================================
 async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca: string): Promise<boolean> {
   if (termoBusca.length < 2) {
@@ -134,21 +134,8 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
     );
   }
 
-  // Finalizar com botões de navegação
-  await ctx.reply('O que deseja fazer?', 
-    Markup.inlineKeyboard([
-      [Markup.button.callback('🔍 Nova Busca', 'followup_buscar_cliente')],
-      [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
-      [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-    ])
-  );
-
-  // Limpar a sessão após exibir os resultados
-  await adminSupabase
-    .from('sessions')
-    .delete()
-    .eq('id', session.id);
-
+  // ✅ CORREÇÃO: Parar aqui, sem enviar botões extras nem limpar sessão
+  // A sessão deve ser mantida para que o callback followup_selecionar_cliente funcione
   return true;
 }
 
