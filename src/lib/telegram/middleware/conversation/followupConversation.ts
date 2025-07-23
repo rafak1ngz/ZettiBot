@@ -1,5 +1,5 @@
 // ============================================================================
-// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO CORRIGIDA
+// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO COMPLETA COM FLUXO MELHORADO
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
@@ -8,7 +8,6 @@ import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { estaNoPassadoBrasil, brasilParaUTC, parseDataBrasil } from '@/utils/timezone';
 import { validators } from '@/utils/validators';
-// ✅ CORRIGIDO: Import unificado
 import { EstagioFollowup, getEstagioTexto, ESTAGIO_TEXTO } from '../../commands/followup/types';
 
 // ============================================================================
@@ -55,6 +54,10 @@ export async function handleFollowupConversation(ctx: Context, session: any): Pr
       case 'proxima_acao_contato':
         return await handleProximaAcaoContato(ctx, session, messageText);
 
+      // 🆕 NOVO: Data específica da próxima ação
+      case 'data_proxima_acao_contato':
+        return await handleDataProximaAcaoContato(ctx, session, messageText);
+
       default:
         return false;
     }
@@ -75,12 +78,12 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
   }
 
   try {
-    // Buscar clientes
     const { data: clientes, error } = await adminSupabase
       .from('clientes')
-      .select('id, nome_empresa, contato_nome, cnpj')
+      .select('id, nome_empresa, contato_nome, contato_telefone')
       .eq('user_id', session.user_id)
-      .or(`nome_empresa.ilike.%${termoBusca}%,cnpj.ilike.%${termoBusca}%,contato_nome.ilike.%${termoBusca}%`);
+      .ilike('nome_empresa', `%${termoBusca}%`)
+      .limit(10);
 
     if (error) {
       console.error('Erro ao buscar clientes:', error);
@@ -90,39 +93,48 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
 
     if (!clientes || clientes.length === 0) {
       await ctx.reply(
-        `❌ Nenhum cliente encontrado para "${termoBusca}".\n\n` +
+        `❌ **Nenhuma empresa encontrada** com "${termoBusca}"\n\n` +
         `Deseja criar um novo cliente?`,
-        Markup.inlineKeyboard([
-          [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
-          [Markup.button.callback('🔍 Buscar Novamente', 'followup_buscar_cliente')],
-          [Markup.button.callback('❌ Cancelar', 'cancelar_acao')]
-        ])
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [Markup.button.callback('🆕 Criar Novo Cliente', 'followup_criar_cliente')],
+            [Markup.button.callback('🔍 Buscar Novamente', 'followup_buscar_cliente')]
+          ])
+        }
       );
       return true;
     }
 
+    const telegramId = ctx.from?.id;
+    if (!telegramId) return true;
+
     // Mostrar resultados
-    await ctx.reply(`🔍 **Clientes encontrados:**\n\nSelecione o cliente desejado:`, { parse_mode: 'Markdown' });
+    const botoes = clientes.map(cliente => {
+      const contatoInfo = cliente.contato_nome ? ` - ${cliente.contato_nome}` : '';
+      const telefoneInfo = cliente.contato_telefone ? ` (${cliente.contato_telefone})` : '';
+      return [Markup.button.callback(
+        `${cliente.nome_empresa}${contatoInfo}${telefoneInfo}`,
+        `followup_selecionar_cliente_${cliente.id}`
+      )];
+    });
 
-    for (const cliente of clientes.slice(0, 10)) { // Limitar a 10 resultados
-      const cnpjTexto = cliente.cnpj ? `\n📋 ${validators.formatters.cnpj(cliente.cnpj)}` : '';
-      const contatoTexto = cliente.contato_nome ? `\n👤 ${cliente.contato_nome}` : '';
+    botoes.push([Markup.button.callback('🔍 Nova Busca', 'followup_buscar_cliente')]);
+    botoes.push([Markup.button.callback('🆕 Criar Novo', 'followup_criar_cliente')]);
 
-      await ctx.reply(
-        `🏢 **${cliente.nome_empresa}**${cnpjTexto}${contatoTexto}`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [Markup.button.callback('✅ Selecionar', `followup_selecionar_${cliente.id}`)]
-          ])
-        }
-      );
-    }
+    await ctx.reply(
+      `🔍 **Resultados da busca:**\n\n` +
+      `Encontrei ${clientes.length} empresa(s). Selecione uma:`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard(botoes)
+      }
+    );
 
     return true;
   } catch (error) {
-    console.error('Erro na busca de cliente:', error);
-    await ctx.reply('Erro ao buscar clientes. Tente novamente.');
+    console.error('Erro na busca:', error);
+    await ctx.reply('Erro na busca. Tente novamente.');
     return true;
   }
 }
@@ -182,7 +194,6 @@ async function handleCriarClienteTelefone(ctx: Context, session: any, telefone: 
   let telefoneValue = null;
 
   if (telefone.toLowerCase() !== 'pular') {
-    // ✅ CORRIGIDO: Usar validators.cleanTelefone()
     const telefoneLimpo = validators.cleanTelefone(telefone);
     
     if (!validators.telefone(telefoneLimpo)) {
@@ -212,34 +223,8 @@ async function handleCriarClienteTelefone(ctx: Context, session: any, telefone: 
     return true;
   }
 
-  // Atualizar sessão com cliente criado e ir para dados do followup
-  await adminSupabase
-    .from('sessions')
-    .update({
-      step: 'titulo_followup',
-      data: { 
-        ...session.data, 
-        cliente_id: novoCliente.id,
-        nome_cliente: novoCliente.nome_empresa,
-        contato_nome: novoCliente.contato_nome
-      },
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', session.id);
-
-  const telefoneTexto = telefoneValue 
-    ? `\n📞 ${validators.formatters.telefone(telefoneValue)}`
-    : '';
-
-  await ctx.reply(
-    `✅ **Cliente criado com sucesso!**\n\n` +
-    `🏢 ${novoCliente.nome_empresa}\n` +
-    `👤 ${novoCliente.contato_nome}${telefoneTexto}\n\n` +
-    `Agora vamos criar o follow-up!\n\n` +
-    `📝 Digite o **título da oportunidade**:\n\n` +
-    `Exemplos: "Venda Sistema ERP", "Consultoria em TI"`,
-    { parse_mode: 'Markdown' }
-  );
+  // Continuar com criação do followup
+  await continuarCriacaoFollowup(ctx, session, novoCliente);
   return true;
 }
 
@@ -248,7 +233,7 @@ async function handleCriarClienteTelefone(ctx: Context, session: any, telefone: 
 // ============================================================================
 async function handleTituloFollowup(ctx: Context, session: any, titulo: string): Promise<boolean> {
   if (!titulo || titulo.length < 3) {
-    await ctx.reply('Por favor, forneça um título válido (mínimo 3 caracteres).');
+    await ctx.reply('Por favor, forneça um título mais específico (mínimo 3 caracteres).');
     return true;
   }
 
@@ -256,24 +241,23 @@ async function handleTituloFollowup(ctx: Context, session: any, titulo: string):
   await adminSupabase
     .from('sessions')
     .update({
-      step: 'escolher_estagio',
+      step: 'selecionar_estagio',
       data: { ...session.data, titulo },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
-  // Mostrar opções de estágio
   await ctx.reply(
     `✅ **Título:** ${titulo}\n\n` +
-    `🎯 Escolha o **estágio atual** da oportunidade:`,
+    `🎯 **Selecione o estágio atual da oportunidade:**`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
-        [Markup.button.callback('🔍 Prospecção', 'followup_estagio_prospeccao')],
-        [Markup.button.callback('📋 Apresentação', 'followup_estagio_apresentacao')],
-        [Markup.button.callback('💰 Proposta', 'followup_estagio_proposta')],
-        [Markup.button.callback('🤝 Negociação', 'followup_estagio_negociacao')],
-        [Markup.button.callback('✅ Fechamento', 'followup_estagio_fechamento')]
+        [Markup.button.callback('🔍 Prospecção', 'estagio_prospeccao')],
+        [Markup.button.callback('📋 Apresentação', 'estagio_apresentacao')],
+        [Markup.button.callback('💰 Proposta', 'estagio_proposta')],
+        [Markup.button.callback('🤝 Negociação', 'estagio_negociacao')],
+        [Markup.button.callback('✅ Fechamento', 'estagio_fechamento')]
       ])
     }
   );
@@ -281,9 +265,10 @@ async function handleTituloFollowup(ctx: Context, session: any, titulo: string):
 }
 
 async function handleValorEstimado(ctx: Context, session: any, valorTexto: string): Promise<boolean> {
-  let valorValue = null;
+  let valor = null;
 
   if (valorTexto.toLowerCase() !== 'pular') {
+    // Limpar e validar valor
     const valorLimpo = valorTexto.replace(/[^\d,.-]/g, '').replace(',', '.');
     const valorNumerico = parseFloat(valorLimpo);
 
@@ -292,41 +277,37 @@ async function handleValorEstimado(ctx: Context, session: any, valorTexto: strin
       return true;
     }
 
-    valorValue = valorNumerico;
+    valor = valorNumerico;
   }
 
   // Atualizar sessão
   await adminSupabase
     .from('sessions')
     .update({
-      step: 'data_prevista',
-      data: { ...session.data, valor_estimado: valorValue },
+      step: 'data_prevista_rapida',
+      data: { ...session.data, valor_estimado: valor },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
-  const valorTextoFormatado = valorValue 
-    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorValue)
+  const valorFormatado = valor 
+    ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor)
     : 'Não informado';
 
   await ctx.reply(
-    `✅ **Valor:** ${valorTextoFormatado}\n\n` +
-    `📅 Digite a **data prevista** de fechamento ou escolha uma opção:`,
-    { parse_mode: 'Markdown' }
-  );
-
-  // ✅ CORRIGIDO: Botões inline em vez de keyboard
-  await ctx.reply(
-    `Ou escolha uma opção rápida:`,
+    `✅ **Valor estimado:** ${valorFormatado}\n\n` +
+    `📅 **Data prevista para fechamento:**`,
     {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback('📅 Hoje', 'data_hoje_followup'),
-          Markup.button.callback('🗓️ Amanhã', 'data_amanha_followup')
+          Markup.button.callback('📅 Amanhã', 'data_amanha_followup')
         ],
-        [Markup.button.callback('📆 Próxima semana', 'data_semana_followup')],
-        [Markup.button.callback('⏭️ Pular', 'data_pular_followup')]
+        [
+          Markup.button.callback('📅 Próxima semana', 'data_semana_followup'),
+          Markup.button.callback('⏭️ Pular', 'data_pular_followup')
+        ]
       ])
     }
   );
@@ -334,44 +315,44 @@ async function handleValorEstimado(ctx: Context, session: any, valorTexto: strin
 }
 
 async function handleDataPrevista(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
-  let dataValue = null;
-
-  if (dataTexto.toLowerCase() !== 'pular') {
-    // ✅ CORRIGIDO: Usar parseDataBrasil do timezone
-    const dataParseada = parseDataBrasil(dataTexto);
+  try {
+    const dataProcessada = parseDataBrasil(dataTexto);
     
-    if (!dataParseada || estaNoPassadoBrasil(brasilParaUTC(dataParseada))) {
+    if (!dataProcessada || estaNoPassadoBrasil(dataProcessada)) {
       await ctx.reply(
-        'Por favor, forneça uma data futura válida ou "pular".\n\n' +
-        'Formatos aceitos: 15/12/2024, 15/12, amanhã, próxima semana'
+        'Data inválida ou no passado. Por favor, use um formato válido:\n\n' +
+        'Exemplos: "25/07", "sexta-feira", "próxima segunda", "30 de julho"'
       );
       return true;
     }
 
-    dataValue = brasilParaUTC(dataParseada).toISOString();
+    // Converter para UTC
+    const dataUTC = brasilParaUTC(dataProcessada);
+
+    // Atualizar sessão
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'proxima_acao',
+        data: { ...session.data, data_prevista: dataUTC.toISOString() },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id);
+
+    const dataFormatada = format(dataProcessada, 'dd/MM/yyyy', { locale: ptBR });
+    
+    await ctx.reply(
+      `✅ **Data prevista:** ${dataFormatada}\n\n` +
+      `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
+      `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
+      { parse_mode: 'Markdown' }
+    );
+    return true;
+  } catch (error) {
+    console.error('Erro ao processar data:', error);
+    await ctx.reply('Erro ao processar data. Tente novamente.');
+    return true;
   }
-
-  // Atualizar sessão
-  await adminSupabase
-    .from('sessions')
-    .update({
-      step: 'proxima_acao',
-      data: { ...session.data, data_prevista: dataValue },
-      updated_at: new Date().toISOString()
-    })
-    .eq('id', session.id);
-
-  const dataFormatada = dataValue 
-    ? format(new Date(dataValue), 'dd/MM/yyyy', { locale: ptBR })
-    : 'Não definida';
-
-  await ctx.reply(
-    `✅ **Data prevista:** ${dataFormatada}\n\n` +
-    `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
-    `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
-    { parse_mode: 'Markdown' }
-  );
-  return true;
 }
 
 async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string): Promise<boolean> {
@@ -382,28 +363,28 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
 
   try {
     // Criar followup no banco
-    const agora = new Date().toISOString();
-    
-    const { data: followup, error: followupError } = await adminSupabase
+    const followupData = {
+      user_id: session.user_id,
+      cliente_id: session.data.cliente_id,
+      titulo: session.data.titulo,
+      estagio: session.data.estagio,
+      valor_estimado: session.data.valor_estimado,
+      data_inicio: new Date().toISOString(),
+      data_prevista: session.data.data_prevista,
+      ultimo_contato: new Date().toISOString(),
+      proxima_acao: proximaAcao,
+      status: 'ativo' as const,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    };
+
+    const { data: novoFollowup, error: followupError } = await adminSupabase
       .from('followups')
-      .insert({
-        user_id: session.user_id,
-        cliente_id: session.data.cliente_id,
-        titulo: session.data.titulo,
-        estagio: session.data.estagio,
-        valor_estimado: session.data.valor_estimado,
-        data_inicio: agora,
-        data_prevista: session.data.data_prevista,
-        ultimo_contato: agora,
-        proxima_acao: proximaAcao,
-        status: 'ativo',
-        created_at: agora,
-        updated_at: agora
-      })
+      .insert(followupData)
       .select('id')
       .single();
 
-    if (followupError || !followup) {
+    if (followupError || !novoFollowup) {
       console.error('Erro ao criar followup:', followupError);
       await ctx.reply('Erro ao criar follow-up. Tente novamente.');
       return true;
@@ -415,31 +396,44 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
       .delete()
       .eq('id', session.id);
 
-    // Mostrar resumo final
-    const valorFormatado = session.data.valor_estimado 
-      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(session.data.valor_estimado)
-      : 'Não informado';
-      
-    const dataFormatada = session.data.data_prevista 
-      ? format(new Date(session.data.data_prevista), 'dd/MM/yyyy', { locale: ptBR })
-      : 'Não definida';
+    // Buscar dados completos para mostrar
+    const { data: followupCompleto } = await adminSupabase
+      .from('followups')
+      .select(`
+        *,
+        clientes (
+          nome_empresa,
+          contato_nome
+        )
+      `)
+      .eq('id', novoFollowup.id)
+      .single();
+
+    const cliente = Array.isArray(followupCompleto?.clientes) 
+      ? followupCompleto.clientes[0] 
+      : followupCompleto?.clientes;
+
+    const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
+    const estagioTexto = getEstagioTexto(session.data.estagio);
 
     await ctx.reply(
       `🎉 **Follow-up criado com sucesso!**\n\n` +
-      `📋 **${session.data.titulo}**\n` +
-      `🏢 **Cliente:** ${session.data.nome_cliente}\n` +
-      `${getEstagioTexto(session.data.estagio)}\n` +
-      `💰 **Valor:** ${valorFormatado}\n` +
-      `📅 **Previsão:** ${dataFormatada}\n` +
+      `🏢 **Cliente:** ${nomeEmpresa}\n` +
+      `📋 **Título:** ${session.data.titulo}\n` +
+      `🎯 **Estágio:** ${estagioTexto}\n` +
       `🎬 **Próxima ação:** ${proximaAcao}\n\n` +
-      `Deseja configurar lembretes?`,
+      `🔔 **Deseja configurar uma notificação?**`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
-          [Markup.button.callback('🔕 Sem notificação', `notif_followup_nao_${followup.id}`)],
-          [Markup.button.callback('⏰ 1 hora antes', `notif_followup_1h_${followup.id}`)],
-          [Markup.button.callback('📅 24h antes', `notif_followup_24h_${followup.id}`)],
-          [Markup.button.callback('📆 3 dias antes', `notif_followup_3d_${followup.id}`)]
+          [
+            Markup.button.callback('🔕 Não', `notif_followup_nao_${novoFollowup.id}`),
+            Markup.button.callback('⏰ 1 hora antes', `notif_followup_1h_${novoFollowup.id}`)
+          ],
+          [
+            Markup.button.callback('📅 24 horas antes', `notif_followup_24h_${novoFollowup.id}`),
+            Markup.button.callback('📆 3 dias antes', `notif_followup_3d_${novoFollowup.id}`)
+          ]
         ])
       }
     );
@@ -480,7 +474,7 @@ async function handleRegistrarContatoTexto(ctx: Context, session: any, contatoTe
 }
 
 // ============================================================================
-// CORREÇÃO: handleProximaAcaoContato - SALVAR CONTATO + NOTIFICAÇÃO
+// 🆕 FLUXO MELHORADO: PRÓXIMA AÇÃO COM PERGUNTA DE DATA
 // ============================================================================
 async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao: string): Promise<boolean> {
   if (!proximaAcao || proximaAcao.length < 3) {
@@ -493,7 +487,7 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
     const followupId = session.data.followup_id;
     const userId = session.user_id;
 
-    // ✅ CORREÇÃO 1: SALVAR O CONTATO NA TABELA contatos_followup
+    // ✅ SALVAR O CONTATO NA TABELA contatos_followup
     const { error: contatoError } = await adminSupabase
       .from('contatos_followup')
       .insert({
@@ -512,7 +506,7 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
       return true;
     }
 
-    // ✅ CORREÇÃO 2: ATUALIZAR FOLLOWUP
+    // ✅ ATUALIZAR FOLLOWUP
     const { error: updateError } = await adminSupabase
       .from('followups')
       .update({
@@ -528,13 +522,7 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
       return true;
     }
 
-    // ✅ CORREÇÃO 3: LIMPAR SESSÃO
-    await adminSupabase
-      .from('sessions')
-      .delete()
-      .eq('id', session.id);
-
-    // ✅ CORREÇÃO 4: BUSCAR DADOS ATUALIZADOS
+    // ✅ BUSCAR DADOS ATUALIZADOS PARA MOSTRAR
     const { data: followupAtualizado, error: fetchError } = await adminSupabase
       .from('followups')
       .select(`
@@ -547,34 +535,33 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
       .eq('id', followupId)
       .single();
 
-    if (fetchError || !followupAtualizado) {
-      console.error('Erro ao buscar follow-up atualizado:', fetchError);
-    }
-
     const cliente = Array.isArray(followupAtualizado?.clientes) 
       ? followupAtualizado.clientes[0] 
       : followupAtualizado?.clientes;
 
     const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
 
-    // ✅ CORREÇÃO 5: MOSTRAR RESUMO E PERGUNTAR SOBRE NOTIFICAÇÃO
+    // ✅ NOVA PERGUNTA: QUANDO FAZER A PRÓXIMA AÇÃO?
     await ctx.reply(
       `✅ **Contato registrado com sucesso!**\n\n` +
       `🏢 **Cliente:** ${nomeEmpresa}\n` +
       `📝 **Resumo:** ${session.data.contato_descricao}\n` +
-      `🎬 **Próxima ação:** ${proximaAcao}\n` +
-      `🕐 **Registrado:** Hoje, ${format(new Date(), 'HH:mm', { locale: ptBR })}\n\n` +
-      `🔔 **Deseja configurar um lembrete para a próxima ação?**`,
+      `🎬 **Próxima ação:** ${proximaAcao}\n\n` +
+      `📅 **QUANDO você quer realizar esta ação?**`,
       {
         parse_mode: 'Markdown',
         ...Markup.inlineKeyboard([
           [
-            Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
-            Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`)
+            Markup.button.callback('📅 Hoje', `data_acao_hoje_${followupId}`),
+            Markup.button.callback('📅 Amanhã', `data_acao_amanha_${followupId}`)
           ],
           [
-            Markup.button.callback('📅 24 horas antes', `notif_contato_24h_${followupId}`),
-            Markup.button.callback('📆 3 dias antes', `notif_contato_3d_${followupId}`)
+            Markup.button.callback('📅 Esta semana', `data_acao_semana_${followupId}`),
+            Markup.button.callback('📅 Próxima semana', `data_acao_prox_semana_${followupId}`)
+          ],
+          [
+            Markup.button.callback('📝 Digitar data específica', `data_acao_manual_${followupId}`),
+            Markup.button.callback('⏭️ Pular', `data_acao_pular_${followupId}`)
           ]
         ])
       }
@@ -585,5 +572,99 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
     console.error('Erro ao finalizar registro de contato:', error);
     await ctx.reply('Erro ao registrar contato. Tente novamente.');
     return true;
+  }
+}
+
+// ============================================================================
+// 🆕 NOVA FUNÇÃO: PROCESSAR DATA ESPECÍFICA MANUAL
+// ============================================================================
+async function handleDataProximaAcaoContato(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
+  try {
+    // Validar e processar data manual
+    const dataProcessada = parseDataBrasil(dataTexto);
+    
+    if (!dataProcessada || estaNoPassadoBrasil(dataProcessada)) {
+      await ctx.reply(
+        '❌ Data inválida ou no passado.\n\n' +
+        'Exemplos válidos:\n' +
+        '• "25/07 14:30"\n' +
+        '• "sexta-feira 09:00"\n' +
+        '• "30 de julho"\n' +
+        '• "próxima segunda às 15h"'
+      );
+      return true;
+    }
+
+    // Limpar sessão
+    await adminSupabase
+      .from('sessions')
+      .delete()
+      .eq('id', session.id);
+
+    const followupId = session.data.followup_id;
+    const mensagemData = format(dataProcessada, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+
+    // Mostrar resumo final e perguntar sobre notificação
+    await ctx.reply(
+      `📋 **RESUMO COMPLETO**\n\n` +
+      `🎬 **Próxima ação:** ${session.data.proxima_acao}\n` +
+      `📅 **Quando fazer:** ${mensagemData}\n\n` +
+      `🔔 **Deseja configurar um lembrete?**`,
+      {
+        parse_mode: 'Markdown',
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
+            Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
+          ],
+          [
+            Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
+            Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
+          ]
+        ])
+      }
+    );
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao processar data manual:', error);
+    await ctx.reply('Erro ao processar data. Tente novamente.');
+    return true;
+  }
+}
+
+// ============================================================================
+// FUNÇÃO AUXILIAR PARA CONTINUAR CRIAÇÃO DE FOLLOWUP
+// ============================================================================
+async function continuarCriacaoFollowup(ctx: Context, session: any, cliente: any) {
+  try {
+    // Atualizar sessão com dados do cliente
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'titulo_followup',
+        data: {
+          ...session.data,
+          cliente_id: cliente.id,
+          nome_cliente: cliente.nome_empresa,
+          contato_nome: cliente.contato_nome
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id);
+
+    const contatoInfo = cliente.contato_nome ? ` - ${cliente.contato_nome}` : '';
+    
+    await ctx.reply(
+      `✅ **Cliente selecionado:**\n` +
+      `🏢 ${cliente.nome_empresa}${contatoInfo}\n\n` +
+      `📋 Digite o **título** do follow-up:\n\n` +
+      `Exemplos: "Proposta sistema", "Reunião apresentação", "Follow-up orçamento"`,
+      { parse_mode: 'Markdown' }
+    );
+
+  } catch (error) {
+    console.error('Erro ao continuar criação:', error);
+    await ctx.reply('Erro ao processar. Tente novamente.');
   }
 }
