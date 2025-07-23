@@ -1,5 +1,5 @@
 // ============================================================================
-// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO FINAL SEM ERROS DE TIPAGEM
+// HANDLERS DO MÓDULO FOLLOWUP - VERSÃO FINAL COM DATAS PADRONIZADAS
 // ============================================================================
 
 import { Context } from 'telegraf';
@@ -31,7 +31,8 @@ function formatarDataSegura(dataString: any): string {
       return 'Data inválida';
     }
     
-    return format(utcParaBrasil(dataUTC), 'dd/MM/yyyy', { locale: ptBR });
+    // ✅ CORRIGIDO: Usar mesmo formato da agenda e lembretes
+    return format(utcParaBrasil(dataUTC), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
   } catch (error) {
     console.error('Erro ao formatar data:', error);
     return 'Erro na data';
@@ -76,44 +77,48 @@ export async function handleFollowup(ctx: Context) {
     }
 
     // Calcular estatísticas
-    const ativos = followups?.filter(f => f.status === 'ativo').length || 0;
-    const ganhos = followups?.filter(f => f.status === 'ganho').length || 0;
-    const perdidos = followups?.filter(f => f.status === 'perdido').length || 0;
+    const totalAtivos = followups?.filter(f => f.status === 'ativo').length || 0;
+    const totalGanhos = followups?.filter(f => f.status === 'ganho').length || 0;
+    const totalPerdidos = followups?.filter(f => f.status === 'perdido').length || 0;
     
     const valorTotal = followups
       ?.filter(f => f.status === 'ativo' && f.valor_estimado)
-      .reduce((acc, f) => acc + f.valor_estimado, 0) || 0;
+      .reduce((sum, f) => sum + (f.valor_estimado || 0), 0) || 0;
 
-    const valorFormatado = new Intl.NumberFormat('pt-BR', {
-      style: 'currency',
-      currency: 'BRL'
-    }).format(valorTotal);
+    const valorFormatado = valorTotal > 0 
+      ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valorTotal)
+      : 'R$ 0,00';
 
-    const mensagem = `📊 **Painel Follow-up**\n\n` +
-      `🔄 **Ativos:** ${ativos}\n` +
-      `✅ **Ganhos:** ${ganhos}\n` +
-      `❌ **Perdidos:** ${perdidos}\n\n` +
-      `💰 **Pipeline Total:** ${valorFormatado}`;
+    return ctx.reply(`
+🎯 **Follow-up Dashboard**
 
-    await ctx.reply(mensagem, {
+📊 **Estatísticas:**
+🔄 Ativos: ${totalAtivos}
+✅ Ganhos: ${totalGanhos}
+❌ Perdidos: ${totalPerdidos}
+💰 Pipeline: ${valorFormatado}
+
+O que deseja fazer?
+    `, {
       parse_mode: 'Markdown',
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback('🆕 Novo Follow-up', 'followup_novo'),
-          Markup.button.callback('🔄 Ver Ativos', 'followup_listar_ativos')
+          Markup.button.callback('📋 Listar Ativos', 'followup_listar_ativos')
         ],
         [
-          Markup.button.callback('✅ Ver Ganhos', 'followup_listar_ganhos'),
-          Markup.button.callback('❌ Ver Perdidos', 'followup_listar_perdidos')
+          Markup.button.callback('✅ Follow-ups Ganhos', 'followup_listar_ganhos'),
+          Markup.button.callback('❌ Follow-ups Perdidos', 'followup_listar_perdidos')
         ],
-        [Markup.button.callback('🏠 Menu Principal', 'menu_principal')]
+        [
+          Markup.button.callback('🏠 Menu Principal', 'menu_principal')
+        ]
       ])
     });
 
-    return true;
   } catch (error) {
     console.error('Erro no menu followup:', error);
-    await ctx.reply('Ocorreu um erro. Tente novamente.');
+    await ctx.reply('Ocorreu um erro. Por favor, tente novamente.');
   }
 }
 
@@ -429,7 +434,7 @@ export async function handleRegistrarContato(ctx: Context, followupId: string) {
 }
 
 // ============================================================================
-// 🆕 NOVA FUNÇÃO: VER HISTÓRICO DE CONTATOS
+// VER HISTÓRICO DE CONTATOS
 // ============================================================================
 export async function handleVerHistoricoContatos(ctx: Context, followupId: string) {
   try {
@@ -507,9 +512,9 @@ export async function handleVerHistoricoContatos(ctx: Context, followupId: strin
     for (let i = 0; i < Math.min(contatos.length, 5); i++) {
       const contato = contatos[i];
       const dataContato = new Date(contato.data_contato);
-      const dataFormatada = format(utcParaBrasil(dataContato), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
+      // ✅ CORRIGIDO: Usar padrão da agenda e lembretes
+      const dataFormatada = format(utcParaBrasil(dataContato), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
       
-      // ✅ CORRIGIDO: Usar função utilitária para emoji
       const tipoEmoji = getEmojiTipoContato(contato.tipo_contato);
 
       await ctx.reply(
@@ -554,7 +559,7 @@ export async function handleVerHistoricoContatos(ctx: Context, followupId: strin
 }
 
 // ============================================================================
-// 🆕 NOVA FUNÇÃO: VER DETALHES COMPLETOS DO FOLLOW-UP
+// VER DETALHES COMPLETOS DO FOLLOW-UP
 // ============================================================================
 export async function handleVerDetalhesFollowup(ctx: Context, followupId: string) {
   try {
@@ -596,14 +601,14 @@ export async function handleVerDetalhesFollowup(ctx: Context, followupId: string
 
     const cliente = Array.isArray(followup.clientes) ? followup.clientes[0] : followup.clientes;
     
-    // ✅ Dados do cliente
+    // Dados do cliente
     const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
     const nomeContato = cliente?.contato_nome || '';
     const telefone = cliente?.contato_telefone || '';
     const email = cliente?.contato_email || '';
     const cnpj = cliente?.cnpj || '';
     
-    // ✅ Dados do follow-up
+    // Dados do follow-up
     const estagioEmoji = getEstagioEmoji(followup.estagio);
     const estagioTexto = getEstagioTexto(followup.estagio);
     const statusTexto = getStatusTexto(followup.status);
@@ -612,8 +617,9 @@ export async function handleVerDetalhesFollowup(ctx: Context, followupId: string
       ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(followup.valor_estimado)
       : 'Não informado';
       
-    const dataInicioFormatada = format(utcParaBrasil(new Date(followup.data_inicio)), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
-    const ultimoContatoFormatado = format(utcParaBrasil(new Date(followup.ultimo_contato)), 'dd/MM/yyyy \'às\' HH:mm', { locale: ptBR });
+    // ✅ CORRIGIDO: Usar padrão da agenda e lembretes
+    const dataInicioFormatada = format(utcParaBrasil(new Date(followup.data_inicio)), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+    const ultimoContatoFormatado = format(utcParaBrasil(new Date(followup.ultimo_contato)), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
     
     const dataPrevisaoFormatada = followup.data_prevista 
       ? formatarDataSegura(followup.data_prevista)
@@ -691,7 +697,7 @@ export async function handleVerDetalhesFollowup(ctx: Context, followupId: string
     );
 
   } catch (error) {
-    console.error('Erro ao mostrar detalhes:', error);
-    await ctx.reply('Ocorreu um erro ao carregar detalhes do follow-up.');
+    console.error('Erro ao mostrar detalhes do followup:', error);
+    await ctx.reply('Ocorreu um erro ao carregar detalhes.');
   }
 }
