@@ -1,5 +1,5 @@
 // ============================================================================
-// BUSCA POTENCIAL CLIENTE - CALLBACKS DOS BOTÕES - CORRIGIDO
+// BUSCA POTENCIAL CLIENTE - CALLBACKS DOS BOTÕES - VERSÃO FINAL CORRIGIDA
 // ============================================================================
 
 import { Context, Markup, Telegraf } from 'telegraf';
@@ -488,13 +488,26 @@ Quer refinar os parâmetros da análise?
   }
 }
 
+// ============================================================================
+// CALLBACKS CORRIGIDOS - AÇÕES COM PROSPECTS
+// ============================================================================
+
 async function handleSalvarProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    // Extrair ID do prospect do callback data
-    const match = ctx.callbackQuery?.data?.match(/^bp_salvar_(\d+)$/);
+    // CORREÇÃO: Extrair ID do prospect do callback data
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+    const match = callbackData.match(/^bp_salvar_(\d+)$/);
     const prospectId = match ? parseInt(match[1]) : 0;
+
+    const telegramId = ctx.from?.id;
+    const userId = ctx.state.user?.id;
+
+    if (!telegramId || !userId) {
+      await ctx.reply('Erro: não foi possível identificar o usuário.');
+      return false;
+    }
 
     const mensagem = `📝 **Salvar como Cliente**
 
@@ -509,11 +522,8 @@ Digite o nome do contato principal da empresa:
 
 💡 *Exemplo: "João Silva" ou "Maria Santos"*`;
 
-    // Criar sessão para cadastro de cliente
-    const telegramId = ctx.from?.id;
-    if (!telegramId) return false;
-
-    await createUserSession(telegramId, 'salvar_prospect', 'aguardando_nome_contato', {
+    // CORREÇÃO: Criar sessão para cadastro de cliente com userId
+    await createUserSession(telegramId, userId, 'salvar_prospect', 'aguardando_nome_contato', {
       prospect_id: prospectId,
       nome_empresa: 'TechSolutions Ltda',
       telefone: '(11) 3456-7890',
@@ -538,7 +548,9 @@ async function handleCriarFollowupProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    const match = ctx.callbackQuery?.data?.match(/^bp_followup_(\d+)$/);
+    // CORREÇÃO: Extrair ID do prospect do callback data
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+    const match = callbackData.match(/^bp_followup_(\d+)$/);
     const prospectId = match ? parseInt(match[1]) : 0;
 
     const mensagem = `🎯 **Criar Follow-up Direto**
@@ -575,7 +587,9 @@ async function handleLigarProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    const match = ctx.callbackQuery?.data?.match(/^bp_ligar_(\d+)$/);
+    // CORREÇÃO: Extrair ID do prospect do callback data
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+    const match = callbackData.match(/^bp_ligar_(\d+)$/);
     const prospectId = match ? parseInt(match[1]) : 0;
 
     const mensagem = `📞 **Ligar para Prospect**
@@ -616,7 +630,9 @@ async function handleProximoProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    const match = ctx.callbackQuery?.data?.match(/^bp_proximo_(\d+)$/);
+    // CORREÇÃO: Extrair ID do prospect do callback data
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+    const match = callbackData.match(/^bp_proximo_(\d+)$/);
     const proximoId = match ? parseInt(match[1]) : 1;
 
     // Mock do próximo prospect
@@ -681,7 +697,9 @@ async function handleAnteriorProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    const match = ctx.callbackQuery?.data?.match(/^bp_anterior_(\d+)$/);
+    // CORREÇÃO: Extrair ID do prospect do callback data
+    const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
+    const match = callbackData.match(/^bp_anterior_(\d+)$/);
     const anteriorId = match ? Math.max(0, parseInt(match[1])) : 0;
 
     // Reutilizar lógica do próximo prospect
