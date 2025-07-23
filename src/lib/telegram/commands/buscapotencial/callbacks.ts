@@ -3,7 +3,7 @@
 // ============================================================================
 
 import { Context, Markup, Telegraf } from 'telegraf';
-import { adminSupabase } from '@/lib/supabase/admin';
+import { adminSupabase } from '@/lib/supabase';
 import { updateUserSession, createUserSession } from '@/lib/telegram/middleware/session';
 import { 
   handleBuscaFocada, 

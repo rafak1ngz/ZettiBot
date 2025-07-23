@@ -2,7 +2,7 @@
 // BUSCA POTENCIAL CLIENTE - INTELIGÊNCIA ARTIFICIAL
 // ============================================================================
 
-import { adminSupabase } from '@/lib/supabase/admin';
+import { adminSupabase } from '@/lib/supabase';
 import type { ProspectData } from './integration';
 
 // ============================================================================
