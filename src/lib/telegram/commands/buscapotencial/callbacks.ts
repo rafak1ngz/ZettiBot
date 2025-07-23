@@ -693,23 +693,66 @@ O que você quer fazer com este prospect?`;
   }
 }
 
+// VERSÃO CORRIGIDA - COLAR NO LUGAR DA FUNÇÃO ANTIGA
 async function handleAnteriorProspect(ctx: Context) {
   try {
     ctx.answerCbQuery();
     
-    // CORREÇÃO: Extrair ID do prospect do callback data
     const callbackData = ctx.callbackQuery && 'data' in ctx.callbackQuery ? ctx.callbackQuery.data : '';
     const match = callbackData.match(/^bp_anterior_(\d+)$/);
     const anteriorId = match ? Math.max(0, parseInt(match[1])) : 0;
 
-    // Reutilizar lógica do próximo prospect
-    return await handleProximoProspect({
-      ...ctx,
-      callbackQuery: {
-        ...ctx.callbackQuery,
-        data: `bp_proximo_${anteriorId}`
+    // Implementação direta sem manipular ctx.callbackQuery
+    const prospects = [
+      {
+        nome: 'TechSolutions Ltda',
+        endereco: 'Rua da Consolação, 1245 - Centro',
+        telefone: '(11) 3456-7890',
+        score: 94,
+        motivo: 'Mesmo segmento dos seus tops'
+      },
+      {
+        nome: 'Inovação Digital LTDA',
+        endereco: 'Av. Paulista, 987 - Bela Vista',
+        telefone: '(11) 2345-6789',
+        score: 87,
+        motivo: 'Localização premium'
       }
-    });
+    ];
+
+    const prospect = prospects[anteriorId % prospects.length];
+
+    const mensagem = `🏢 **Prospect ${anteriorId + 1} de 15**
+
+**${prospect.nome}**
+📍 ${prospect.endereco} (1.8km)
+📞 ${prospect.telefone}
+⭐ 4.3 estrelas (67 avaliações)
+
+💡 **Score: ${prospect.score}/100** - ${prospect.motivo}
+
+O que você quer fazer com este prospect?`;
+
+    await ctx.editMessageText(mensagem, 
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback('📝 Salvar Cliente', `bp_salvar_${anteriorId}`),
+          Markup.button.callback('🎯 Follow-up', `bp_followup_${anteriorId}`)
+        ],
+        [
+          Markup.button.callback('📞 Ligar Agora', `bp_ligar_${anteriorId}`),
+          Markup.button.callback('📍 Ver no Maps', `bp_maps_${anteriorId}`)
+        ],
+        [
+          Markup.button.callback('⬅️ Anterior', `bp_anterior_${anteriorId - 1}`),
+          Markup.button.callback('➡️ Próximo', `bp_proximo_${anteriorId + 1}`)
+        ],
+        [Markup.button.callback('📋 Ver Todos', 'bp_ver_todos')],
+        [Markup.button.callback('🔍 Nova Busca', 'bp_nova_busca')]
+      ])
+    );
+
+    return true;
   } catch (error) {
     console.error('Erro prospect anterior:', error);
     return false;
