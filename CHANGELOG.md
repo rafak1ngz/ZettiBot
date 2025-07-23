@@ -5,6 +5,58 @@ Todas as mudanças notáveis deste projeto serão documentadas neste arquivo.
 O formato é baseado em [Keep a Changelog](https://keepachangelog.com/pt-BR/1.0.0/),
 e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR/).
 
+## [1.2.0] - 2025-07-23
+
+### 🚀 **NOVA FUNCIONALIDADE: Sistema de Follow-up Completo**
+
+#### ✨ Adicionado
+- **🎯 Módulo de Follow-up de Leads Completo**
+  - ➕ Criar follow-ups vinculados a clientes existentes ou novos
+  - 🔍 Busca inteligente de clientes para vinculação
+  - 📋 Listar follow-ups ativos/ganhos/perdidos com paginação
+  - ✏️ Editar follow-ups existentes (título, valor, estágio, datas)
+  - 📊 Sistema de estágios de vendas (Prospecção → Apresentação → Proposta → Negociação → Fechamento)
+  - 🎯 Gestão de status (Ativo, Ganho, Perdido)
+  - 💰 Controle de valor estimado com formatação monetária
+  - 📅 Previsão de fechamento com validação de datas futuras
+
+- **📝 Sistema de Histórico de Contatos**
+  - 📞 Registrar interações (ligação, email, reunião, WhatsApp, visita)
+  - 📋 Histórico completo de todos os contatos realizados
+  - ⏰ Definir próximas ações com datas/horários específicos
+  - 🔄 Atualização de estágio após cada contato
+  - 📊 Timeline visual de evolução do lead
+
+- **🎨 Interface Avançada para Follow-up**
+  - 🏢 Criação inline de clientes durante follow-up
+  - ⚡ Botões de atalho para datas (Hoje/Amanhã/Próxima Semana)
+  - 🎯 Seleção rápida de estágios com emojis visuais
+  - 📱 Teclados simplificados para ações frequentes
+  - ✅ Fluxo conversacional guiado e intuitivo
+
+- **🔔 Notificações para Follow-up**
+  - ⏰ Lembretes de follow-up (1h, 24h, 3 dias antes)
+  - 📞 Lembretes de contato (15min, 1h, 24h, 3 dias antes)
+  - 🔄 Integração com sistema de notificações existente
+  - 📱 Mensagens personalizadas por tipo de ação
+
+#### 🔧 Técnico
+- **Tabelas Novas**: 
+  - `followups` - Dados principais dos leads
+  - `contatos_followup` - Histórico de interações
+- **Tipos TypeScript**: Interfaces completas para EstagioFollowup, StatusFollowup, TipoContato
+- **Conversação**: Sistema multi-etapas robusto com 15+ steps
+- **Validações**: Valor monetário, datas futuras, estágios válidos
+- **Timezone**: Gestão correta UTC-3 para todas as datas
+- **Performance**: Queries otimizadas com joins e seleção específica
+
+#### 🎨 UX/UI
+- 🎯 **Estágios visuais**: Emojis por estágio (🔍📋💰🤝✅)
+- 💰 **Valores formatados**: Exibição monetária brasileira (R$ 1.000,00)
+- ⚡ **Criação rápida**: Fluxo simplificado para follow-ups frequentes
+- 📱 **Mobile-first**: Interface otimizada para uso em celular
+- 🔄 **Feedback em tempo real**: Confirmações e progress indicators
+
 ## [1.1.0] - 2025-07-21
 
 ### 🆕 **NOVA FUNCIONALIDADE: Sistema de Lembretes Completo**
@@ -104,12 +156,19 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 ## [Não Lançado]
 
 ### 🔮 Planejado para Próximas Versões
-- 📈 **Follow-up de Leads** - Acompanhamento de negociações
-- 📊 **Relatórios e Analytics** - Métricas de vendas
-- 🗺️ **Otimização de Rotas** - Planejamento de visitas
-- 🌐 **Dashboard Web** - Interface administrativa
-- 📱 **App Mobile** - Aplicativo nativo
-- 🤖 **IA para Insights** - Sugestões inteligentes
+
+#### 🔄 **v1.3.0 - EM PLANEJAMENTO**
+- 📊 **Relatórios e Analytics** - Métricas de vendas e performance
+- 🗺️ **Otimização de Rotas** - Planejamento inteligente de visitas
+- 📧 **API Pública** - Integrações com CRMs externos
+- ⚡ **Melhorias de Performance** - Cache Redis e otimizações
+
+#### 🔮 **v2.0.0 - FUTURO**
+- 🌐 **Dashboard Web** - Interface administrativa completa
+- 📱 **App Mobile** - Aplicativo nativo Android/iOS
+- 🤖 **IA para Insights** - Sugestões inteligentes de vendas
+- 🔗 **Integrações CRM** - HubSpot, Pipedrive, Salesforce
+- 🗺️ **Google Maps** - Rotas otimizadas com navegação
 
 ---
 
@@ -127,3 +186,11 @@ e este projeto adere ao [Versionamento Semântico](https://semver.org/lang/pt-BR
 - **MAJOR** (X.0.0) - Mudanças incompatíveis
 - **MINOR** (1.X.0) - Novas funcionalidades compatíveis
 - **PATCH** (1.0.X) - Correções de bugs compatíveis
+
+### 📊 Estatísticas da Versão 1.2.0
+- **Arquivos Adicionados**: 8 novos arquivos
+- **Linhas de Código**: +2.500 linhas
+- **Funcionalidades**: 5 módulos principais
+- **Comandos**: +15 novos comandos e callbacks
+- **Tempo de Desenvolvimento**: 3 dias
+- **Commits**: 25+ commits organizados
