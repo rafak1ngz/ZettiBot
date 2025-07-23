@@ -1,5 +1,5 @@
 // ============================================================================
-// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL COM PERGUNTA DE HORÁRIO
+// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO SIMPLIFICADA
 // ============================================================================
 
 import { Telegraf, Markup } from 'telegraf';
@@ -174,104 +174,14 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // 🔧 CALLBACKS CORRIGIDOS PARA DATA DA PRÓXIMA AÇÃO - COM PERGUNTA DE HORÁRIO
+  // 🔧 CALLBACKS SIMPLIFICADOS PARA DATA DA PRÓXIMA AÇÃO - APENAS HOJE/AMANHÃ
   // ========================================================================
   bot.action(/data_acao_hoje_(.+)/, async (ctx) => {
-    await processarDataComHorario(ctx, 'hoje', ctx.match[1]);
+    await processarDataSimplificada(ctx, 'hoje', ctx.match[1]);
   });
 
   bot.action(/data_acao_amanha_(.+)/, async (ctx) => {
-    await processarDataComHorario(ctx, 'amanhã', ctx.match[1]);
-  });
-
-  bot.action(/data_acao_semana_(.+)/, async (ctx) => {
-    await processarDataComHorario(ctx, 'esta semana', ctx.match[1]);
-  });
-
-  bot.action(/data_acao_prox_semana_(.+)/, async (ctx) => {
-    await processarDataComHorario(ctx, 'próxima semana', ctx.match[1]);
-  });
-
-  bot.action(/data_acao_manual_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const followupId = ctx.match[1];
-      const telegramId = ctx.from?.id;
-      
-      console.log('🔧 CORRIGINDO STEP para data_proxima_acao_contato');
-      
-      // ✅ CORREÇÃO: GARANTIR QUE O STEP SEJA ATUALIZADO CORRETAMENTE
-      const { error } = await adminSupabase
-        .from('sessions')
-        .update({
-          step: 'data_proxima_acao_contato', // ← IMPORTANTE: Este step específico
-          updated_at: new Date().toISOString()
-        })
-        .eq('telegram_id', telegramId);
-
-      if (error) {
-        console.error('Erro ao atualizar sessão para data manual:', error);
-        return ctx.reply('Erro ao processar. Tente novamente.');
-      }
-
-      await ctx.editMessageText(
-        `📅 **Digite a data e hora específica:**\n\n` +
-        `**Formatos aceitos:**\n` +
-        `• "25/07" (dia/mês - vou perguntar horário)\n` +
-        `• "25/07 14:30" (com horário específico)\n` +
-        `• "25/07/2025 14:30" (ano completo)\n` +
-        `• "amanhã", "sexta-feira"\n` +
-        `• "próxima segunda"\n\n` +
-        `💡 **Dica:** Se não incluir horário, vou perguntar depois!`,
-        { parse_mode: 'Markdown' }
-      );
-
-    } catch (error) {
-      console.error('Erro ao configurar entrada manual:', error);
-      await ctx.reply('Erro ao processar. Tente novamente.');
-    }
-  });
-
-  bot.action(/data_acao_pular_(.+)/, async (ctx) => {
-    await processarDataProximaAcao(ctx, 'pular', ctx.match[1]);
-  });
-
-  // ========================================================================
-  // 🆕 CALLBACKS PARA HORÁRIOS ESPECÍFICOS
-  // ========================================================================
-  bot.action(/horario_(\d+)_(.+)/, async (ctx) => {
-    await processarHorarioEscolhido(ctx, ctx.match[1], ctx.match[2]);
-  });
-
-  bot.action(/horario_manual_(.+)/, async (ctx) => {
-    try {
-      ctx.answerCbQuery();
-      const followupId = ctx.match[1];
-      const telegramId = ctx.from?.id;
-      
-      // Atualizar step para entrada manual de horário
-      await adminSupabase
-        .from('sessions')
-        .update({
-          step: 'horario_manual_proxima_acao',
-          updated_at: new Date().toISOString()
-        })
-        .eq('telegram_id', telegramId);
-
-      await ctx.editMessageText(
-        `🕐 **Digite o horário desejado:**\n\n` +
-        `**Formatos aceitos:**\n` +
-        `• "14:30" ou "14h30"\n` +
-        `• "9:00" ou "09:00"\n` +
-        `• "15h" (será 15:00)\n\n` +
-        `💡 **Exemplos:** 14:30, 09:00, 16h`,
-        { parse_mode: 'Markdown' }
-      );
-
-    } catch (error) {
-      console.error('Erro ao configurar horário manual:', error);
-      await ctx.reply('Erro ao processar. Tente novamente.');
-    }
+    await processarDataSimplificada(ctx, 'amanhã', ctx.match[1]);
   });
 
   // ========================================================================
@@ -673,9 +583,9 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   }
 
   // ========================================================================
-  // 🆕 NOVA FUNÇÃO: PROCESSAR DATA COM PERGUNTA DE HORÁRIO
+  // 🆕 FUNÇÃO SIMPLIFICADA: PROCESSAR DATA (APENAS HOJE/AMANHÃ)
   // ========================================================================
-  async function processarDataComHorario(ctx: any, opcaoData: string, followupId: string) {
+  async function processarDataSimplificada(ctx: any, opcaoData: string, followupId: string) {
     try {
       ctx.answerCbQuery();
       const telegramId = ctx.from?.id;
@@ -695,7 +605,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         return ctx.reply('Sessão não encontrada. Tente novamente.');
       }
 
-      // Calcular data base sem horário
+      // Calcular data base
       let dataBase: Date | null = null;
       let dataTexto = '';
       
@@ -711,28 +621,17 @@ export function registerFollowupCallbacks(bot: Telegraf) {
           dataBase.setDate(dataBase.getDate() + 1);
           dataTexto = 'amanhã';
           break;
-        case 'esta semana':
-          dataBase = new Date(hoje);
-          const diasParaSexta = 5 - hoje.getDay();
-          dataBase.setDate(dataBase.getDate() + (diasParaSexta > 0 ? diasParaSexta : 7));
-          dataTexto = format(dataBase, 'EEEE', { locale: ptBR });
-          break;
-        case 'próxima semana':
-          dataBase = new Date(hoje);
-          dataBase.setDate(dataBase.getDate() + 7);
-          dataTexto = format(dataBase, "EEEE 'da próxima semana'", { locale: ptBR });
-          break;
       }
 
       if (!dataBase) {
         return ctx.reply('Erro ao processar data.');
       }
 
-      // Salvar data na sessão e perguntar horário
+      // Salvar data na sessão e pedir horário
       await adminSupabase
         .from('sessions')
         .update({
-          step: 'horario_proxima_acao', // ← NOVO STEP
+          step: 'horario_proxima_acao',
           data: { 
             ...session.data, 
             data_escolhida: dataBase.toISOString(),
@@ -742,159 +641,20 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         })
         .eq('id', session.id);
 
-      // Perguntar horário específico
+      // Pedir horário digitado
       await ctx.editMessageText(
         `📅 **Data escolhida:** ${dataTexto}\n\n` +
-        `🕐 **Que horas você quer realizar a ação?**`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('🌅 08:00', `horario_08_${followupId}`),
-              Markup.button.callback('🌞 09:00', `horario_09_${followupId}`),
-              Markup.button.callback('🌞 10:00', `horario_10_${followupId}`)
-            ],
-            [
-              Markup.button.callback('☀️ 11:00', `horario_11_${followupId}`),
-              Markup.button.callback('☀️ 14:00', `horario_14_${followupId}`),
-              Markup.button.callback('🌤️ 15:00', `horario_15_${followupId}`)
-            ],
-            [
-              Markup.button.callback('🌅 16:00', `horario_16_${followupId}`),
-              Markup.button.callback('🌆 17:00', `horario_17_${followupId}`),
-              Markup.button.callback('🌆 18:00', `horario_18_${followupId}`)
-            ],
-            [
-              Markup.button.callback('📝 Digitar horário', `horario_manual_${followupId}`)
-            ]
-          ])
-        }
+        `🕐 **Digite o horário que deseja realizar a ação:**\n\n` +
+        `**Formatos aceitos:**\n` +
+        `• "14:30" ou "14h30"\n` +
+        `• "9:00" ou "09:00"\n` +
+        `• "15h" (será 15:00)\n\n` +
+        `💡 **Exemplos:** 14:30, 09:00, 16h`,
+        { parse_mode: 'Markdown' }
       );
 
     } catch (error) {
-      console.error('Erro ao processar data com horário:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
-    }
-  }
-
-  // ========================================================================
-  // 🆕 FUNÇÃO PARA PROCESSAR HORÁRIO ESCOLHIDO
-  // ========================================================================
-  async function processarHorarioEscolhido(ctx: any, horario: string, followupId: string) {
-    try {
-      ctx.answerCbQuery();
-      const telegramId = ctx.from?.id;
-
-      if (!telegramId) {
-        return ctx.reply('Erro ao identificar usuário.');
-      }
-
-      // Buscar sessão atual
-      const { data: session, error: sessionError } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .single();
-
-      if (sessionError || !session) {
-        return ctx.reply('Sessão não encontrada. Tente novamente.');
-      }
-
-      // Combinar data com horário
-      const dataEscolhida = new Date(session.data.data_escolhida);
-      const horarioNum = parseInt(horario);
-      dataEscolhida.setHours(horarioNum, 0, 0, 0);
-
-      // Limpar sessão
-      await adminSupabase
-        .from('sessions')
-        .delete()
-        .eq('id', session.id);
-
-      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
-      const mensagemData = format(dataEscolhida, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-
-      // Mostrar resumo final e perguntar sobre notificação
-      await ctx.editMessageText(
-        `📋 **RESUMO COMPLETO**\n\n` +
-        `🎬 **Próxima ação:** ${proximaAcao}\n` +
-        `📅 **Quando fazer:** ${mensagemData}\n\n` +
-        `🔔 **Deseja configurar um lembrete?**`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
-              Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
-            ],
-            [
-              Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
-              Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
-            ]
-          ])
-        }
-      );
-
-    } catch (error) {
-      console.error('Erro ao processar horário escolhido:', error);
-      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
-    }
-  }
-
-  // ========================================================================
-  // FUNÇÃO PARA PROCESSAR DATA DA PRÓXIMA AÇÃO (PULAR)
-  // ========================================================================
-  async function processarDataProximaAcao(ctx: any, opcaoData: string, followupId: string) {
-    try {
-      ctx.answerCbQuery();
-      const telegramId = ctx.from?.id;
-
-      if (!telegramId) {
-        return ctx.reply('Erro ao identificar usuário.');
-      }
-
-      // Buscar sessão atual
-      const { data: session, error: sessionError } = await adminSupabase
-        .from('sessions')
-        .select('*')
-        .eq('telegram_id', telegramId)
-        .single();
-
-      if (sessionError || !session) {
-        return ctx.reply('Sessão não encontrada. Tente novamente.');
-      }
-
-      // Limpar sessão
-      await adminSupabase
-        .from('sessions')
-        .delete()
-        .eq('id', session.id);
-
-      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
-
-      // Mostrar resumo final e perguntar sobre notificação
-      await ctx.editMessageText(
-        `📋 **RESUMO COMPLETO**\n\n` +
-        `🎬 **Próxima ação:** ${proximaAcao}\n` +
-        `📅 **Quando fazer:** Não definida\n\n` +
-        `🔔 **Deseja configurar um lembrete?**`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
-              Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
-            ],
-            [
-              Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
-              Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
-            ]
-          ])
-        }
-      );
-
-    } catch (error) {
-      console.error('Erro ao processar data da ação:', error);
+      console.error('Erro ao processar data simplificada:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   }
