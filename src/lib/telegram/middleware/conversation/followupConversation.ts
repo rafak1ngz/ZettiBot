@@ -1,5 +1,5 @@
 // ============================================================================
-// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO FINAL CORRIGIDA
+// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO FINAL COM PERGUNTA DE HORÁRIO
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
@@ -54,9 +54,16 @@ export async function handleFollowupConversation(ctx: Context, session: any): Pr
       case 'proxima_acao_contato':
         return await handleProximaAcaoContato(ctx, session, messageText);
 
-      // 🆕 NOVO: Data específica da próxima ação
+      // 🔧 CORRIGIDO: Data específica da próxima ação
       case 'data_proxima_acao_contato':
         return await handleDataProximaAcaoContato(ctx, session, messageText);
+
+      // 🆕 NOVOS STEPS: Para horários
+      case 'horario_proxima_acao':
+        return await handleHorarioProximaAcao(ctx, session, messageText);
+
+      case 'horario_manual_proxima_acao':
+        return await handleHorarioManualProximaAcao(ctx, session, messageText);
 
       default:
         return false;
@@ -588,9 +595,13 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 }
 
 // ============================================================================
-// 🔧 NOVA FUNÇÃO CORRIGIDA: PROCESSAR DATA ESPECÍFICA MANUAL
+// 🔧 FUNÇÃO CORRIGIDA: PROCESSAR DATA ESPECÍFICA MANUAL (SEM CONFUNDIR COM PRÓXIMA AÇÃO)
 // ============================================================================
 async function handleDataProximaAcaoContato(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
+  console.log('🔧 DEBUG: Processando data manual:', dataTexto);
+  console.log('🔧 DEBUG: Session step:', session.step);
+  console.log('🔧 DEBUG: Session data:', session.data);
+
   try {
     // Permitir mais formatos de data
     let dataProcessada: Date | null = null;
@@ -625,17 +636,159 @@ async function handleDataProximaAcaoContato(ctx: Context, session: any, dataText
         '• "25/07 14:30" (com horário)\n' +
         '• "amanhã", "sexta-feira"\n' +
         '• "próxima segunda"\n\n' +
-        '⚠️ **Dica:** Se não incluir horário, será 14:00 por padrão.\n\n' +
         '🔄 **Tente novamente** com um formato válido.',
         { parse_mode: 'Markdown' }
       );
       return true;
     }
 
-    // Se não tem horário específico, assumir 14:00
-    if (dataProcessada.getHours() === 0 && dataProcessada.getMinutes() === 0) {
-      dataProcessada.setHours(14, 0, 0, 0);
+    // Verificar se tem horário específico na string
+    const temHorario = /\d{1,2}:\d{2}/.test(dataTexto);
+    
+    if (temHorario) {
+      // Se já tem horário, finalizar direto
+      const followupId = session.data.followup_id;
+      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+      const mensagemData = format(dataProcessada, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+
+      // Limpar sessão
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('id', session.id);
+
+      await ctx.reply(
+        `📋 **RESUMO COMPLETO**\n\n` +
+        `🎬 **Próxima ação:** ${proximaAcao}\n` +
+        `📅 **Quando fazer:** ${mensagemData}\n\n` +
+        `🔔 **Deseja configurar um lembrete?**`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
+              Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
+            ],
+            [
+              Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
+              Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
+            ]
+          ])
+        }
+      );
+    } else {
+      // Se não tem horário, perguntar horário
+      const followupId = session.data.followup_id;
+      const dataTextoFormatado = format(dataProcessada, "dd/MM/yyyy", { locale: ptBR });
+
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'horario_proxima_acao',
+          data: { 
+            ...session.data, 
+            data_escolhida: dataProcessada.toISOString(),
+            data_texto: dataTextoFormatado
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+
+      await ctx.reply(
+        `📅 **Data escolhida:** ${dataTextoFormatado}\n\n` +
+        `🕐 **Que horas você quer realizar a ação?**`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('🌅 08:00', `horario_08_${followupId}`),
+              Markup.button.callback('🌞 09:00', `horario_09_${followupId}`),
+              Markup.button.callback('🌞 10:00', `horario_10_${followupId}`)
+            ],
+            [
+              Markup.button.callback('☀️ 11:00', `horario_11_${followupId}`),
+              Markup.button.callback('☀️ 14:00', `horario_14_${followupId}`),
+              Markup.button.callback('🌤️ 15:00', `horario_15_${followupId}`)
+            ],
+            [
+              Markup.button.callback('🌅 16:00', `horario_16_${followupId}`),
+              Markup.button.callback('🌆 17:00', `horario_17_${followupId}`),
+              Markup.button.callback('🌆 18:00', `horario_18_${followupId}`)
+            ],
+            [
+              Markup.button.callback('📝 Digitar horário', `horario_manual_${followupId}`)
+            ]
+          ])
+        }
+      );
     }
+    
+    return true;
+  } catch (error) {
+    console.error('Erro ao processar data manual:', error);
+    await ctx.reply(
+      '❌ **Erro ao processar data.**\n\n' +
+      'Tente novamente com um formato válido:\n' +
+      '• "25/07 14:30"\n' +
+      '• "amanhã"\n' +
+      '• "sexta-feira 09:00"'
+    );
+    return true;
+  }
+}
+
+// ============================================================================
+// 🆕 NOVA FUNÇÃO: PROCESSAR HORÁRIO DIGITADO (BOTÕES DE HORÁRIO)
+// ============================================================================
+async function handleHorarioProximaAcao(ctx: Context, session: any, horarioTexto: string): Promise<boolean> {
+  // Esta função não deveria ser chamada pois horários são via botões
+  // Mas vamos tratar caso o usuário digite algo
+  await ctx.reply(
+    '⚠️ Por favor, use os botões para escolher o horário ou clique em "📝 Digitar horário" para digitar manualmente.',
+    {
+      parse_mode: 'Markdown'
+    }
+  );
+  return true;
+}
+
+// ============================================================================
+// 🆕 NOVA FUNÇÃO: PROCESSAR HORÁRIO DIGITADO MANUALMENTE
+// ============================================================================
+async function handleHorarioManualProximaAcao(ctx: Context, session: any, horarioTexto: string): Promise<boolean> {
+  try {
+    // Validar formato de horário
+    const horarioRegex = /^(\d{1,2}):?(\d{2})?h?$/;
+    const match = horarioTexto.match(horarioRegex);
+    
+    if (!match) {
+      await ctx.reply(
+        '❌ **Formato de horário inválido.**\n\n' +
+        'Use um dos formatos:\n' +
+        '• "14:30" ou "14h30"\n' +
+        '• "9:00" ou "09:00"\n' +
+        '• "15h" (será 15:00)',
+        { parse_mode: 'Markdown' }
+      );
+      return true;
+    }
+
+    const horas = parseInt(match[1]);
+    const minutos = parseInt(match[2] || '0');
+
+    if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
+      await ctx.reply(
+        '❌ **Horário inválido.**\n\n' +
+        'Use horas de 00 a 23 e minutos de 00 a 59.\n' +
+        'Exemplo: 14:30, 09:00, 18h',
+        { parse_mode: 'Markdown' }
+      );
+      return true;
+    }
+
+    // Combinar data com horário
+    const dataEscolhida = new Date(session.data.data_escolhida);
+    dataEscolhida.setHours(horas, minutos, 0, 0);
 
     // Limpar sessão
     await adminSupabase
@@ -644,10 +797,8 @@ async function handleDataProximaAcaoContato(ctx: Context, session: any, dataText
       .eq('id', session.id);
 
     const followupId = session.data.followup_id;
-    const mensagemData = format(dataProcessada, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-
-    // ✅ CORREÇÃO: USAR session.data.proxima_acao que foi salvo
     const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+    const mensagemData = format(dataEscolhida, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
     // Mostrar resumo final e perguntar sobre notificação
     await ctx.reply(
@@ -672,14 +823,8 @@ async function handleDataProximaAcaoContato(ctx: Context, session: any, dataText
     
     return true;
   } catch (error) {
-    console.error('Erro ao processar data manual:', error);
-    await ctx.reply(
-      '❌ **Erro ao processar data.**\n\n' +
-      'Tente novamente com um formato válido:\n' +
-      '• "25/07 14:30"\n' +
-      '• "amanhã"\n' +
-      '• "sexta-feira 09:00"'
-    );
+    console.error('Erro ao processar horário manual:', error);
+    await ctx.reply('Erro ao processar horário. Tente novamente.');
     return true;
   }
 }

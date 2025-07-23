@@ -1,5 +1,5 @@
 // ============================================================================
-// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
+// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL COM PERGUNTA DE HORÁRIO
 // ============================================================================
 
 import { Telegraf, Markup } from 'telegraf';
@@ -155,7 +155,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // CALLBACKS PARA SELEÇÃO RÁPIDA DE DATA
+  // CALLBACKS PARA SELEÇÃO RÁPIDA DE DATA (FOLLOWUP INICIAL)
   // ========================================================================
   bot.action('data_hoje_followup', async (ctx) => {
     await processarDataRapida(ctx, 'hoje');
@@ -174,22 +174,22 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // 🆕 NOVOS CALLBACKS PARA DATA DA PRÓXIMA AÇÃO
+  // 🔧 CALLBACKS CORRIGIDOS PARA DATA DA PRÓXIMA AÇÃO - COM PERGUNTA DE HORÁRIO
   // ========================================================================
   bot.action(/data_acao_hoje_(.+)/, async (ctx) => {
-    await processarDataProximaAcao(ctx, 'hoje', ctx.match[1]);
+    await processarDataComHorario(ctx, 'hoje', ctx.match[1]);
   });
 
   bot.action(/data_acao_amanha_(.+)/, async (ctx) => {
-    await processarDataProximaAcao(ctx, 'amanhã', ctx.match[1]);
+    await processarDataComHorario(ctx, 'amanhã', ctx.match[1]);
   });
 
   bot.action(/data_acao_semana_(.+)/, async (ctx) => {
-    await processarDataProximaAcao(ctx, 'esta semana', ctx.match[1]);
+    await processarDataComHorario(ctx, 'esta semana', ctx.match[1]);
   });
 
   bot.action(/data_acao_prox_semana_(.+)/, async (ctx) => {
-    await processarDataProximaAcao(ctx, 'próxima semana', ctx.match[1]);
+    await processarDataComHorario(ctx, 'próxima semana', ctx.match[1]);
   });
 
   bot.action(/data_acao_manual_(.+)/, async (ctx) => {
@@ -198,24 +198,31 @@ export function registerFollowupCallbacks(bot: Telegraf) {
       const followupId = ctx.match[1];
       const telegramId = ctx.from?.id;
       
-      // Atualizar sessão para entrada manual de data
-      await adminSupabase
+      console.log('🔧 CORRIGINDO STEP para data_proxima_acao_contato');
+      
+      // ✅ CORREÇÃO: GARANTIR QUE O STEP SEJA ATUALIZADO CORRETAMENTE
+      const { error } = await adminSupabase
         .from('sessions')
         .update({
-          step: 'data_proxima_acao_contato',
+          step: 'data_proxima_acao_contato', // ← IMPORTANTE: Este step específico
           updated_at: new Date().toISOString()
         })
         .eq('telegram_id', telegramId);
 
+      if (error) {
+        console.error('Erro ao atualizar sessão para data manual:', error);
+        return ctx.reply('Erro ao processar. Tente novamente.');
+      }
+
       await ctx.editMessageText(
         `📅 **Digite a data e hora específica:**\n\n` +
         `**Formatos aceitos:**\n` +
-        `• "25/07" (dia/mês - assume 14:00)\n` +
-        `• "25/07 14:30" (com horário)\n` +
+        `• "25/07" (dia/mês - vou perguntar horário)\n` +
+        `• "25/07 14:30" (com horário específico)\n` +
         `• "25/07/2025 14:30" (ano completo)\n` +
         `• "amanhã", "sexta-feira"\n` +
-        `• "próxima segunda às 15h"\n\n` +
-        `⚠️ **Dica:** Se não incluir horário, será 14:00 por padrão.`,
+        `• "próxima segunda"\n\n` +
+        `💡 **Dica:** Se não incluir horário, vou perguntar depois!`,
         { parse_mode: 'Markdown' }
       );
 
@@ -227,6 +234,44 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 
   bot.action(/data_acao_pular_(.+)/, async (ctx) => {
     await processarDataProximaAcao(ctx, 'pular', ctx.match[1]);
+  });
+
+  // ========================================================================
+  // 🆕 CALLBACKS PARA HORÁRIOS ESPECÍFICOS
+  // ========================================================================
+  bot.action(/horario_(\d+)_(.+)/, async (ctx) => {
+    await processarHorarioEscolhido(ctx, ctx.match[1], ctx.match[2]);
+  });
+
+  bot.action(/horario_manual_(.+)/, async (ctx) => {
+    try {
+      ctx.answerCbQuery();
+      const followupId = ctx.match[1];
+      const telegramId = ctx.from?.id;
+      
+      // Atualizar step para entrada manual de horário
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'horario_manual_proxima_acao',
+          updated_at: new Date().toISOString()
+        })
+        .eq('telegram_id', telegramId);
+
+      await ctx.editMessageText(
+        `🕐 **Digite o horário desejado:**\n\n` +
+        `**Formatos aceitos:**\n` +
+        `• "14:30" ou "14h30"\n` +
+        `• "9:00" ou "09:00"\n` +
+        `• "15h" (será 15:00)\n\n` +
+        `💡 **Exemplos:** 14:30, 09:00, 16h`,
+        { parse_mode: 'Markdown' }
+      );
+
+    } catch (error) {
+      console.error('Erro ao configurar horário manual:', error);
+      await ctx.reply('Erro ao processar. Tente novamente.');
+    }
   });
 
   // ========================================================================
@@ -454,7 +499,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   });
 
   // ========================================================================
-  // 🆕 CALLBACKS PARA NOTIFICAÇÕES DE CONTATO - MELHORADO
+  // CALLBACKS PARA NOTIFICAÇÕES DE CONTATO
   // ========================================================================
   bot.action(/notif_contato_nao_(.+)/, async (ctx) => {
     try {
@@ -628,9 +673,9 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   }
 
   // ========================================================================
-  // 🔧 FUNÇÃO CORRIGIDA: PROCESSAR DATA DA PRÓXIMA AÇÃO
+  // 🆕 NOVA FUNÇÃO: PROCESSAR DATA COM PERGUNTA DE HORÁRIO
   // ========================================================================
-  async function processarDataProximaAcao(ctx: any, opcaoData: string, followupId: string) {
+  async function processarDataComHorario(ctx: any, opcaoData: string, followupId: string) {
     try {
       ctx.answerCbQuery();
       const telegramId = ctx.from?.id;
@@ -650,41 +695,115 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         return ctx.reply('Sessão não encontrada. Tente novamente.');
       }
 
-      // Calcular data baseada na opção
-      let dataAcao: Date | null = null;
-      let mensagemData = 'Não definida';
+      // Calcular data base sem horário
+      let dataBase: Date | null = null;
+      let dataTexto = '';
       
-      if (opcaoData !== 'pular') {
-        const hoje = new Date();
-        
-        switch (opcaoData) {
-          case 'hoje':
-            dataAcao = new Date(hoje);
-            dataAcao.setHours(14, 0, 0, 0); // 14:00 por padrão
-            break;
-          case 'amanhã':
-            dataAcao = new Date(hoje);
-            dataAcao.setDate(dataAcao.getDate() + 1);
-            dataAcao.setHours(14, 0, 0, 0);
-            break;
-          case 'esta semana':
-            dataAcao = new Date(hoje);
-            // Próxima sexta-feira
-            const diasParaSexta = 5 - hoje.getDay();
-            dataAcao.setDate(dataAcao.getDate() + (diasParaSexta > 0 ? diasParaSexta : 7));
-            dataAcao.setHours(14, 0, 0, 0);
-            break;
-          case 'próxima semana':
-            dataAcao = new Date(hoje);
-            dataAcao.setDate(dataAcao.getDate() + 7);
-            dataAcao.setHours(14, 0, 0, 0);
-            break;
-        }
-        
-        if (dataAcao) {
-          mensagemData = format(dataAcao, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-        }
+      const hoje = new Date();
+      
+      switch (opcaoData) {
+        case 'hoje':
+          dataBase = new Date(hoje);
+          dataTexto = 'hoje';
+          break;
+        case 'amanhã':
+          dataBase = new Date(hoje);
+          dataBase.setDate(dataBase.getDate() + 1);
+          dataTexto = 'amanhã';
+          break;
+        case 'esta semana':
+          dataBase = new Date(hoje);
+          const diasParaSexta = 5 - hoje.getDay();
+          dataBase.setDate(dataBase.getDate() + (diasParaSexta > 0 ? diasParaSexta : 7));
+          dataTexto = format(dataBase, 'EEEE', { locale: ptBR });
+          break;
+        case 'próxima semana':
+          dataBase = new Date(hoje);
+          dataBase.setDate(dataBase.getDate() + 7);
+          dataTexto = format(dataBase, "EEEE 'da próxima semana'", { locale: ptBR });
+          break;
       }
+
+      if (!dataBase) {
+        return ctx.reply('Erro ao processar data.');
+      }
+
+      // Salvar data na sessão e perguntar horário
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'horario_proxima_acao', // ← NOVO STEP
+          data: { 
+            ...session.data, 
+            data_escolhida: dataBase.toISOString(),
+            data_texto: dataTexto
+          },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+
+      // Perguntar horário específico
+      await ctx.editMessageText(
+        `📅 **Data escolhida:** ${dataTexto}\n\n` +
+        `🕐 **Que horas você quer realizar a ação?**`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('🌅 08:00', `horario_08_${followupId}`),
+              Markup.button.callback('🌞 09:00', `horario_09_${followupId}`),
+              Markup.button.callback('🌞 10:00', `horario_10_${followupId}`)
+            ],
+            [
+              Markup.button.callback('☀️ 11:00', `horario_11_${followupId}`),
+              Markup.button.callback('☀️ 14:00', `horario_14_${followupId}`),
+              Markup.button.callback('🌤️ 15:00', `horario_15_${followupId}`)
+            ],
+            [
+              Markup.button.callback('🌅 16:00', `horario_16_${followupId}`),
+              Markup.button.callback('🌆 17:00', `horario_17_${followupId}`),
+              Markup.button.callback('🌆 18:00', `horario_18_${followupId}`)
+            ],
+            [
+              Markup.button.callback('📝 Digitar horário', `horario_manual_${followupId}`)
+            ]
+          ])
+        }
+      );
+
+    } catch (error) {
+      console.error('Erro ao processar data com horário:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  }
+
+  // ========================================================================
+  // 🆕 FUNÇÃO PARA PROCESSAR HORÁRIO ESCOLHIDO
+  // ========================================================================
+  async function processarHorarioEscolhido(ctx: any, horario: string, followupId: string) {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
+
+      if (!telegramId) {
+        return ctx.reply('Erro ao identificar usuário.');
+      }
+
+      // Buscar sessão atual
+      const { data: session, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (sessionError || !session) {
+        return ctx.reply('Sessão não encontrada. Tente novamente.');
+      }
+
+      // Combinar data com horário
+      const dataEscolhida = new Date(session.data.data_escolhida);
+      const horarioNum = parseInt(horario);
+      dataEscolhida.setHours(horarioNum, 0, 0, 0);
 
       // Limpar sessão
       await adminSupabase
@@ -692,8 +811,8 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         .delete()
         .eq('id', session.id);
 
-      // ✅ CORREÇÃO: USAR session.data.proxima_acao corretamente
       const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+      const mensagemData = format(dataEscolhida, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
       // Mostrar resumo final e perguntar sobre notificação
       await ctx.editMessageText(
@@ -717,13 +836,71 @@ export function registerFollowupCallbacks(bot: Telegraf) {
       );
 
     } catch (error) {
+      console.error('Erro ao processar horário escolhido:', error);
+      await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
+    }
+  }
+
+  // ========================================================================
+  // FUNÇÃO PARA PROCESSAR DATA DA PRÓXIMA AÇÃO (PULAR)
+  // ========================================================================
+  async function processarDataProximaAcao(ctx: any, opcaoData: string, followupId: string) {
+    try {
+      ctx.answerCbQuery();
+      const telegramId = ctx.from?.id;
+
+      if (!telegramId) {
+        return ctx.reply('Erro ao identificar usuário.');
+      }
+
+      // Buscar sessão atual
+      const { data: session, error: sessionError } = await adminSupabase
+        .from('sessions')
+        .select('*')
+        .eq('telegram_id', telegramId)
+        .single();
+
+      if (sessionError || !session) {
+        return ctx.reply('Sessão não encontrada. Tente novamente.');
+      }
+
+      // Limpar sessão
+      await adminSupabase
+        .from('sessions')
+        .delete()
+        .eq('id', session.id);
+
+      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+
+      // Mostrar resumo final e perguntar sobre notificação
+      await ctx.editMessageText(
+        `📋 **RESUMO COMPLETO**\n\n` +
+        `🎬 **Próxima ação:** ${proximaAcao}\n` +
+        `📅 **Quando fazer:** Não definida\n\n` +
+        `🔔 **Deseja configurar um lembrete?**`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.inlineKeyboard([
+            [
+              Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
+              Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
+            ],
+            [
+              Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
+              Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
+            ]
+          ])
+        }
+      );
+
+    } catch (error) {
       console.error('Erro ao processar data da ação:', error);
       await ctx.reply('Ocorreu um erro ao processar sua solicitação.');
     }
   }
 
   // ========================================================================
-  // 🆕 FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE CONTATO - MELHORADA
+  // FUNÇÃO PARA PROCESSAR NOTIFICAÇÃO DE CONTATO
   // ========================================================================
   async function processarNotificacaoContato(ctx: any, tempo: string, followupId: string) {
     try {
