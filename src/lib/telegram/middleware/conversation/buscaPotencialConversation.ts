@@ -1,5 +1,5 @@
 // ============================================================================
-// BUSCA POTENCIAL CLIENTE - SISTEMA DE CONVERSAÇÃO
+// BUSCA POTENCIAL CLIENTE - SISTEMA DE CONVERSAÇÃO - CORRIGIDO
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
@@ -11,7 +11,7 @@ import {
   validarProdutoServico, 
   validarTicketMedio,
   formatarErroValidacao 
-} from '../commands/buscapotencial/validation';
+} from '../../commands/buscapotencial/validation';
 
 // ============================================================================
 // PROCESSOR PRINCIPAL
@@ -95,10 +95,13 @@ async function processBuscaFocadaProduto(ctx: Context, session: any): Promise<bo
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_focada_ticket', {
-      ...session.data,
-      produto_servico: validacao.produto_limpo,
-      categoria_sugerida: validacao.categoria_sugerida
+    await updateUserSession(telegramId, {
+      step: 'busca_focada_ticket',
+      data: {
+        ...session.data,
+        produto_servico: validacao.produto_limpo,
+        categoria_sugerida: validacao.categoria_sugerida
+      }
     });
 
     const mensagem = `✅ **Produto/Serviço:** ${validacao.produto_limpo}
@@ -152,10 +155,13 @@ async function processBuscaFocadaTicket(ctx: Context, session: any): Promise<boo
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_focada_tipo_negocio', {
-      ...session.data,
-      ticket_medio: validacao.valor,
-      faixa_ticket: validacao.faixa
+    await updateUserSession(telegramId, {
+      step: 'busca_focada_tipo_negocio',
+      data: {
+        ...session.data,
+        ticket_medio: validacao.valor,
+        faixa_ticket: validacao.faixa
+      }
     });
 
     const mensagem = `✅ **Ticket médio:** R$ ${validacao.valor?.toLocaleString('pt-BR')}
@@ -206,10 +212,13 @@ async function processBuscaFocadaRegiao(ctx: Context, session: any): Promise<boo
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_focada_quantidade', {
-      ...session.data,
-      regiao: validacao.endereco,
-      cep: validacao.cep
+    await updateUserSession(telegramId, {
+      step: 'busca_focada_quantidade',
+      data: {
+        ...session.data,
+        regiao: validacao.endereco,
+        cep: validacao.cep
+      }
     });
 
     const mensagem = `✅ **Região:** ${validacao.endereco}
@@ -263,10 +272,13 @@ async function processBuscaAreaEndereco(ctx: Context, session: any): Promise<boo
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_area_raio', {
-      ...session.data,
-      endereco: validacao.endereco,
-      cep: validacao.cep
+    await updateUserSession(telegramId, {
+      step: 'busca_area_raio',
+      data: {
+        ...session.data,
+        endereco: validacao.endereco,
+        cep: validacao.cep
+      }
     });
 
     const mensagem = `✅ **Local definido:** ${validacao.endereco}
@@ -318,9 +330,12 @@ async function processBuscaAreaRaio(ctx: Context, session: any): Promise<boolean
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_area_categoria', {
-      ...session.data,
-      raio: validacao.raio
+    await updateUserSession(telegramId, {
+      step: 'busca_area_categoria',
+      data: {
+        ...session.data,
+        raio: validacao.raio
+      }
     });
 
     const raioKm = validacao.raio! >= 1000 ? 
@@ -397,11 +412,14 @@ async function processEnderecoDigitado(ctx: Context, session: any): Promise<bool
     const telegramId = ctx.from?.id;
     if (!telegramId) return false;
 
-    await updateUserSession(telegramId, 'busca_area_raio', {
-      ...session.data,
-      endereco: validacao.endereco,
-      cep: validacao.cep,
-      origem: 'endereco_digitado'
+    await updateUserSession(telegramId, {
+      step: 'busca_area_raio',
+      data: {
+        ...session.data,
+        endereco: validacao.endereco,
+        cep: validacao.cep,
+        origem: 'endereco_digitado'
+      }
     });
 
     // Redirecionar para próximo step
