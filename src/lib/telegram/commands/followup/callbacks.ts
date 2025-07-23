@@ -1,5 +1,5 @@
 // ============================================================================
-// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO COMPLETA COM FLUXO MELHORADO
+// CALLBACKS DO MÓDULO FOLLOWUP - VERSÃO FINAL CORRIGIDA
 // ============================================================================
 
 import { Telegraf, Markup } from 'telegraf';
@@ -209,11 +209,13 @@ export function registerFollowupCallbacks(bot: Telegraf) {
 
       await ctx.editMessageText(
         `📅 **Digite a data e hora específica:**\n\n` +
-        `**Exemplos:**\n` +
-        `• "25/07 14:30"\n` +
-        `• "sexta-feira 09:00"\n` +
-        `• "30 de julho"\n` +
-        `• "próxima segunda às 15h"`,
+        `**Formatos aceitos:**\n` +
+        `• "25/07" (dia/mês - assume 14:00)\n` +
+        `• "25/07 14:30" (com horário)\n` +
+        `• "25/07/2025 14:30" (ano completo)\n` +
+        `• "amanhã", "sexta-feira"\n` +
+        `• "próxima segunda às 15h"\n\n` +
+        `⚠️ **Dica:** Se não incluir horário, será 14:00 por padrão.`,
         { parse_mode: 'Markdown' }
       );
 
@@ -626,7 +628,7 @@ export function registerFollowupCallbacks(bot: Telegraf) {
   }
 
   // ========================================================================
-  // 🆕 FUNÇÃO PARA PROCESSAR DATA DA PRÓXIMA AÇÃO
+  // 🔧 FUNÇÃO CORRIGIDA: PROCESSAR DATA DA PRÓXIMA AÇÃO
   // ========================================================================
   async function processarDataProximaAcao(ctx: any, opcaoData: string, followupId: string) {
     try {
@@ -690,10 +692,13 @@ export function registerFollowupCallbacks(bot: Telegraf) {
         .delete()
         .eq('id', session.id);
 
+      // ✅ CORREÇÃO: USAR session.data.proxima_acao corretamente
+      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+
       // Mostrar resumo final e perguntar sobre notificação
       await ctx.editMessageText(
         `📋 **RESUMO COMPLETO**\n\n` +
-        `🎬 **Próxima ação:** ${session.data.proxima_acao}\n` +
+        `🎬 **Próxima ação:** ${proximaAcao}\n` +
         `📅 **Quando fazer:** ${mensagemData}\n\n` +
         `🔔 **Deseja configurar um lembrete?**`,
         {

@@ -1,5 +1,5 @@
 // ============================================================================
-// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO COMPLETA COM FLUXO MELHORADO
+// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO FINAL CORRIGIDA
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
@@ -474,7 +474,7 @@ async function handleRegistrarContatoTexto(ctx: Context, session: any, contatoTe
 }
 
 // ============================================================================
-// 🆕 FLUXO MELHORADO: PRÓXIMA AÇÃO COM PERGUNTA DE DATA
+// 🔧 FLUXO CORRIGIDO: PRÓXIMA AÇÃO COM PERGUNTA DE DATA
 // ============================================================================
 async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao: string): Promise<boolean> {
   if (!proximaAcao || proximaAcao.length < 3) {
@@ -486,6 +486,18 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
     const agora = new Date().toISOString();
     const followupId = session.data.followup_id;
     const userId = session.user_id;
+
+    // ✅ CORREÇÃO 1: SALVAR PRÓXIMA AÇÃO NA SESSÃO PRIMEIRO
+    await adminSupabase
+      .from('sessions')
+      .update({
+        data: { 
+          ...session.data, 
+          proxima_acao: proximaAcao
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id);
 
     // ✅ SALVAR O CONTATO NA TABELA contatos_followup
     const { error: contatoError } = await adminSupabase
@@ -576,23 +588,53 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 }
 
 // ============================================================================
-// 🆕 NOVA FUNÇÃO: PROCESSAR DATA ESPECÍFICA MANUAL
+// 🔧 NOVA FUNÇÃO CORRIGIDA: PROCESSAR DATA ESPECÍFICA MANUAL
 // ============================================================================
 async function handleDataProximaAcaoContato(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
   try {
-    // Validar e processar data manual
-    const dataProcessada = parseDataBrasil(dataTexto);
+    // Permitir mais formatos de data
+    let dataProcessada: Date | null = null;
+    
+    // Formatos aceitos
+    const formatosData = [
+      /^\d{1,2}\/\d{1,2}$/,                      // "25/07"
+      /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,             // "25/07/25" ou "25/07/2025"
+      /^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/,      // "25/07 14:30"
+      /^\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}$/ // "25/07/2025 14:30"
+    ];
+
+    const temFormatoData = formatosData.some(formato => formato.test(dataTexto.trim()));
+    
+    try {
+      if (temFormatoData || dataTexto.toLowerCase().includes('amanhã') || 
+          dataTexto.toLowerCase().includes('sexta') || 
+          dataTexto.toLowerCase().includes('segunda') ||
+          dataTexto.toLowerCase().includes('próxima')) {
+        
+        dataProcessada = parseDataBrasil(dataTexto);
+      }
+    } catch (parseError) {
+      console.error('Erro ao fazer parse da data:', parseError);
+    }
     
     if (!dataProcessada || estaNoPassadoBrasil(dataProcessada)) {
       await ctx.reply(
-        '❌ Data inválida ou no passado.\n\n' +
-        'Exemplos válidos:\n' +
-        '• "25/07 14:30"\n' +
-        '• "sexta-feira 09:00"\n' +
-        '• "30 de julho"\n' +
-        '• "próxima segunda às 15h"'
+        '❌ **Data inválida ou no passado.**\n\n' +
+        '📅 **Formatos aceitos:**\n' +
+        '• "25/07" ou "25/07/2025"\n' +
+        '• "25/07 14:30" (com horário)\n' +
+        '• "amanhã", "sexta-feira"\n' +
+        '• "próxima segunda"\n\n' +
+        '⚠️ **Dica:** Se não incluir horário, será 14:00 por padrão.\n\n' +
+        '🔄 **Tente novamente** com um formato válido.',
+        { parse_mode: 'Markdown' }
       );
       return true;
+    }
+
+    // Se não tem horário específico, assumir 14:00
+    if (dataProcessada.getHours() === 0 && dataProcessada.getMinutes() === 0) {
+      dataProcessada.setHours(14, 0, 0, 0);
     }
 
     // Limpar sessão
@@ -604,10 +646,13 @@ async function handleDataProximaAcaoContato(ctx: Context, session: any, dataText
     const followupId = session.data.followup_id;
     const mensagemData = format(dataProcessada, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
 
+    // ✅ CORREÇÃO: USAR session.data.proxima_acao que foi salvo
+    const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
+
     // Mostrar resumo final e perguntar sobre notificação
     await ctx.reply(
       `📋 **RESUMO COMPLETO**\n\n` +
-      `🎬 **Próxima ação:** ${session.data.proxima_acao}\n` +
+      `🎬 **Próxima ação:** ${proximaAcao}\n` +
       `📅 **Quando fazer:** ${mensagemData}\n\n` +
       `🔔 **Deseja configurar um lembrete?**`,
       {
@@ -628,7 +673,13 @@ async function handleDataProximaAcaoContato(ctx: Context, session: any, dataText
     return true;
   } catch (error) {
     console.error('Erro ao processar data manual:', error);
-    await ctx.reply('Erro ao processar data. Tente novamente.');
+    await ctx.reply(
+      '❌ **Erro ao processar data.**\n\n' +
+      'Tente novamente com um formato válido:\n' +
+      '• "25/07 14:30"\n' +
+      '• "amanhã"\n' +
+      '• "sexta-feira 09:00"'
+    );
     return true;
   }
 }
