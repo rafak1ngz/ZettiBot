@@ -3,8 +3,8 @@
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
-import { adminSupabase } from '@/lib/supabase/admin';
-import { updateUserSession, clearUserSession } from '@/lib/telegram/middleware/session';
+import { adminSupabase } from '@/lib/supabase';
+import { updateUserSession, createUserSession, clearUserSession } from '@/lib/telegram/commands/shared/utils';
 import { 
   validarLocalizacao, 
   validarRaio, 

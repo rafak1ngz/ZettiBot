@@ -4,7 +4,7 @@
 
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { clearUserSession, createUserSession } from '@/lib/telegram/middleware/session';
+import { updateUserSession, createUserSession, clearUserSession } from '@/lib/telegram/commands/shared/utils';
 
 // ============================================================================
 // MENU PRINCIPAL - BUSCA POTENCIAL CLIENTE

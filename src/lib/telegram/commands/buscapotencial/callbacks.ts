@@ -4,7 +4,7 @@
 
 import { Context, Markup, Telegraf } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { updateUserSession, createUserSession } from '@/lib/telegram/middleware/session';
+import { updateUserSession, createUserSession, clearUserSession } from '@/lib/telegram/commands/shared/utils';
 import { 
   handleBuscaFocada, 
   handleBuscaPorArea, 
