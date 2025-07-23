@@ -12,6 +12,10 @@ import { validators } from '@/utils/validators';
 import { handleLembretes, registerLembretesCallbacks } from './lembretes';
 import { handleFollowup, registerFollowupCallbacks } from './followup';
 import { getEstagioTexto, isValidEstagio } from './followup/types';
+import { 
+  handleBuscaPotencial,
+  registerBuscaPotencialCallbacks 
+} from './buscapotencial';
 
 // ============================================================================
 // IMPORTAR NOVO MÓDULO DE AGENDA
@@ -65,11 +69,26 @@ Escolha uma das opções abaixo:`,
       [Markup.button.callback('📅 Gerenciar Agenda', 'menu_agenda')],
       [Markup.button.callback('📊 Follow Up', 'menu_followup')],
       [Markup.button.callback('🔔 Lembretes', 'menu_lembretes')],
+      [Markup.button.callback('🔍 Busca Potencial Cliente', 'menu_buscapotencial')],
       [Markup.button.callback('❓ Ajuda', 'menu_ajuda')]
     ]));
     return true;
   } catch (error) {
     console.error('Erro ao mostrar menu principal:', error);
+    return false;
+  }
+}
+
+// ============================================================================
+// BUSCA POTENCIAL COMANDO
+// ============================================================================
+export async function handleBuscaPotencialComando(ctx: Context) {
+  try {
+    await ctx.reply('🔍 Carregando busca inteligente de prospects...');
+    return await handleBuscaPotencial(ctx);
+  } catch (error) {
+    console.error('Erro comando busca potencial:', error);
+    await ctx.reply('❌ Erro ao carregar busca de prospects. Tente novamente.');
     return false;
   }
 }
@@ -685,4 +704,17 @@ O que deseja fazer agora?`,
     }
   }
 
+  // COMANDO BUSCA POTENCIAL CLIENTE
+  bot.command(['buscapotencial', 'busca', 'prospects'], handleBuscaPotencialComando);
+
+  // Registrar callbacks do módulo busca potencial
+  registerBuscaPotencialCallbacks(bot);
+
+  // CALLBACK MENU
+  bot.action('menu_buscapotencial', (ctx) => {
+    ctx.answerCbQuery();
+    return handleBuscaPotencialComando(ctx);
+  });
+
 };
+

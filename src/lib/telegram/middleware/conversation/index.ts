@@ -10,6 +10,7 @@ import { handleClientesConversation } from './clientesConversation';
 import { handleAgendaConversation } from './agendaConversation';
 import { handleLembretesConversation } from './lembretesConversation';
 import { handleFollowupConversation } from './followupConversation';
+import { processBuscaPotencialConversation } from './buscaPotencialConversation';
 
 // Função de cancelamento compartilhada
 export async function cancelarOperacao(ctx: BotContext, telegramId: number) {
@@ -99,6 +100,8 @@ export const conversationMiddleware: MiddlewareFn<BotContext> = async (ctx, next
         return handleLembretesConversation(ctx, session); 
       case 'followup':
         return handleFollowupConversation(ctx, session);
+      case 'busca_potencial':
+        return processBuscaPotencialConversation(ctx, session);
       default:
         console.log(`Unknown command: ${session.command}`);
         return next();
