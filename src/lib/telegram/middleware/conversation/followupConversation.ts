@@ -1,12 +1,12 @@
 // ============================================================================
-// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - VERSÃO SIMPLIFICADA
+// PROCESSAMENTO DE CONVERSAÇÃO DE FOLLOWUP - COM TECLADO IGUAL LEMBRETES
 // ============================================================================
 
 import { Context, Markup } from 'telegraf';
 import { adminSupabase } from '@/lib/supabase';
-import { format } from 'date-fns';
+import { format, parse, isValid, addDays } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
-import { estaNoPassadoBrasil, brasilParaUTC, parseDataBrasil } from '@/utils/timezone';
+import { estaNoPassadoBrasil, brasilParaUTC, parseDataBrasil, parseHoraBrasil } from '@/utils/timezone';
 import { validators } from '@/utils/validators';
 import { EstagioFollowup, getEstagioTexto, ESTAGIO_TEXTO } from '../../commands/followup/types';
 
@@ -54,11 +54,11 @@ export async function handleFollowupConversation(ctx: Context, session: any): Pr
       case 'proxima_acao_contato':
         return await handleProximaAcaoContato(ctx, session, messageText);
 
-      // 🔧 Data específica da próxima ação (quando usuário digita)
+      // ✅ Data específica da próxima ação (quando usuário digita)
       case 'data_proxima_acao_contato':
         return await handleDataProximaAcaoContato(ctx, session, messageText);
 
-      // 🔧 Horário da próxima ação (sempre digitado)
+      // ✅ Horário da próxima ação (sempre digitado)
       case 'horario_proxima_acao':
         return await handleHorarioProximaAcao(ctx, session, messageText);
 
@@ -109,9 +109,6 @@ async function handleBuscaClienteFollowup(ctx: Context, session: any, termoBusca
       );
       return true;
     }
-
-    const telegramId = ctx.from?.id;
-    if (!telegramId) return true;
 
     // Mostrar resultados
     const botoes = clientes.map(cliente => {
@@ -284,11 +281,11 @@ async function handleValorEstimado(ctx: Context, session: any, valorTexto: strin
     valor = valorNumerico;
   }
 
-  // Atualizar sessão
+  // ✅ CORREÇÃO: Atualizar step para data digitada
   await adminSupabase
     .from('sessions')
     .update({
-      step: 'data_prevista_rapida',
+      step: 'data_prevista',
       data: { ...session.data, valor_estimado: valor },
       updated_at: new Date().toISOString()
     })
@@ -298,34 +295,59 @@ async function handleValorEstimado(ctx: Context, session: any, valorTexto: strin
     ? new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(valor)
     : 'Não informado';
 
+  // ✅ CORREÇÃO: Usar padrão dos lembretes
   await ctx.reply(
     `✅ **Valor estimado:** ${valorFormatado}\n\n` +
     `📅 **Data prevista para fechamento:**`,
-    {
-      parse_mode: 'Markdown',
-      ...Markup.inlineKeyboard([
-        [
-          Markup.button.callback('📅 Hoje', 'data_hoje_followup'),
-          Markup.button.callback('📅 Amanhã', 'data_amanha_followup')
-        ],
-        [
-          Markup.button.callback('📅 Próxima semana', 'data_semana_followup'),
-          Markup.button.callback('⏭️ Pular', 'data_pular_followup')
-        ]
-      ])
-    }
+    { parse_mode: 'Markdown' }
   );
+
+  // ✅ SEGUNDA mensagem COM teclado (igual lembrete)
+  await ctx.reply(
+    'Digite a data no formato DD/MM/YYYY ou digite "pular":',
+    Markup.keyboard([
+      ['Hoje', 'Amanhã', 'Pular']
+    ]).oneTime().resize()
+  );
+
   return true;
 }
 
 async function handleDataPrevista(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
   try {
+    // ✅ CORREÇÃO: Verificar se quer pular
+    if (dataTexto.toLowerCase() === 'pular') {
+      await adminSupabase
+        .from('sessions')
+        .update({
+          step: 'proxima_acao',
+          data: { ...session.data, data_prevista: null },
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', session.id);
+
+      await ctx.reply(
+        `⏭️ **Data prevista:** Não informada\n\n` +
+        `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
+        `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
+        {
+          parse_mode: 'Markdown',
+          ...Markup.removeKeyboard()
+        }
+      );
+      return true;
+    }
+
+    // Parse da data normalmente
     const dataProcessada = parseDataBrasil(dataTexto);
     
     if (!dataProcessada || estaNoPassadoBrasil(dataProcessada)) {
       await ctx.reply(
-        'Data inválida ou no passado. Por favor, use um formato válido:\n\n' +
-        'Exemplos: "25/07", "sexta-feira", "próxima segunda", "30 de julho"'
+        'Data inválida ou no passado. Por favor, use um formato válido ou digite "pular":\n\n' +
+        'Exemplos: "25/07", "sexta-feira", "próxima segunda", "30 de julho"',
+        Markup.keyboard([
+          ['Hoje', 'Amanhã', 'Pular']
+        ]).oneTime().resize()
       );
       return true;
     }
@@ -349,7 +371,10 @@ async function handleDataPrevista(ctx: Context, session: any, dataTexto: string)
       `✅ **Data prevista:** ${dataFormatada}\n\n` +
       `🎬 Digite a **próxima ação** a ser realizada:\n\n` +
       `Exemplos: "Agendar reunião", "Enviar proposta", "Fazer follow-up"`,
-      { parse_mode: 'Markdown' }
+      {
+        parse_mode: 'Markdown',
+        ...Markup.removeKeyboard()
+      }
     );
     return true;
   } catch (error) {
@@ -453,9 +478,9 @@ async function handleProximaAcao(ctx: Context, session: any, proximaAcao: string
 // ============================================================================
 // REGISTRAR CONTATO
 // ============================================================================
-async function handleRegistrarContatoTexto(ctx: Context, session: any, contatoTexto: string): Promise<boolean> {
-  if (!contatoTexto || contatoTexto.length < 5) {
-    await ctx.reply('Por favor, descreva o contato com mais detalhes (mínimo 5 caracteres).');
+async function handleRegistrarContatoTexto(ctx: Context, session: any, descricaoContato: string): Promise<boolean> {
+  if (!descricaoContato || descricaoContato.length < 3) {
+    await ctx.reply('Por favor, descreva o contato realizado (mínimo 3 caracteres).');
     return true;
   }
 
@@ -464,22 +489,19 @@ async function handleRegistrarContatoTexto(ctx: Context, session: any, contatoTe
     .from('sessions')
     .update({
       step: 'proxima_acao_contato',
-      data: { ...session.data, contato_descricao: contatoTexto },
+      data: { ...session.data, contato_descricao: descricaoContato },
       updated_at: new Date().toISOString()
     })
     .eq('id', session.id);
 
   await ctx.reply(
-    `✅ **Contato registrado**\n\n` +
-    `📝 Digite a **próxima ação** a ser realizada:`,
+    `✅ **Contato registrado:** ${descricaoContato}\n\n` +
+    `🎬 Digite a **próxima ação** a ser realizada:`,
     { parse_mode: 'Markdown' }
   );
   return true;
 }
 
-// ============================================================================
-// 🔧 FLUXO SIMPLIFICADO: PRÓXIMA AÇÃO COM PERGUNTA DE DATA (APENAS HOJE/AMANHÃ)
-// ============================================================================
 async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao: string): Promise<boolean> {
   if (!proximaAcao || proximaAcao.length < 3) {
     await ctx.reply('Por favor, descreva a próxima ação (mínimo 3 caracteres).');
@@ -487,38 +509,25 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
   }
 
   try {
-    const agora = new Date().toISOString();
     const followupId = session.data.followup_id;
-    const userId = session.user_id;
+    const agora = new Date().toISOString();
 
-    // ✅ SALVAR PRÓXIMA AÇÃO NA SESSÃO PRIMEIRO
-    await adminSupabase
-      .from('sessions')
-      .update({
-        data: { 
-          ...session.data, 
-          proxima_acao: proximaAcao
-        },
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', session.id);
-
-    // ✅ SALVAR O CONTATO NA TABELA contatos_followup
-    const { error: contatoError } = await adminSupabase
+    // ✅ INSERIR CONTATO NO BANCO
+    const { error: insertError } = await adminSupabase
       .from('contatos_followup')
       .insert({
         followup_id: followupId,
-        user_id: userId,
+        user_id: session.user_id,
         data_contato: agora,
-        tipo_contato: 'outro',
-        resumo: session.data.contato_descricao,
+        tipo_contato: 'reuniao', // Tipo padrão
+        resumo: session.data.contato_descricao || 'Contato registrado',
         proxima_acao: proximaAcao,
         created_at: agora
       });
 
-    if (contatoError) {
-      console.error('Erro ao salvar contato:', contatoError);
-      await ctx.reply('Erro ao salvar contato. Tente novamente.');
+    if (insertError) {
+      console.error('Erro ao inserir contato:', insertError);
+      await ctx.reply('Erro ao registrar contato. Tente novamente.');
       return true;
     }
 
@@ -557,23 +566,36 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 
     const nomeEmpresa = cliente?.nome_empresa || 'Cliente não encontrado';
 
-    // ✅ PERGUNTA SIMPLIFICADA: APENAS HOJE/AMANHÃ + EXPLICAÇÃO
+    // ✅ CORREÇÃO: Atualizar sessão para step de data
+    await adminSupabase
+      .from('sessions')
+      .update({
+        step: 'data_proxima_acao_contato',
+        data: { 
+          ...session.data, 
+          proxima_acao: proximaAcao,
+          contato_registrado: true
+        },
+        updated_at: new Date().toISOString()
+      })
+      .eq('id', session.id);
+
+    // ✅ CORREÇÃO: Usar padrão dos lembretes
     await ctx.reply(
       `✅ **Contato registrado com sucesso!**\n\n` +
       `🏢 **Cliente:** ${nomeEmpresa}\n` +
       `📝 **Resumo:** ${session.data.contato_descricao}\n` +
       `🎬 **Próxima ação:** ${proximaAcao}\n\n` +
-      `📅 **QUANDO você quer realizar esta ação?**\n\n` +
-      `Use os botões abaixo ou digite a data (ex: "25/07", "sexta-feira"):`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('📅 Hoje', `data_acao_hoje_${followupId}`),
-            Markup.button.callback('📅 Amanhã', `data_acao_amanha_${followupId}`)
-          ]
-        ])
-      }
+      `📅 **QUANDO você quer realizar esta ação?**`,
+      { parse_mode: 'Markdown' }
+    );
+
+    // ✅ SEGUNDA mensagem COM teclado (igual lembrete)
+    await ctx.reply(
+      'Digite a data no formato DD/MM/YYYY:',
+      Markup.keyboard([
+        ['Hoje', 'Amanhã']
+      ]).oneTime().resize()
     );
 
     return true;
@@ -585,203 +607,105 @@ async function handleProximaAcaoContato(ctx: Context, session: any, proximaAcao:
 }
 
 // ============================================================================
-// 🔧 FUNÇÃO SIMPLIFICADA: PROCESSAR DATA DIGITADA
+// ✅ FUNÇÃO CORRIGIDA: handleDataProximaAcaoContato (IGUAL LEMBRETE)
 // ============================================================================
 async function handleDataProximaAcaoContato(ctx: Context, session: any, dataTexto: string): Promise<boolean> {
-  console.log('🔧 DEBUG: Processando data digitada:', dataTexto);
-
-  try {
-    // Permitir mais formatos de data
-    let dataProcessada: Date | null = null;
-    
-    // Formatos aceitos
-    const formatosData = [
-      /^\d{1,2}\/\d{1,2}$/,                      // "25/07"
-      /^\d{1,2}\/\d{1,2}\/\d{2,4}$/,             // "25/07/25" ou "25/07/2025"
-      /^\d{1,2}\/\d{1,2}\s+\d{1,2}:\d{2}$/,      // "25/07 14:30"
-      /^\d{1,2}\/\d{1,2}\/\d{2,4}\s+\d{1,2}:\d{2}$/ // "25/07/2025 14:30"
-    ];
-
-    const temFormatoData = formatosData.some(formato => formato.test(dataTexto.trim()));
-    
-    try {
-      if (temFormatoData || dataTexto.toLowerCase().includes('amanhã') || 
-          dataTexto.toLowerCase().includes('sexta') || 
-          dataTexto.toLowerCase().includes('segunda') ||
-          dataTexto.toLowerCase().includes('próxima')) {
-        
-        dataProcessada = parseDataBrasil(dataTexto);
-      }
-    } catch (parseError) {
-      console.error('Erro ao fazer parse da data:', parseError);
-    }
-    
-    if (!dataProcessada || estaNoPassadoBrasil(dataProcessada)) {
-      await ctx.reply(
-        '❌ **Data inválida ou no passado.**\n\n' +
-        '📅 **Formatos aceitos:**\n' +
-        '• "25/07" ou "25/07/2025"\n' +
-        '• "25/07 14:30" (com horário)\n' +
-        '• "amanhã", "sexta-feira"\n' +
-        '• "próxima segunda"\n\n' +
-        '🔄 **Tente novamente** com um formato válido.',
-        { parse_mode: 'Markdown' }
-      );
-      return true;
-    }
-
-    // Verificar se tem horário específico na string
-    const temHorario = /\d{1,2}:\d{2}/.test(dataTexto);
-    
-    if (temHorario) {
-      // Se já tem horário, finalizar direto
-      const followupId = session.data.followup_id;
-      const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
-      const mensagemData = format(dataProcessada, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-
-      // Limpar sessão
-      await adminSupabase
-        .from('sessions')
-        .delete()
-        .eq('id', session.id);
-
-      await ctx.reply(
-        `📋 **RESUMO COMPLETO**\n\n` +
-        `🎬 **Próxima ação:** ${proximaAcao}\n` +
-        `📅 **Quando fazer:** ${mensagemData}\n\n` +
-        `🔔 **Deseja configurar um lembrete?**`,
-        {
-          parse_mode: 'Markdown',
-          ...Markup.inlineKeyboard([
-            [
-              Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
-              Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
-            ],
-            [
-              Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
-              Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
-            ]
-          ])
-        }
-      );
-    } else {
-      // Se não tem horário, pedir horário digitado
-      const dataTextoFormatado = format(dataProcessada, "dd/MM/yyyy", { locale: ptBR });
-
-      await adminSupabase
-        .from('sessions')
-        .update({
-          step: 'horario_proxima_acao',
-          data: { 
-            ...session.data, 
-            data_escolhida: dataProcessada.toISOString(),
-            data_texto: dataTextoFormatado
-          },
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', session.id);
-
-      await ctx.reply(
-        `📅 **Data escolhida:** ${dataTextoFormatado}\n\n` +
-        `🕐 **Digite o horário que deseja realizar a ação:**\n\n` +
-        `**Formatos aceitos:**\n` +
-        `• "14:30" ou "14h30"\n` +
-        `• "9:00" ou "09:00"\n` +
-        `• "15h" (será 15:00)\n\n` +
-        `💡 **Exemplos:** 14:30, 09:00, 16h`,
-        { parse_mode: 'Markdown' }
-      );
-    }
-    
-    return true;
-  } catch (error) {
-    console.error('Erro ao processar data digitada:', error);
+  const data = parseDataTexto(dataTexto);
+  
+  if (!data) {
     await ctx.reply(
-      '❌ **Erro ao processar data.**\n\n' +
-      'Tente novamente com um formato válido:\n' +
-      '• "25/07 14:30"\n' +
-      '• "amanhã"\n' +
-      '• "sexta-feira 09:00"'
+      'Data inválida. Por favor, use o formato DD/MM/YYYY ou digite "hoje" ou "amanhã".',
+      Markup.keyboard([
+        ['Hoje', 'Amanhã']
+      ]).oneTime().resize()
     );
     return true;
   }
+
+  // Verificar se a data não é no passado
+  const agora = new Date();
+  const hoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+  
+  if (data < hoje) {
+    await ctx.reply(
+      'Não é possível agendar ações para datas passadas. Por favor, digite uma data futura.',
+      Markup.keyboard([
+        ['Hoje', 'Amanhã']
+      ]).oneTime().resize()
+    );
+    return true;
+  }
+
+  await adminSupabase
+    .from('sessions')
+    .update({
+      step: 'horario_proxima_acao',
+      data: { 
+        ...session.data, 
+        data_texto: dataTexto, 
+        data_selecionada: data.toISOString() 
+      },
+      updated_at: new Date().toISOString()
+    })
+    .eq('id', session.id);
+
+  await ctx.reply(
+    'Digite o horário no formato HH:MM:\n\nExemplo: 14:30',
+    Markup.removeKeyboard()
+  );
+  return true;
 }
 
 // ============================================================================
-// 🔧 FUNÇÃO SIMPLIFICADA: PROCESSAR HORÁRIO DIGITADO
+// ✅ FUNÇÃO NOVA: handleHorarioProximaAcao (IGUAL LEMBRETE)
 // ============================================================================
-async function handleHorarioProximaAcao(ctx: Context, session: any, horarioTexto: string): Promise<boolean> {
-  try {
-    // Validar formato de horário
-    const horarioRegex = /^(\d{1,2}):?(\d{2})?h?$/;
-    const match = horarioTexto.match(horarioRegex);
-    
-    if (!match) {
-      await ctx.reply(
-        '❌ **Formato de horário inválido.**\n\n' +
-        'Use um dos formatos:\n' +
-        '• "14:30" ou "14h30"\n' +
-        '• "9:00" ou "09:00"\n' +
-        '• "15h" (será 15:00)',
-        { parse_mode: 'Markdown' }
-      );
-      return true;
-    }
-
-    const horas = parseInt(match[1]);
-    const minutos = parseInt(match[2] || '0');
-
-    if (horas < 0 || horas > 23 || minutos < 0 || minutos > 59) {
-      await ctx.reply(
-        '❌ **Horário inválido.**\n\n' +
-        'Use horas de 00 a 23 e minutos de 00 a 59.\n' +
-        'Exemplo: 14:30, 09:00, 18h',
-        { parse_mode: 'Markdown' }
-      );
-      return true;
-    }
-
-    // Combinar data com horário
-    const dataEscolhida = new Date(session.data.data_escolhida);
-    dataEscolhida.setHours(horas, minutos, 0, 0);
-
-    // Limpar sessão
-    await adminSupabase
-      .from('sessions')
-      .delete()
-      .eq('id', session.id);
-
-    const followupId = session.data.followup_id;
-    const proximaAcao = session.data?.proxima_acao || 'Ação não definida';
-    const mensagemData = format(dataEscolhida, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
-
-    // Mostrar resumo final e perguntar sobre notificação
-    await ctx.reply(
-      `📋 **RESUMO COMPLETO**\n\n` +
-      `🎬 **Próxima ação:** ${proximaAcao}\n` +
-      `📅 **Quando fazer:** ${mensagemData}\n\n` +
-      `🔔 **Deseja configurar um lembrete?**`,
-      {
-        parse_mode: 'Markdown',
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
-            Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
-          ],
-          [
-            Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
-            Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
-          ]
-        ])
-      }
-    );
-    
-    return true;
-  } catch (error) {
-    console.error('Erro ao processar horário digitado:', error);
-    await ctx.reply('Erro ao processar horário. Tente novamente.');
+async function handleHorarioProximaAcao(ctx: Context, session: any, horaTexto: string): Promise<boolean> {
+  const dataBase = new Date(session.data.data_selecionada);
+  const dataUTC = parseHoraBrasil(dataBase, horaTexto);
+  
+  if (!dataUTC) {
+    await ctx.reply('Horário inválido. Por favor, use o formato HH:MM (exemplo: 14:30).');
     return true;
   }
+
+  if (estaNoPassadoBrasil(dataUTC)) {
+    await ctx.reply('Este horário já passou. Por favor, digite um horário futuro.');
+    return true;
+  }
+
+  const followupId = session.data.followup_id;
+  const proximaAcao = session.data.proxima_acao;
+  
+  const dataBrasil = new Date(dataUTC.getTime() - (3 * 60 * 60 * 1000));
+  const mensagemData = format(dataBrasil, "dd/MM/yyyy 'às' HH:mm", { locale: ptBR });
+
+  // Limpar sessão
+  await adminSupabase
+    .from('sessions')
+    .delete()
+    .eq('id', session.id);
+
+  await ctx.reply(
+    `📋 **RESUMO COMPLETO**\n\n` +
+    `🎬 **Próxima ação:** ${proximaAcao}\n` +
+    `📅 **Quando fazer:** ${mensagemData}\n\n` +
+    `🔔 **Deseja configurar um lembrete?**`,
+    {
+      parse_mode: 'Markdown',
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback('🔕 Não', `notif_contato_nao_${followupId}`),
+          Markup.button.callback('⏰ 15 min antes', `notif_contato_15m_${followupId}`)
+        ],
+        [
+          Markup.button.callback('⏰ 1 hora antes', `notif_contato_1h_${followupId}`),
+          Markup.button.callback('📅 1 dia antes', `notif_contato_24h_${followupId}`)
+        ]
+      ])
+    }
+  );
+
+  return true;
 }
 
 // ============================================================================
@@ -817,5 +741,23 @@ async function continuarCriacaoFollowup(ctx: Context, session: any, cliente: any
   } catch (error) {
     console.error('Erro ao continuar criação:', error);
     await ctx.reply('Erro ao processar. Tente novamente.');
+  }
+}
+
+// ============================================================================
+// ✅ FUNÇÃO AUXILIAR PARA PARSE DE DATA (IGUAL LEMBRETE)
+// ============================================================================
+function parseDataTexto(dataTexto: string): Date | null {
+  try {
+    if (dataTexto.toLowerCase() === 'hoje') {
+      return new Date();
+    } else if (dataTexto.toLowerCase() === 'amanhã') {
+      return addDays(new Date(), 1);
+    }
+    
+    const data = parse(dataTexto, 'dd/MM/yyyy', new Date());
+    return isValid(data) ? data : null;
+  } catch {
+    return null;
   }
 }
